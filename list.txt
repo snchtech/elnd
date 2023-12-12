@@ -1,0 +1,73 @@
+$(function() {
+  // Enable sorting for the list
+  $("#list_cst").sortable({
+    items: "li",
+    handle: "button[id=top], button[id=bottom]"
+  });
+
+  // Handle the click event for the top and bottom buttons within each list item
+  $("ul#list_cst li").on("click", "button[id=top], button[id=bottom]", function() {
+    var $button = $(this);
+    var $li = $button.closest("li");
+
+    if ($button.attr("id") === "top") {
+      $li.insertBefore($li.prev());
+    } else {
+      $li.insertAfter($li.next());
+    }
+  });
+});
+
+$(".moveup").on("click", function() {
+    var elem = $(this).closest("div");
+    elem.prev().before(elem);
+});
+
+$(".movedown").on("click", function() {
+    var elem = $(this).closest("div");
+    elem.next().after(elem);
+});
+
+$(".movetop").on("click", function() {
+    var elem = $(this).closest("div");
+    elem.siblings().first().before(elem);
+});
+
+$(".movebottom").on("click", function() {
+    var elem = $(this).closest("div");
+    elem.siblings().last().after(elem);
+});
+
+
+
+
+<div class="row">
+    <div class="col-sm-12 updownrow" style="background: lightblue;">
+        <button type="button" class="updownbtn movetop fa fa-angle-double-up"></button>
+        <button type="button" class="updownbtn moveup fa fa-angle-up"></button>
+        <button type="button" class="updownbtn movedown fa fa-angle-down"></button>
+        <button type="button" class="updownbtn movebottom fa fa-angle-double-down"></button>
+        Row 1
+    </div>
+    <div class="col-sm-12 updownrow" style="background: lightgreen;">
+        <button type="button" class="updownbtn movetop fa fa-angle-double-up"></button>
+        <button type="button" class="updownbtn moveup fa fa-angle-up"></button>
+        <button type="button" class="updownbtn movedown fa fa-angle-down"></button>
+        <button type="button" class="updownbtn movebottom fa fa-angle-double-down"></button>
+        Row 2
+    </div>
+    <div class="col-sm-12 updownrow" style="background: lightpink;">
+        <button type="button" class="updownbtn movetop fa fa-angle-double-up"></button>
+        <button type="button" class="updownbtn moveup fa fa-angle-up"></button>
+        <button type="button" class="updownbtn movedown fa fa-angle-down"></button>
+        <button type="button" class="updownbtn movebottom fa fa-angle-double-down"></button>
+        Row 3
+    </div>
+    <div class="col-sm-12 updownrow" style="background: lightseagreen;">
+        <button type="button" class="updownbtn movetop fa fa-angle-double-up"></button>
+        <button type="button" class="updownbtn moveup fa fa-angle-up"></button>
+        <button type="button" class="updownbtn movedown fa fa-angle-down"></button>
+        <button type="button" class="updownbtn movebottom fa fa-angle-double-down"></button>
+        Row 4
+    </div>
+</div>

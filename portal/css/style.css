@@ -1,0 +1,381 @@
+/* Toggle input styles */
+.toggle {
+  background-color: grey;
+  width: 60px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.toggle-active {
+  background-color: blue;
+  width: 60px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+input#app-list-v {
+  display: none;
+}
+.slider {
+  height: 24px;
+  width: 24px;
+  background-color: white;
+  border-radius: 12px;
+  margin: 4px;
+}
+input:checked + .toggle {
+  background-color: green;
+}
+input:checked + .toggle > .slider {
+  align-self: flex-end;
+}
+
+body {
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+
+/* HEADER */
+
+.header {
+    display: flex;
+    padding: 5px 0px;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    background: #bababa;
+}
+
+
+.header .header__logo {
+    display: flex;
+    align-items: center;
+    width: 150px;
+    height: 50px;
+    padding: 0px 0px 0px 15px;
+}
+
+.header .header__user {
+    margin-left: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-right: 15px;
+}
+
+.header .header__user-login {
+    margin-right: 10px;
+}
+
+/* TOP PANEL */
+
+.top-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+    padding: 5px 0px;
+    background: #a3e395;
+}
+
+.top-panel .top-panel__user {
+    width: 70%;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    padding: 0px 0px 0px 15px;
+    font-size: 15px;
+}
+
+.top-panel .top-panel__ui {
+    display: flex;
+}
+
+.top-panel .top-panel__user-settings {
+    padding-right: 15px;
+}
+
+.top-panel__my-account {
+    margin-left: auto;
+}
+
+.top-panel .top-panel__additional {
+    width: 30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: row;
+    font-size: 15px;
+}
+
+.top-panel .top-panel__phone-catalog {
+    display: flex;
+    padding-left: 25px;
+}
+
+.top-panel .top-panel__send-email {
+    margin-left: auto; 
+    padding-right: 15px;
+}
+
+/* MAIN CONTENT */
+.main-content {
+    display: flex;
+}
+
+.sidebar {
+    width: 30%;
+    background-color: aliceblue;
+}
+
+.content {
+    width: 70%;
+    background-color: antiquewhite;
+    padding-bottom: 20px;
+}
+
+.app .app__title {
+    background-color: cadetblue;
+    color: #fff;
+    font-size: 17px;
+    font-weight: bold;
+    text-align: center;
+    padding: 7px;
+}
+
+.app .app__views {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 7px 0px;
+    background-color: burlywood;
+    padding-right: 15px;
+    font-size: 14px;
+}
+
+.app .app__views .app__views-default {
+ padding-right: 25px;
+}
+
+.app .app__views .app__views-list, .app .app__views .app__views-icons, .app .app__views .app__views-tables {
+    padding-left: 15px;
+}
+
+
+/* APP LIST */
+.app-list__container {
+    margin-top: 20px;
+    font-size: 14px;
+}
+
+.app-list__container .app-list__item {
+    display: flex;
+    border: 2px solid #000;
+    margin-bottom: 15px;
+    text-decoration: none;
+}
+
+.app-list__container .app-list__item .app-list__item-order {
+    width: 10%;
+    display: flex;
+    text-align: center;
+    justify-content: center;
+    background-color: aqua;
+    padding: 7px 0px;
+    color: #000;
+}
+
+.app-list__container .app-list__item .app-list__item-name {
+    width: 75%;
+    display: flex;
+    align-items: center;
+    padding-left: 15px;
+    color: #000;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.app-list__container .app-list__item .app-list__item-go-link {
+    width: 15%;
+    display: flex;
+    text-align: center;
+    justify-content: center;
+    background-color: blue;
+    padding: 7px 0px;
+    color: #fff;
+}
+
+.app-list__container .app-list__item .app-list__item-description {
+    display: none;
+}
+
+.app-list__container .app-list__item-ttl {
+    display: none;
+}
+
+/* APP GRID */
+
+.app-grid__container {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-gap: 20px;
+    font-size: 14px;
+}
+
+.app-grid__container .app-list__item {
+    border: 2px solid #000;
+    padding: 25px 0px;
+    display: grid;
+    align-items: last baseline;
+    text-decoration: none;
+}
+
+.app-grid__container .app-list__item .app-list__item-order {
+    display: none;
+}
+
+.app-grid__container .app-list__item .app-list__item-name {
+    text-align: center;
+    color: #000;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    padding: 0px 5px;
+}
+
+.app-grid__container .app-list__item .app-list__item-go-link {
+    background-color: blue;
+    color: #fff;
+    padding: 7px 0px;
+    margin-left: 15px;
+    margin-right: 15px;
+    text-align: center;
+}
+
+.app-grid__container .app-list__item .app-list__item-description {
+    display: none;
+}
+
+.app-grid__container .app-list__item-ttl {
+    display: none;
+}
+
+
+/* APP TABLE */
+
+.app-table__container {
+    margin-top: 20px;
+    font-size: 14px;
+}
+
+.app-table__container .app-list__item {
+    display: flex;
+    border-top: 1px solid #000;
+    border-left: 1px solid #000;
+    border-right: 1px solid #000;
+    text-decoration: none;
+}
+
+.app-table__container .app-list__item:last-child {
+    border-bottom: 1px solid #000;
+}
+
+.app-table__container .app-list__item .app-list__item-order {
+    border-right: 1px solid #000;
+    width: 5%;
+    padding: 7px 0px;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-table__container .app-list__item .app-list__item-name {
+    width: 40%;
+    border-right: 1px solid #000;
+    padding: 7px 5px 7px 10px;
+    color: #000;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.app-table__container .app-list__item .app-list__item-go-link {
+    width: 15%;
+    border-right: 1px solid #000;
+    padding: 7px 0px;
+    color: #fff;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-table__container .app-list__item .app-list__item-go-link span {
+    padding: 4px 10px;
+    background-color: blue;
+}
+
+.app-table__container .app-list__item .app-list__item-description {
+    width: 40%;
+    padding: 7px 5px;
+    color: #000;
+}
+
+.app-table__container .app-list__item-ttl .app-list__item-name {
+    font-size: 14px;
+    font-weight: normal;
+}
+
+
+
+
+/* Tree list app */
+.jsl-collapsed {
+    display: none;
+}
+
+.jsl-collapsed-arrow {
+    float: left; 
+    clear: both; 
+    margin-right: 11px; 
+    width: 11px; 
+    height: 11px; 
+    cursor: pointer;
+    background: url(../images/plus-square.svg);
+}
+
+.jsl-list-closed {
+	/*float: left;
+	clear: both;*/
+    display: inline-block;
+	margin: 2px 4px 2px 0px;
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+	background: url(../images/plus-square.svg);
+}
+
+.jsl-open {
+    display: block;
+}
+
+.jsl-list-open  {
+    background: url(../images/dash-square.svg);
+}
+
+.li-text {
+    position: relative;
+    top: -3px;
+}
+
+#app-tree li {
+    position: relative;
+}
+
+.jslist-ul .active li {
+    display: block !important;
+}

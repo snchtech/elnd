@@ -1,0 +1,34 @@
+1. Initialize an empty object to serve as the root of your tree structure:
+const tree = {};
+
+2. Iterate through each item in the JSON array using a loop or the `forEach` method:
+  
+   jsonData.forEach(item => {
+     // Logic to build the tree structure
+   });
+
+3. For each item, extract the different levels (first, second, and third) using array destructuring:
+   
+
+   const [first, second, third] = item;
+   
+
+4. Check if the first level already exists in the tree. If not, create an empty object for it:
+   
+
+   if (!tree[first]) {
+     tree[first] = {};
+   }
+
+5. Repeat the same check for the second level, creating an empty object if needed:
+   
+
+   if (!tree[first][second]) {
+     tree[first][second] = {};
+   }
+
+
+6. Finally, assign the third item/link to the corresponding location in the tree:
+   
+
+   tree[first][second] = third;

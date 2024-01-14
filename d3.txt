@@ -1,0 +1,29 @@
+const jsonData = [
+  { category: "Personal", group: "Group1", link: "Link name1" },
+  { category: "Personal", group: "Group1", link: "Link name2" },
+  { category: "Personal", group: "Group1", link: "Link name3" },
+  { category: "Personal", group: "Group2", link: "Link name4" },
+  { category: "Position", group: "Group1", link: "Link name5" },
+  { category: "Position", group: "Group1", link: "Link name6" },
+  { category: "Position", group: "Group2", link: "Link name7" },
+  { category: "Position", group: "Group2", link: "Link name8" },
+  { category: "Position", group: "Group2", link: "Link name9" }
+];
+
+const treeMenu = {};
+
+jsonData.forEach(item => {
+  const { category, group, link } = item;
+
+  if (!treeMenu[category]) {
+    treeMenu[category] = {};
+  }
+
+  if (!treeMenu[category][group]) {
+    treeMenu[category][group] = [];
+  }
+
+  treeMenu[category][group].push(link);
+});
+
+console.log(treeMenu);

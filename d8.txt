@@ -1,0 +1,26 @@
+// Input data
+const data = [
+  { Level1: "Level1", Level2: "Level2", MenuItem: "MenuItem1", MenuLabel: "MenuLabel1", Addm: "Addm1" },
+  { Level1: "Level1", Level2: "Level2", MenuItem: "MenuItem1", MenuLabel: "MenuLabel1", Addm: "Addm2" },
+  { Level1: "Level11", Level2: "Level22", MenuItem: "MenuItem2", MenuLabel: "MenuLabel3", Addm: "Addm3" }
+];
+
+// Group data by Level1, Level2, and MenuItem
+const groupedData = {};
+data.forEach(item => {
+  const { Level1, Level2, MenuItem, MenuLabel, ...rest } = item;
+  if (!groupedData[Level1]) {
+    groupedData[Level1] = {};
+  }
+  if (!groupedData[Level1][Level2]) {
+    groupedData[Level1][Level2] = {};
+  }
+  if (!groupedData[Level1][Level2][MenuItem]) {
+    groupedData[Level1][Level2][MenuItem] = { link: rest.link, label: MenuLabel };
+  }
+});
+
+// Final structure item without duplicate labels
+const item = JSON.parse(JSON.stringify(groupedData)); // Deep clone to remove any references
+
+console.log(item);

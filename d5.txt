@@ -1,0 +1,40 @@
+// Assuming you have the following array of labels:
+const labelsArray = ["Label1", "Label2", "Label3"];
+
+// Function to recursively build the HTML menu
+function buildMenu(menuItem) {
+  let html = '<ul>';
+
+  for (const key in menuItem) {
+    const item = menuItem[key];
+    html += '<li>';
+
+    // Check if the item has a link property
+    if (item.link) {
+      // Check if the item's label is present in the labelsArray
+      if (labelsArray.includes(item.label)) {
+        html += `<a href="${item.link}" class="your-class">${item.label}</a>`;
+      } else {
+        html += `<a href="${item.link}">${item.label}</a>`;
+      }
+    } else {
+      html += item.label;
+    }
+
+    // Check if the item has nested submenus
+    if (typeof item === 'object') {
+      html += buildMenu(item);
+    }
+
+    html += '</li>';
+  }
+
+  html += '</ul>';
+  return html;
+}
+
+// Call the buildMenu function with the Level1 object
+const menuHTML = buildMenu(item.Level1);
+
+// Output the generated HTML
+console.log(menuHTML);

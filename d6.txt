@@ -1,0 +1,38 @@
+// Assuming you have the following data array:
+const data = [
+  { Level1: "A", Level2: "B", MenuItem: "C", MenuLabel: "Label 1", Addm: "Additional 1" },
+  { Level1: "A", Level2: "B", MenuItem: "C", MenuLabel: "Label 1", Addm: "Additional 2" },
+  { Level1: "X", Level2: "Y", MenuItem: "Z", MenuLabel: "Label 3", Addm: "Additional 3" }
+];
+
+// Function to process the data and build the structure item
+function buildItemStructure(data) {
+  const item = {};
+
+  data.forEach(entry => {
+    const { Level1, Level2, MenuItem, MenuLabel, Addm } = entry;
+
+    // Check if the label already exists in the structure
+    if (!item[Level1]) {
+      item[Level1] = {};
+    }
+    if (!item[Level1][Level2]) {
+      item[Level1][Level2] = {};
+    }
+    if (!item[Level1][Level2][MenuItem]) {
+      item[Level1][Level2][MenuItem] = {
+        link: "your_link_value",
+        label: MenuLabel,
+        addm: Addm
+      };
+    }
+  });
+
+  return item;
+}
+
+// Call the buildItemStructure function with the data array
+const item = buildItemStructure(data);
+
+// Output the generated structure item
+console.log(item);

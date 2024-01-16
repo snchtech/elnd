@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=<device-width>, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+
+
+
+/*
+for (const level1Item of data.Level1) {
+  for (const level2Item of level1Item.Level2) {
+    data.Level1.Level2.MenuItem.push(level2Item.MenuItem);
+  }
+}
+*/
+
+const data1 = {
+  'Staff': {
+    'Managers': {
+      'Sellers': []
+    }
+  },
+  'Position': {
+    'Boss': {
+      'Department': []
+    }
+  }
+};
+
+
+
+var structure = [
+    ["Виробництво", "Персонал", "Каталог посад", "linkUrl1", "filename1"],
+    ["Виробництво", "Персонал", "Каталог посад", "linkUrl3", "filename3"],
+    ["Документообіг", "Погодження", "АСК"]
+];
+
+console.log(structure)
+
+
+
+// Create an empty object to hold the structure
+var objectStructure = {};
+
+// Function to recursively build the structure
+function buildStructure(obj, keys, value) {
+  var key = keys.shift(); // Get the first key from the array
+
+  if (keys.length === 0) {
+    // If no more keys left, assign the value
+    obj[key] = value;
+  } else {
+    // If more keys are present, create nested objects if necessary
+    obj[key] = obj[key] || {};
+    buildStructure(obj[key], keys, value); // Recursively build the structure
+  }
+}
+
+structure.forEach(function(element){
+    console.log(element)
+    buildStructure(objectStructure, element);
+});
+// Example usage to build the structure
+/*buildStructure(objectStructure, ["Виробництво", "Персонал", "Каталог посад", "linkUrl1", "filename1"]);
+buildStructure(objectStructure, ["Виробництво", "Персонал", "Каталог посад", "linkUrl3", "filename3"]);
+buildStructure(objectStructure, ["Виробництво", "Персонал", "Каталог підрозділів"], ["linkUrl2", "filename2"]);
+buildStructure(objectStructure, ["Виробництво", "Персонал", "Каталог підрозділів"], ["linkUrl4", "filename4"]);
+buildStructure(objectStructure, ["Документообіг", "Погодження", "АСК"], ["Menu_subitem6"]);*/
+
+// Convert the object structure to JSON string
+var jsonString = JSON.stringify(objectStructure);
+console.log(objectStructure)
+    </script>
+</body>
+</html>

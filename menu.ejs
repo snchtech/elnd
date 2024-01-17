@@ -1,0 +1,33 @@
+<ul id="app-tree">
+    <% for (let i = 0; i < tasks.length; i++) { %>
+      <% if (tasks[i].Lvl === 1) { %>
+        <li>
+          <%= tasks[i].task_info %>
+          <% buildTree(tasks[i].Id_task, tasks) %>
+        </li>
+      <% } %>
+    <% } %>
+  </ul>
+  
+  <% function buildTree(parentId, tasks) { %>
+    <% const children = tasks.filter(task => task.ParentId === parentId); %>
+    <% if (children.length > 0) { %>
+      <ul>
+        <% for (let i = 0; i < children.length; i++) { %>
+            <% if (children[i].Lvl === 2) { %>
+                <li>
+                <%= children[i]['task_info'] %>
+                <ul>
+                <% for (let j = 0; j < children.length; j++) { %>
+                    <% console.log(children[j].ParentId) %>
+                  <% if (children[j].ParentId === children[i].ParentId && children[j].Lvl === 3) { %>
+                    <li><%= children[j]['task_info'] %></li>
+                  <% } %>
+                <% } %>
+                </ul>
+            </li>
+              <% } %>
+        <% } %>
+      </ul>
+    <% } %>
+  <% } %>

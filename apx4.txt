@@ -1,0 +1,23 @@
+python
+import cx_Oracle
+
+# Connect to the Oracle database
+connection = cx_Oracle.connect("username", "password", "hostname:port/service_name")
+
+# Get the modified list from the user (assuming it's a list of item IDs)
+modified_list = [1, 2, 3, 4]  # Example modified list
+
+# Create a cursor to execute SQL statements
+cursor = connection.cursor()
+
+# Update the order column value for each item in the modified list
+for index, item_id in enumerate(modified_list, start=1):
+    # Update the order column value based on the index
+    cursor.execute("UPDATE your_table SET order_column = :index WHERE item_id = :id", index=index, id=item_id)
+
+# Commit the changes to the database
+connection.commit()
+
+# Close the cursor and the database connection
+cursor.close()
+connection.close()

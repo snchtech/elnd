@@ -1,0 +1,12 @@
+$(document).ready(function() {
+  // When a div is clicked
+  $('div').click(function() {
+    // Get the data attributes from the clicked div
+    var side = $(this).data('side');
+    var step = $(this).data('step');
+    
+    // Set the values of the hidden inputs
+    $('input[name="side"]').val(side);
+    $('input[name="step"]').val(step);
+  });
+});

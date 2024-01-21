@@ -1,0 +1,35 @@
+python
+import cx_Oracle
+
+# Connect to the Oracle database
+connection = cx_Oracle.connect("username", "password", "hostname:port/service_name")
+
+# Get the modified list from the user (assuming it's a list of item IDs)
+modified_list = [1, 2, 3, 4]  # Example modified list
+
+# Create a cursor to execute SQL statements
+cursor = connection.cursor()
+
+# Add new items to the database
+for item_id in modified_list:
+    # Check if the item already exists in the database
+    cursor.execute("SELECT COUNT(*) FROM your_table WHERE item_id = :id", id=item_id)
+    result = cursor.fetchone()
+    count = result[0]
+    
+    if count == 0:
+        # Item doesn't exist, so insert it into the database
+        cursor.execute("INSERT INTO your_table (item_id) VALUES (:id)", id=item_id)
+
+# Delete items that the user has checked for deletion
+for item_id in modified_list:
+    # Check if the item should be deleted
+    if should_delete_item(item_id):  # Implement your own logic to determine if an item should be deleted
+        cursor.execute("DELETE FROM your_table WHERE item_id = :id", id=item_id)
+
+# Commit the changes to the database
+connection.commit()
+
+# Close the cursor and the database connection
+cursor.close()
+connection.close()

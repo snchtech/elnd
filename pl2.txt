@@ -1,0 +1,59 @@
+1. Retrieve the session ID from the session created on your site during the login process.
+2. Include the session ID as a cookie or a custom header in your fetch request to the API server.
+3. Configure the API server to recognize and validate the session ID sent from the site.
+4. Retrieve the session data on the API server using the session ID.
+
+Here's an example of how you can make a fetch request with the session ID:
+
+javascript
+const sessionID = 'your_session_id'; // Replace with the actual session ID
+
+fetch('https://api.example.com/endpoint', {
+  method: 'GET',
+  headers: {
+    'Cookie': `sessionID=${sessionID}`, // Include the session ID as a cookie
+    // or
+    // 'Authorization': `Bearer ${sessionID}`, // Include the session ID as a custom header
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    // Handle the API response data
+  })
+  .catch(error => {
+    // Handle any errors
+  });
+
+
+On the API server side, you need to configure it to recognize and validate the session ID sent from the site. The exact implementation will depend on the framework or library you are using for your API server. In the case of Node.js and Express with the `session-file-store` module, you can configure it as follows:
+
+javascript
+const express = require('express');
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
+
+const app = express();
+
+app.use(session({
+  secret: 'your_secret_key',
+  resave: false,
+  saveUninitialized: true,
+  store: new FileStore({}),
+  cookie: {
+    secure: true, // Set to true if using HTTPS
+    httpOnly: true,
+    maxAge: 86400000, // Set the desired session expiration time
+  },
+}));
+
+// Handle API routes and logic
+
+app.listen(3000, () => {
+  console.log('API server is running on port 3000');
+});
+
+
+Make sure to replace `'your_secret_key'` with a secure secret key for session encryption and adjust the session configuration options according to your requirements.
+
+By including the session ID in the fetch request and configuring the API server to recognize and validate it, you can use the already created session on the different server for authentication and authorization purposes.
+

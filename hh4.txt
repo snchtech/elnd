@@ -1,0 +1,70 @@
+const { app, BrowserWindow } = require('electron');
+const axios = require('axios');
+
+let mainWindow;
+
+app.on('ready', () => {
+  mainWindow = new BrowserWindow();
+
+  // Load your site URL
+  mainWindow.loadURL('https://your-site.com');
+
+  // Check for session file
+  mainWindow.webContents.on('did-finish-load', async () => {
+    try {
+      const response = await axios.get('https://your-site.com/check-session');
+      const hasSession = response.data.hasSession;
+
+      if (hasSession) {
+        // User has a session file
+        console.log('User is already logged in.');
+        // Perform any necessary actions for a logged-in user
+      } else {
+        // User does not have a session file
+        console.log('User is not logged in.');
+        // Perform any necessary actions for a non-logged-in user
+      }
+    } catch (error) {
+      console.error('Error checking session:', error);
+    }
+  });
+});
+
+
+--------------------------------
+
+// Assuming you have already set up the necessary dependencies and session management in your Electron application
+
+// Import required modules
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
+
+// Initialize session middleware
+app.use(session({
+  store: new FileStore({
+    // Specify the path where session files are stored
+    path: '/path/to/session/files',
+  }),
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: true,
+}));
+
+// Check session on the page
+app.get('/check-session', (req, res) => {
+  // Check if the user has an active session
+  if (req.session && req.session.user) {
+    // User is logged in, perform necessary actions
+    // Retrieve user information from the session
+    const user = req.session.user;
+    // Do something with the user data
+    res.send(`Welcome back, ${user.username}!`);
+  } else {
+    // User is not logged in or session expired
+    res.send('Please log in to access this page.');
+  }
+});
+
+
+
+

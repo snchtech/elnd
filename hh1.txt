@@ -1,0 +1,46 @@
+1. Install the `session-file-store` module in your project by running the following command:
+
+   npm install session-file-store
+   
+
+
+2. In your Node.js code, require the necessary modules:
+javascript
+   const express = require('express');
+   const session = require('express-session');
+   const FileStore = require('session-file-store')(session);
+   
+
+
+3. Configure the session middleware for both your site and API servers, using the same session store:
+javascript
+   const app = express();
+
+   app.use(session({
+     secret: 'your-secret-key',
+     resave: false,
+     saveUninitialized: true,
+     store: new FileStore({
+       path: '/path/to/session/store/directory',
+     }),
+   }));
+   
+
+
+Make sure to replace `'your-secret-key'` with a secure secret key and `'path/to/session/store/directory'` with the actual path where you want to store the session files.
+
+4. With this configuration, both your site and API servers will use the same session store, allowing them to share session data.
+
+Here's an example of how you can access and manipulate session data in your route handlers:
+
+javascript
+app.get('/api/data', (req, res) => {
+  // Access session data
+  const userData = req.session.user;
+
+  // Manipulate session data
+  req.session.user = { name: 'John', role: 'admin' };
+
+  // Send response
+  res.json({ data: 'Some data' });
+});

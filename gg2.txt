@@ -1,0 +1,36 @@
+DECLARE
+  l_stage_id TABLE_2.stage_id%TYPE;
+  l_title TABLE_2.title%TYPE;
+BEGIN
+  FOR rec IN (
+    SELECT t2.stage_id, t2.title
+    FROM TABLE_1 t1
+    JOIN TABLE_2 t2 ON t1.stage_id = t2.stage_id
+    WHERE t1.parent_stage_id IS NULL
+    ORDER BY t2.stage_id
+  ) LOOP
+    l_stage_id := rec.stage_id;
+    l_title := rec.title;
+    
+    APEX_COLLECTION.ADD_MEMBER(
+      p_collection_name => 'YOUR_COLLECTION_NAME',
+      p_c001 => l_stage_id,
+      p_c002 => l_title
+    );
+    
+    FOR sub_rec IN (
+      SELECT stage_id, title
+      FROM TABLE_2
+      WHERE parent_stage_id = rec.stage_id
+      ORDER BY stage_id
+    ) LOOP
+      APEX_COLLECTION.ADD_MEMBER(
+        p_collection_name => 'YOUR_COLLECTION_NAME',
+        p_c001 => sub_rec.stage_id,
+        p_c002 => sub_rec.title
+      );
+    END LOOP;
+  END LOOP;
+  
+  COMMIT;
+END;

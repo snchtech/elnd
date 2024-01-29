@@ -1,0 +1,43 @@
+1. Updating data in TABLE_1 when deleting rows:
+sql
+BEGIN
+  FOR i IN 1..APEX_COLLECTION.GET_COUNT('YOUR_COLLECTION_NAME') LOOP
+    DELETE FROM TABLE_1 WHERE id = APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'id', i);
+  END LOOP;
+  COMMIT;
+END;
+
+In this code snippet, we loop through the APEX collection and delete the corresponding rows from TABLE_1 based on the id column.
+
+2. Updating data in TABLE_1 when modifying specific columns (e.g., sort_order):
+sql
+BEGIN
+  FOR i IN 1..APEX_COLLECTION.GET_COUNT('YOUR_COLLECTION_NAME') LOOP
+    UPDATE TABLE_1 SET sort_order = APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'sort_order', i)
+    WHERE id = APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'id', i);
+  END LOOP;
+  COMMIT;
+END;
+
+In this code snippet, we loop through the APEX collection and update the sort_order column in TABLE_1 based on the id column.
+
+3. Adding new data to TABLE_1 with checks for existing records by Table_1 id:
+sql
+BEGIN
+  FOR i IN 1..APEX_COLLECTION.GET_COUNT('YOUR_COLLECTION_NAME') LOOP
+    IF NOT EXISTS (SELECT 1 FROM TABLE_1 WHERE id = APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'id', i)) THEN
+      INSERT INTO TABLE_1 (id, stage_id, position_id, department_id, office_id, sort_order)
+      VALUES (APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'id', i),
+              APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'stage_id', i),
+              APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'position_id', i),
+              APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'department_id', i),
+              APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'office_id', i),
+              APEX_COLLECTION.GET_NTH_COLUMN('YOUR_COLLECTION_NAME', 'sort_order', i));
+    END IF;
+  END LOOP;
+  COMMIT;
+END;
+
+In this code snippet, we check if a record with the same id already exists in TABLE_1 before inserting new data. If the record doesn't exist, we insert the new data into TABLE_1.
+
+Remember to replace 'YOUR_COLLECTION_NAME' with the actual name of your APEX collection. Adjust the column names and conditions in the code snippets according to your TABLE_1 structure.

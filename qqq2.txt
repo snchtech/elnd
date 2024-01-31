@@ -1,0 +1,53 @@
+BEGIN
+  FOR c IN (SELECT id_tsk, position, department, office, stage, sort_order
+            FROM apex_collection
+            WHERE collection_name = 'YOUR_COLLECTION_NAME')
+  LOOP
+    -- Check if the id_tsk already exists in TABLE_1
+    IF EXISTS (SELECT 1 FROM TABLE_1 WHERE id_tsk = c.id_tsk) THEN
+      -- Update the existing row in TABLE_1
+      UPDATE TABLE_1
+      SET position = c.position,
+          department = c.department,
+          office = c.office,
+          stage = c.stage,
+          sort_order = c.sort_order
+      WHERE id_tsk = c.id_tsk;
+    ELSE
+      -- Insert a new row into TABLE_1
+      INSERT INTO TABLE_1 (id_tsk, position, department, office, stage, sort_order)
+      VALUES (c.id_tsk, c.position, c.department, c.office, c.stage, c.sort_order);
+    END IF;
+  END LOOP;
+END;
+
+
+2.) Check deleted rows by id_task and delete them from TABLE_1:
+
+sql
+BEGIN
+  FOR c IN (SELECT id_tsk
+            FROM apex_collection
+            WHERE collection_name = 'YOUR_COLLECTION_NAME')
+  LOOP
+    -- Delete the row from TABLE_1
+    DELETE FROM TABLE_1
+    WHERE id_tsk = c.id_tsk;
+  END LOOP;
+END;
+
+
+3.) Check rows to update the sort order column and change these values in TABLE_1:
+
+sql
+BEGIN
+  FOR c IN (SELECT id_tsk, sort_order
+            FROM apex_collection
+            WHERE collection_name = 'YOUR_COLLECTION_NAME')
+  LOOP
+    -- Update the sort_order column in TABLE_1
+    UPDATE TABLE_1
+    SET sort_order = c.sort_order
+    WHERE id_tsk = c.id_tsk;
+  END LOOP;
+END;

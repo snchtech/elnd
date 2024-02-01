@@ -1,0 +1,21 @@
+DECLARE
+  l_table2_per_id TABLE_2.PER_ID%TYPE;
+  l_collection_exists BOOLEAN;
+BEGIN
+  FOR rec IN (SELECT PER_ID FROM TABLE_2) LOOP
+    l_collection_exists := FALSE;
+    
+    -- Iterate through the Apex collections to check if the ID exists
+    FOR i IN 1..APEX_APPLICATION.G_F01.COUNT LOOP
+      IF APEX_APPLICATION.G_F01(i) = rec.PER_ID THEN
+        l_collection_exists := TRUE;
+        EXIT; -- Exit the loop if the ID is found in the collection
+      END IF;
+    END LOOP;
+    
+    -- If the ID exists in the collection, display the information
+    IF l_collection_exists THEN
+      DBMS_OUTPUT.PUT_LINE('ID ' || rec.PER_ID || ' exists in the Apex collection.');
+    END IF;
+  END LOOP;
+END;

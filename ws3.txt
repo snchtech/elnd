@@ -1,0 +1,15 @@
+DECLARE
+  l_deleted_per_id NUMBER;
+BEGIN
+  FOR i IN 1..APEX_COLLECTION.GET_COUNT(p_collection_name => 'APP_COL_NAME_1') LOOP
+    -- Check if the PER_ID value exists in the TABLE_2 table
+    SELECT PER_ID
+    INTO l_deleted_per_id
+    FROM TABLE_2
+    WHERE PER_ID = APEX_COLLECTION.GET_MEMBER_NUMBER(p_collection_name => 'APP_COL_NAME_1', p_idx => i)
+    AND ROWNUM = 1;
+
+    -- If the PER_ID value exists in the TABLE_2 table, it was deleted from the Apex collection
+    DBMS_OUTPUT.PUT_LINE('Deleted PER_ID value: ' || l_deleted_per_id);
+  END LOOP;
+END;

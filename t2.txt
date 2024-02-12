@@ -1,0 +1,105 @@
+First, let's assume you have an HTML structure with the sidebar menu containing checkboxes and the main content block where new items will be displayed. 
+
+HTML:
+
+<!-- Sidebar menu -->
+<div id="sidebar">
+  <input type="checkbox" data-itemid="1">Item 1<br>
+  <input type="checkbox" data-itemid="2">Item 2<br>
+  <input type="checkbox" data-itemid="3">Item 3<br>
+  <!-- Add more checkbox items as needed -->
+</div>
+
+<!-- Main content block -->
+<div id="main-content">
+  <!-- Content will be dynamically updated here -->
+</div>
+
+Copy code
+
+
+Next, you need to handle the checkbox click event using JavaScript:
+
+JavaScript (Client-side):
+
+// Get the sidebar checkboxes
+const checkboxes = document.querySelectorAll('#sidebar input[type="checkbox"]');
+
+// Attach event listener to each checkbox
+checkboxes.forEach(checkbox => {
+  checkbox.addEventListener('click', async () => {
+    const itemId = checkbox.dataset.itemid;
+    
+    try {
+      // Make a request to the Node.js server
+      const response = await fetch(`/api/addItem?itemId=${itemId}`);
+      
+      if (response.ok) {
+        // Refresh the main content block
+        refreshMainContent();
+      } else {
+        console.error('Failed to add item');
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  });
+});
+
+// Function to refresh the main content block
+function refreshMainContent() {
+  // Make a request to the Node.js server to get updated item data
+  // and update the main content block with the new item
+  // You can use a similar approach as the addItem endpoint below
+}
+
+Copy code
+
+
+Now, let's define the Node.js server endpoints to handle the requests:
+
+JavaScript (Server-side using Node.js and Express.js):
+
+const express = require('express');
+const app = express();
+const port = 3000; // Change this to your desired port number
+
+// Add middleware for parsing JSON request bodies
+app.use(express.json());
+
+// Endpoint to add an item to the Oracle database
+app.get('/api/addItem', async (req, res) => {
+  const { itemId } = req.query;
+  const userId = 'your_user_id'; // Replace with the actual user ID
+    
+  try {
+    // Perform the database operation to insert the new item
+    // using the provided userId and itemId
+    
+    // Example Oracle DB code using the `oracledb` library
+    const oracledb = require('oracledb');
+    const connection = await oracledb.getConnection({
+      user: 'your_db_user',
+      password: 'your_db_password',
+      connectString: 'your_db_connection_string'
+    });
+    
+    await connection.execute(`
+      INSERT INTO your_table_name (user_id, item_id)
+      VALUES (:userId, :itemId)
+    `, [userId, itemId]);
+    
+    await connection.commit();
+    await connection.close();
+    
+    res.sendStatus(200);
+  } catch (error) {
+    console.error(error);
+    res.sendStatus(500);
+  }
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});

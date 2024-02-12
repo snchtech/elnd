@@ -1,0 +1,23 @@
+// Assuming you have two arrays: firstArray and secondArray
+
+// Get the container element where the checkboxes will be added
+const container = document.getElementById('checkboxContainerId'); // Replace 'checkboxContainerId' with the ID of the container element
+
+// Iterate over the first array
+firstArray.forEach(item => {
+  // Check if the item is not present in the second array
+  if (!secondArray.includes(item)) {
+    // Create a checkbox element
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = item.id; // Replace 'id' with the appropriate property of your item
+
+    // Create a label element for the checkbox
+    const label = document.createElement('label');
+    label.textContent = item.name; // Replace 'name' with the appropriate property of your item
+
+    // Append the checkbox and label to the container
+    container.appendChild(checkbox);
+    container.appendChild(label);
+  }
+});

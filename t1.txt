@@ -1,0 +1,22 @@
+javascript
+// Assuming you have a sidebar menu with checkboxes and a main content list
+
+// Get the checkbox element by its unique ID
+const checkbox = document.getElementById('yourCheckboxId');
+
+// Add an event listener to the checkbox
+checkbox.addEventListener('click', function() {
+  // Check if the checkbox is checked
+  if (checkbox.checked) {
+    // Get the value or text of the checkbox item
+    const itemValue = checkbox.value; // Replace 'value' with the appropriate attribute or property
+
+    // Create a new list item element
+    const newItem = document.createElement('li');
+    newItem.textContent = itemValue;
+
+    // Append the new item to the main content list
+    const mainContentList = document.getElementById('mainContentListId'); // Replace 'mainContentListId' with the ID of your main content list
+    mainContentList.appendChild(newItem);
+  }
+});

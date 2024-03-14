@@ -1,0 +1,17 @@
+function updateTooltipPosition() {
+    const scrollableDiv = document.querySelector('.scrollable-div');
+    const tooltip = document.querySelector('.tooltip');
+
+    const scrollPosition = scrollableDiv.scrollTop;
+    const tooltipHeight = tooltip.offsetHeight;
+    const tooltipTop = scrollPosition + 10; // Adjust as needed
+
+    // Check if tooltip fits at the top
+    if (tooltipTop + tooltipHeight > scrollPosition + scrollableDiv.clientHeight) {
+        // Tooltip doesn't fit, set it to the bottom
+        tooltip.style.top = (scrollPosition + scrollableDiv.clientHeight - tooltipHeight - 10) + 'px';
+    } else {
+        // Tooltip fits at the top
+        tooltip.style.top = tooltipTop + 'px';
+    }
+}

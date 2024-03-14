@@ -1,0 +1,41 @@
+1. Create a sequence in Oracle to generate unique keys:
+
+sql
+CREATE SEQUENCE key_sequence
+START WITH 1
+INCREMENT BY 1;
+
+
+2. Create a table to store the generated keys and their corresponding values:
+
+sql
+CREATE TABLE key_value_table (
+    key_id NUMBER PRIMARY KEY,
+    key_value VARCHAR2(50)
+);
+
+
+3. Create a trigger that automatically updates the keys every month:
+
+sql
+CREATE OR REPLACE TRIGGER update_keys_trigger
+BEFORE INSERT ON key_value_table
+FOR EACH ROW
+BEGIN
+    IF EXTRACT(MONTH FROM SYSDATE) != EXTRACT(MONTH FROM :NEW.key_value) THEN
+        :NEW.key_id := key_sequence.NEXTVAL;
+    END IF;
+END;
+/
+
+
+4. Insert values into the table, and the trigger will automatically update the keys when a new month starts:
+
+sql
+INSERT INTO key_value_table (key_value) VALUES ('Value 1');
+INSERT INTO key_value_table (key_value) VALUES ('Value 2');
+
+
+This setup ensures that a new key is generated and assigned to a value whenever a new month begins. You can adjust the trigger logic and key generation strategy based on your specific requirements.
+
+Please note that this is a basic example, and you may need to customize it further based on your specific use case and business logic.

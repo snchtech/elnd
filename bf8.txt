@@ -1,0 +1,22 @@
+In Oracle Database version 10.2, you can use the `DBMS_OBFUSCATION_TOOLKIT` package to perform Base64 encoding and decoding. Here is an example of how you can encode a key value using Base64 encoding in Oracle Database 10.2:
+
+sql
+-- Create a function to encode a key value using Base64 encoding
+CREATE OR REPLACE FUNCTION encode_base64(p_key_value IN VARCHAR2) RETURN VARCHAR2 IS
+    l_encoded_value VARCHAR2(4000);
+BEGIN
+    l_encoded_value := UTL_RAW.CAST_TO_VARCHAR2(UTL_ENCODE.BASE64_ENCODE(UTL_RAW.CAST_TO_RAW(p_key_value)));
+    RETURN l_encoded_value;
+END;
+/
+
+
+You can then use this function to encode a key value into Base64 format:
+
+sql
+SELECT encode_base64('your_key_value') AS encoded_value FROM dual;
+
+
+This will return the Base64 encoded value of your key.
+
+Please note that Base64 encoding is not a secure way to store sensitive information like passwords or keys in a database. It is recommended to use proper encryption techniques for sensitive data.

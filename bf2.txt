@@ -1,0 +1,44 @@
+<style>
+    .scrollable-div {
+        height: 200px;
+        overflow-y: auto;
+        position: relative;
+    }
+
+    .tooltip {
+        position: absolute;
+        background-color: #f9f9f9;
+        padding: 5px;
+        border: 1px solid #ccc;
+    }
+</style>
+</head>
+<body>
+<div class="scrollable-div" onscroll="updateTooltipPosition()">
+    <div>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+    <div>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+    <div>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+    <div>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+    <div class="tooltip" id="tooltip">Tooltip</div>
+</div>
+
+<script>
+    function updateTooltipPosition() {
+        const scrollableDiv = document.querySelector('.scrollable-div');
+        const tooltip = document.querySelector('.tooltip');
+
+        const scrollPosition = scrollableDiv.scrollTop;
+        const tooltipTop = scrollPosition + 10; // Adjust as needed
+
+        tooltip.style.top = tooltipTop + 'px';
+
+        const tooltipWidth = tooltip.offsetWidth;
+        const scrollWidth = scrollableDiv.offsetWidth;
+
+        if (tooltipWidth > scrollWidth) {
+            tooltip.style.left = '0';
+        } else {
+            tooltip.style.left = '';
+        }
+    }
+</script>

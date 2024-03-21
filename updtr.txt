@@ -1,0 +1,25 @@
+const fs = require('fs');
+const path = require('path');
+
+const folderPath = 'path/to/your/folder';
+
+function readFolder(folderPath) {
+    fs.readdir(folderPath, { withFileTypes: true }, (err, files) => {
+        if (err) {
+            console.error('Error reading folder:', err);
+            return;
+        }
+
+        files.forEach(file => {
+            const filePath = path.join(folderPath, file.name);
+
+            if (file.isDirectory() && file.name !== 'updator') {
+                readFolder(filePath); // Recursively read subfolders
+            } else if (!file.isDirectory() && path.dirname(filePath) !== path.join(folderPath, 'updator')) {
+                console.log(filePath); // Process files excluding those in the "updator" folder
+            }
+        });
+    });
+}
+
+readFolder(folderPath);

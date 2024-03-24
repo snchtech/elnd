@@ -1,3 +1,0 @@
-https://stackoverflow.com/questions/34354975/refresh-section-of-a-page-using-ejs-and-express
-re-rendering EJS file after an ajax request
-https://www.youtube.com/watch?v=-aO7B3FQ2XE

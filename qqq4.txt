@@ -1,7 +1,0 @@
-sql
-DELETE FROM TABLE_1
-WHERE id_tsk NOT IN (
-  SELECT id_tsk
-  FROM apex_collection
-  WHERE collection_name = 'YOUR_COLLECTION_NAME'
-);

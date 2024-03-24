@@ -1,0 +1,54 @@
+{
+  "name": "electronupdt",
+  "version": "1.0.0",
+  "description": "Test application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "make": "electron-forge make",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Serg",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^29.1.1"
+  },
+  "config": {
+    "forge": {
+      "packagerConfig": {"asar": true},
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "my_ele_app"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {}
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@electron-forge/maker-deb": "^7.3.0",
+    "@electron-forge/maker-rpm": "^7.3.0",
+    "@electron-forge/maker-squirrel": "^7.3.0",
+    "@electron-forge/maker-zip": "^7.3.0",
+    "adm-zip": "^0.5.10",
+    "child_process": "^1.0.2",
+    "electron-squirrel-startup": "^1.0.0",
+    "request": "^2.88.2",
+    "tslib": "^2.6.2"
+  }
+}

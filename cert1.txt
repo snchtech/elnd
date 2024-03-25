@@ -1,0 +1,26 @@
+1. Install Certbot: Use the following command to install Certbot on your Ubuntu server:
+
+   sudo apt-get update
+   sudo apt-get install certbot
+   
+
+
+2. Obtain SSL Certificate: Run Certbot to obtain an SSL certificate for your domain. Replace 'your_domain' with your actual domain name:
+
+   sudo certbot certonly --standalone -d your_domain
+   
+
+
+3. Configure Node.js App: In your Node.js app, you will need to use the SSL certificate and private key to create an HTTPS server. Here is an example code snippet to get you started:
+javascript
+   const https = require('https');
+   const fs = require('fs');
+
+   const options = {
+     key: fs.readFileSync('/etc/letsencrypt/live/your_domain/privkey.pem'),
+     cert: fs.readFileSync('/etc/letsencrypt/live/your_domain/fullchain.pem')
+   };
+
+   https.createServer(options, (req, res) => {
+     // Your Node.js app logic here
+   }).listen(443);

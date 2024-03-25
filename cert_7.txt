@@ -1,0 +1,32 @@
+javascript
+const downloadAndExtractUpdate = (updateUrl, updateFolder) => {
+  return new Promise((resolve, reject) => {
+    const zipFilePath = path.join(updateFolder, 'update.zip');
+
+    request(updateUrl)
+      .pipe(fs.createWriteStream(zipFilePath))
+      .on('close', () => {
+        const zip = new AdmZip(zipFilePath);
+        zip.extractAllTo(updateFolder, true);
+        fs.unlinkSync(zipFilePath);
+
+        resolve(); // Resolve the Promise when all processes are completed
+      })
+      .on('error', (error) => {
+        reject(error); // Reject the Promise if there is an error
+      });
+  });
+};
+
+// Usage of the Promise-based function with async/await
+async function main() {
+  try {
+    await downloadAndExtractUpdate(updateUrl, updateFolder);
+    console.log('Update downloaded and extracted successfully.');
+    // Additional code to execute after the update process is completed
+  } catch (error) {
+    console.error('Error occurred during update process:', error);
+  }
+}
+
+main();

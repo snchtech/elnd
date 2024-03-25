@@ -1,0 +1,20 @@
+1. Install OpenSSL: Use the following command to install the OpenSSL package on your Ubuntu system:
+
+   sudo apt-get update
+   sudo apt-get install openssl
+   
+
+
+2. Check OpenSSL Version: After installing OpenSSL, verify the version to ensure that the `pkcs7` command is available. You can check the OpenSSL version by running:
+
+   openssl version
+   
+
+
+3. Use `openssl crl2pkcs7` Command: If the `openssl pkcs7` command is not available, you can use the `openssl crl2pkcs7` command as an alternative to convert your P7B file to PEM format. Here is an example command:
+
+   openssl crl2pkcs7 -nocrl -certfile your_cert.p7b -out your_cert.pem
+   
+
+
+By following these steps, you should be able to convert your P7B file to PEM format using the `openssl crl2pkcs7` command on your Ubuntu system. If you encounter any issues or need further assistance, please let me know.

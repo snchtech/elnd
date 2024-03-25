@@ -1,0 +1,25 @@
+javascript
+// Define a function that returns a Promise to simulate an asynchronous operation
+function asyncFunction() {
+  return new Promise((resolve, reject) => {
+    // Simulate some asynchronous operation
+    setTimeout(() => {
+      console.log("Function execution complete");
+      resolve(); // Resolve the Promise when the function execution is complete
+    }, 3000); // Simulating a 3-second delay
+  });
+}
+
+// Call the async function and use async/await to wait for its completion
+async function checkFunctionExecution() {
+  try {
+    console.log("Starting function execution...");
+    await asyncFunction(); // Wait for the async function to complete
+    console.log("Function fully executed.");
+  } catch (error) {
+    console.error("Error occurred during function execution:", error);
+  }
+}
+
+// Call the function to check if it has fully executed
+checkFunctionExecution();

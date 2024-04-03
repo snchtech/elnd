@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<style>
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.wrapper {
+    background: #3498db;
+    width: 100%;
+    height: 100vh;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+h1.loading{
+    font-size: 20px;
+    font-family: Verdana;
+    font-weight: bold;
+    text-align: center;
+}
+span[class^="dot-"]{
+    opacity: 0;
+}
+.dot-one{
+    animation: dot-one 2s infinite linear
+}
+.dot-two{
+    animation: dot-two 2s infinite linear
+}
+.dot-three{
+    animation: dot-three 2s infinite linear
+}
+@keyframes dot-one{
+  0%{
+    opacity: 0;
+  }
+  15%{
+    opacity: 0;
+  }
+  25%{
+    opacity: 1;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+
+@keyframes dot-two{
+  0%{
+    opacity: 0;
+  }
+  25%{
+    opacity: 0;
+  }
+  50%{
+    opacity: 1;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+
+@keyframes dot-three{
+  0%{
+    opacity: 0;
+  }
+  50%{
+    opacity: 0;
+  }
+  75%{
+    opacity: 1;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+
+
+
+
+.box {
+	position: relative;
+	margin-bottom: 20px;
+	transition: .3s color, .3s border, .3s;
+    padding-top: 40px;
+    text-align: center;
+    min-height: 35px;
+}
+
+    [class*="loader-"] {
+	display: inline-block;
+	width: 35px;
+	height: 35px;
+	color: inherit;
+	vertical-align: middle;
+	pointer-events: none;
+}
+
+.loader-39 {
+    position: relative;
+    width: 15px;
+    height: 15px;
+    background-color: currentcolor;
+    border-radius: 100%;
+    animation: loader-39-1 30s infinite linear;
+}
+.loader-39:before, .loader-39:after {
+	content: '';
+	border-radius: 100%;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}
+
+.loader-39:before {
+	width: 30px;
+	height: 60px;
+	animation: loader-39-2 .8s linear infinite;
+}
+
+.loader-39:after {
+	width: 60px;
+	height: 30px;
+	animation: loader-39-2 1.2s linear infinite;
+}
+
+@keyframes loader-39-1 {
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
+}
+@keyframes loader-39-2 {
+    0% {
+        box-shadow: 2px -2px 1px #ffffff;
+    }
+    25% {
+        box-shadow: 2px 2px 0 1px #ffffff;
+    }
+    50% {
+        box-shadow: -2px 2px 0 1px #ffffff;
+    }
+    75% {
+        box-shadow: -2px -2px 0 1px #ffffff;
+    }
+    100% {
+        box-shadow: 2px -2px 0 1px #ffffff;
+    }
+}
+</style>
+<body>
+    <div class="wrapper">
+        <div class="load-content">
+            <div class="box">
+                <div class="loader-39"></div>
+            </div>
+
+            <div class="loading-text"> <!--Loading-text-->
+            <h1 class="loading">Завантаження оновлень
+                <span class="dot-one"> .</span>
+                <span class="dot-two"> .</span>
+                <span class="dot-three"> .</span>
+            </h1>
+            </div> <!--/Loading-text-->
+        </div>
+    </div>
+</body>
+</html>
+
+
+
+
+

@@ -1,0 +1,39 @@
+// In your Electron main process file (main.js)
+
+const { app, BrowserWindow, ipcMain } = require('electron');
+const axios = require('axios');
+
+let mainWindow;
+
+app.on('ready', () => {
+  mainWindow = new BrowserWindow();
+  mainWindow.loadURL('your_site_url_here');
+
+  // Listen for data from the renderer process
+  ipcMain.on('send-data-to-electron', (event, data) => {
+    // Use Axios to send data to the preloader JS
+    axios.post('your_preloader_url_here', data)
+      .then(response => {
+        console.log(response.data);
+      })
+      .catch(error => {
+        console.error(error);
+      });
+  });
+});
+
+
+In your renderer process (site), you can send data to the main process using Electron's IPC mechanism. Here's an example of how you can do that:
+
+javascript
+// In your site's renderer process
+
+const { ipcRenderer } = require('electron');
+
+// Assuming you have a function that triggers sending data to Electron
+function sendDataToElectron(data) {
+  ipcRenderer.send('send-data-to-electron', data);
+}
+
+// Call the function with your data attributes
+sendDataToElectron({ attribute1: 'value1', attribute2: 'value2' });

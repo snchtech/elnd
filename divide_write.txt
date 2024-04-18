@@ -1,0 +1,39 @@
+To divide the process of writing a text file in an Electron application from the main process and prevent it from blocking the GPU process render, you can utilize the `fs` module in Node.js to perform the file writing operation asynchronously in a separate process. By doing so, you can offload the file writing task from the main process and avoid potential blocking issues.
+
+Here is an example code snippet demonstrating how you can achieve this separation of file writing process in an Electron application:
+
+javascript
+// In the main process file (main.js)
+const { ipcMain } = require('electron');
+const fs = require('fs');
+
+ipcMain.on('writeToFile', (event, data) => {
+  // Perform file writing operation asynchronously
+  fs.writeFile('output.txt', data, (err) => {
+    if (err) {
+      event.reply('writeToFileResponse', { success: false, error: err.message });
+    } else {
+      event.reply('writeToFileResponse', { success: true });
+    }
+  });
+});
+
+
+javascript
+// In the renderer process file (renderer.js)
+const { ipcRenderer } = require('electron');
+
+ipcRenderer.send('writeToFile', 'Hello, World!');
+
+ipcRenderer.on('writeToFileResponse', (event, response) => {
+  if (response.success) {
+    console.log('File write operation successful');
+  } else {
+    console.error('Error writing file:', response.error);
+  }
+});
+
+
+In this code snippet, the file writing operation is triggered from the renderer process using `ipcRenderer.send()`, and the actual file writing is handled asynchronously in the main process using `fs.writeFile()`. Once the file writing operation is completed, a response is sent back to the renderer process using `event.reply()`.
+
+By dividing the file writing process in this manner, you can prevent it from blocking the GPU process render in your Electron application and ensure a smoother user experience.

@@ -1,0 +1,43 @@
+-- main
+
+Main process
+The main process is responsible for creating and managing BrowserWindow instances and various application events. It can also do things like register global shortcuts, create native menus and dialogs, respond to auto-update events, and more. 
+
+
+-- type=render
+
+Renderer process
+The render process is responsible for running the user-interface of your app, or in other words, a web page which is an instance of webContents. 
+
+https://www.electronjs.org/docs/latest/tutorial/process-model
+Electron applications are structured very similarly. As an app developer, you control two types of processes: main and renderer. These are analogous to Chrome's own browser and renderer processes outlined above.
+BrowserView module
+
+
+-- type gpu-process
+
+Why?
+The main process and its UI thread are essentially the control tower for major operations inside your app. When the operating system tells your app about a mouse click, it'll go through the main process before it reaches your window. If your window is rendering a buttery-smooth animation, it'll need to talk to the GPU process about that – once again going through the main process.
+
+Electron and Chromium are careful to put heavy disk I/O and CPU-bound operations onto new threads to avoid blocking the UI thread. You should do the same.
+
+
+https://jameshfisher.com/2020/10/14/the-electron-process-architecture-is-the-chromium-process-architecture/
+This process architecture comes from Chromium. Look at the process tree for Chrome running on your computer, and you’ll see basically the same thing:
+
+-+= Google Chrome
+ |--- Google Chrome Helper (GPU) --type=gpu-process
+ |--- Google Chrome Helper --type=utility --utility-sub-type=network.mojom.NetworkService
+ |--- Google Chrome Helper --type=utility --utility-sub-type=audio.mojom.AudioService
+ |--- Google Chrome Helper --type=ppapi-broker
+ |--- Google Chrome Helper (Renderer) --type=renderer
+ |--- Google Chrome Helper (Renderer) --type=renderer
+ ... an ungodly amount of these ...
+ \--- Google Chrome Helper (Renderer) --type=renderer
+
+-- type utility
+
+https://github.com/electron/electron/issues/22587
+
+Chromium uses utility processes to run certain services. In this case what you are seeing is the network service.
+

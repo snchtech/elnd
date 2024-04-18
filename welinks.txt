@@ -1,0 +1,3 @@
+https://github.com/electron/electron/blob/main/docs/tutorial/process-model.md
+
+https://www.chromium.org/developers/design-documents/multi-process-architecture/

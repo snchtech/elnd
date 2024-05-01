@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="jquery-ui.js"></script>
+</head>
+<body>
+    <a class="changer" href="#">Edit</a>
+
+    <a class="btn-save" href="#">Second</a>
+
+    <ul id="srt-ul">
+        <li>item1</li>
+        <li>item2</li>
+        <li>item3</li>
+        <li>item4</li>
+        <li>item5</li>
+    </ul>
+
+    <!-- <script>
+        $(function() {
+           $( "#srt-ul" ).sortable();
+        });
+
+        let changer = document.querySelector('.changer');
+
+        changer.addEventListener('click', function() {
+            let ulSrt = document.querySelector('#srt-ul');
+            ulSrt.classList.toggle('editable');
+        })
+
+
+     </script> -->
+
+     <!-- <script>
+        $(function() {
+            let ulSrt = $("#srt-ul");
+            if (ulSrt.hasClass("editable")) {
+                ulSrt.sortable();
+            }
+        });
+    
+        let changer = document.querySelector('.changer');
+        changer.addEventListener('click', function() {
+            let ulSrt = document.querySelector('#srt-ul');
+            ulSrt.classList.toggle('editable');
+            if (ulSrt.classList.contains('editable')) {
+                $( "#srt-ul" ).sortable();
+            } else {
+                $( "#srt-ul" ).sortable("destroy");
+            }
+        });
+    </script> -->
+
+<script>
+
+    $(function() {
+        let ulSrt = $("#srt-ul");
+        if (ulSrt.hasClass("editable")) {
+        enableSortable();
+        }
+        
+        let changer = document.querySelector('.changer');
+        changer.addEventListener('click', function() {
+        let ulSrt = document.querySelector('#srt-ul');
+        ulSrt.classList.toggle('editable');
+        if (ulSrt.classList.contains('editable')) {
+        enableSortable();
+        } else {
+        disableSortable();
+        }
+        });
+
+        let scndButton = document.querySelector('.btn-save');
+        scndButton.addEventListener('click', function() {
+            let ulDiv = document.querySelector('#srt-ul');
+            console.log(ulDiv);
+            if (ulDiv.classList.contains('editable')) {
+                ulDiv.classList.remove('editable');
+            }
+            
+            disableSortable(); 
+        });
+        
+        function enableSortable() {
+        if (!ulSrt.hasClass('sortable-initialized')) {
+        ulSrt.sortable();
+        ulSrt.addClass('sortable-initialized');
+        }
+        }
+        
+        function disableSortable() {
+        if (ulSrt.hasClass('sortable-initialized')) {
+        ulSrt.sortable("destroy");
+        ulSrt.removeClass('sortable-initialized');
+        }
+        }
+        });
+    </script>
+
+    
+</body>
+</html>

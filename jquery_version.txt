@@ -1,0 +1,44 @@
+<script>
+
+$(function() {
+    let ulSrt = $("#srt-ul");
+    if (ulSrt.hasClass("editable")) {
+        enableSortable();
+    }
+
+    $('.changer').click(function() {
+        let ulSrt = $('#srt-ul');
+        ulSrt.toggleClass('editable');
+        if (ulSrt.hasClass('editable')) {
+            enableSortable();
+        } else {
+            disableSortable();
+        }
+    });
+
+    $('.btn-save').click(function() {
+        let ulDiv = $('#srt-ul');
+        console.log(ulDiv);
+        if (ulDiv.hasClass('editable')) {
+            ulDiv.removeClass('editable');
+        }
+
+        disableSortable();
+    });
+
+    function enableSortable() {
+        if (!ulSrt.hasClass('sortable-initialized')) {
+            ulSrt.sortable();
+            ulSrt.addClass('sortable-initialized');
+        }
+    }
+
+    function disableSortable() {
+        if (ulSrt.hasClass('sortable-initialized')) {
+            ulSrt.sortable("destroy");
+            ulSrt.removeClass('sortable-initialized');
+        }
+    }
+});
+
+</script>

@@ -1,0 +1,21 @@
+SET_MODULE_ORDER
+declare
+l_module_id NUMBER;
+l_order_number NUMBER;
+begin
+
+    FOR c IN (SELECT MODULE_ID, ORDER_NUMBER FROM MODULE_ORDER) LOOP
+        l_module_id := c.MODULE_ID;
+        l_order_number := c.ORDER_NUMBER;
+        
+        IF l_module_id = 11 THEN
+            apex_util.set_session_state('P1_M11', l_order_number);
+        ELSIF l_module_id = 12 THEN
+            apex_util.set_session_state('P1_M12', l_order_number);
+        ELSIF l_module_id = 14 THEN
+            apex_util.set_session_state('P1_M14', l_order_number);
+        END IF;
+
+    END LOOP;
+
+end;

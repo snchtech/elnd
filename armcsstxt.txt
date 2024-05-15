@@ -1,0 +1,171 @@
+/* Side menu */
+.side-menu-tooltip {
+    background: #fafafa;
+    border: 2px solid blue;
+    font-size: 15px;
+    font-weight: bold;
+}
+
+body.js-navExpanded .side-menu-tooltip {
+      display: none;
+      visibility: hidden;
+}
+
+body.js-navCollapsed .a-TreeView .a-TreeView-node .a-TreeView-content .a-TreeView-label  {
+    display: none;
+}
+
+.a-TreeView .a-TreeView-node .a-TreeView-row.is-hover {
+    background-color: yellow !important;
+}
+
+.a-TreeView .a-TreeView-node .a-TreeView-content.is-hover .tooltip-label-side {
+    color: #000;
+}
+
+.a-TreeView .a-TreeView-node .a-TreeView-content.is-hover .a-TreeView-label {
+    color: #000;
+}
+
+
+.a-TreeView .a-TreeView-node.active .a-TreeView-row {
+    background-color: blue;
+}
+
+  /* Editable mode for modules */
+
+#module-container {
+    margin: 0;
+    padding: 0; 
+}
+
+.ui-state-highlight { 
+    height: 50px;
+    background: #fffa94;
+    border: 1px solid #e0d563;
+    margin-bottom: 18px;
+}
+
+#module-container.editable-mode {
+    border: 1px dashed #ccc;
+    padding: 40px 20px 20px 20px;
+    position: relative;
+}
+
+#module-container.editable-mode:before {
+     content: 'Ви можете змінити порядок сортування модулів';
+     position: absolute;
+     top: 10px;
+     left: 20px;
+     font-size: 14px;
+}
+
+#module-container .a-TMV--cards {
+    position: relative;
+}
+
+#module-container .a-TMV--cards .order-number {
+    font-weight: bold;
+    color: #818181;
+    font-size: 15px;
+    position: absolute;
+    left: 5px;
+    top: 18px;
+    display: none;
+}
+
+#module-container.editable-mode .a-TMV--cards .order-number {
+    display: block;
+}
+
+#module-container.editable-mode .a-TMV--cards {
+    padding-left: 70px;
+}
+
+#module-container .a-TMV--cards .ord-button-container {
+    position: absolute;
+    left: 30px;
+    top: 0px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#module-container.editable-mode .a-TMV--cards .ord-button-container {
+     display: flex;
+     height: 100%;
+}
+
+#module-container.editable-mode .a-TMV--cards .ord-button-container button {
+    padding: 0;
+    margin: 0;
+    width: 26px;
+    height: 23px;
+}
+
+#module-container .a-TMV--cards .a-CardView-items {
+    padding: 0;
+    margin: 0;
+}
+
+#module-container.editable-mode .cards-item:first-child .ord-button-container .ord-button-top {
+   display: none;
+}
+
+
+#module-container.editable-mode .cards-item:last-child .ord-button-container .ord-button-bottom {
+   display: none;
+}
+
+#module-container.editable-mode .a-TMV--cards .ord-button-container .ord-button-top {
+   margin-bottom: 5px;
+}
+
+#module-container .cards-item {
+    margin-bottom: 18px;
+}
+
+#module-wrapper #save-order-button {
+    margin-bottom: 20px;
+    display: none;
+}
+
+#module-wrapper.editable-container #save-order-button.active {
+    display: block;
+}
+
+.success-save-message {
+    display: none;
+}
+
+.success-save-message #P1_SUCCESS_SAVE_MESSAGE {
+    color: #fff;
+    background: rgb(5, 134, 5);
+    border: 0;
+    outline: 0;
+    font-size: 16px;
+    padding: 5px 15px;
+}
+
+.success-save-message.active {
+    display: block;
+}
+
+.error-save-message {
+    display: none;
+}
+
+.error-save-message #P1_ERROR_SAVE_MESSAGE {
+    color: #fff;
+    background: red;
+    border: 0;
+    outline: 0;
+    font-size: 16px;
+    padding: 5px 15px;
+}
+
+.error-save-message.active {
+    display: block;
+}
+

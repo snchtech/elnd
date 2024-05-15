@@ -1,0 +1,71 @@
+Обгортка модулів
+id module-wrapper
+
+P1_SUCCESS_SAVE_MESSAGE
+template hidden
+css class success-save-message
+advanced css class success-save-message-item
+warn on unsaved change - ignore
+
+
+P1_ERROR_SAVE_MESSAGE
+hidden 
+error-save-message
+warn on unsaved change - ignore
+
+
+advanced - error-save-message-item
+
+SAVE_ORDER_BUTTON
+Зберегти порядок модулів
+hot-true
+behavior action - defined by dynamic action
+id save-order-button
+
+
+P1_MODULE_ID (hidden)
+warn on unsaved change - ignore
+
+P1_MODULE_ORDER
+warn on unsaved change - ignore
+
+Контейнер модулів - static content
+id - module-container
+
+Модуль 1 - Cards
+SQL Query - 
+select 'Модуль 1' from dual UNION
+select '5' from dual UNION
+select '2' from dual UNION
+select '0' from dual
+
+css class - cards-item
+id - mod-1
+attr - data-module-id="11" data-order="&P1_M11."
+
+P1_M11 - hidden
+warn on unsaved change - ignore
+
+select 'Модуль 2' from dual UNION
+select '3' from dual UNION
+select '8' from dual UNION
+select '1' from dual
+
+mod-2
+data-module-id="12" data-order="&P1_M12."
+
+P1_M12 - hidden
+warn on unsaved change - ignore
+
+select 'Модуль 3' from dual UNION
+select '15' from dual UNION
+select '18' from dual UNION
+select '4' from dual
+
+mod-3
+data-module-id="14" data-order="&P1_M14."
+
+GRID 4 column
+
+P1_M14 - hidden
+warn on unsaved change - ignore

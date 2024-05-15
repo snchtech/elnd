@@ -1,0 +1,348 @@
+Page load
+----------------------------------
+SET_MODULE_ORDER_DATA
+GET_AJAX_DATA_ORDER
+
+$(document).ready(function() {
+    var container = $('#module-container');
+    var items = container.children('.cards-item').get();
+
+    items.sort(function(a, b) {
+        return $(a).data('order') - $(b).data('order');
+    });
+
+    $.each(items, function(index, item) {
+        container.append(item);
+    });
+});
+
+---------------------------------
+
+SET_TOOLTIP_FOR_SIDE_MENU
+ADD_TOOLTIP_FUNCTIONALITY
+
+$( function() {
+    $( document ).tooltip({
+        tooltipClass: "side-menu-tooltip",
+        items: ".tooltip-label-side, [label], [title]",
+        position: {
+            // my: "right top-20",
+            at: "right+10 top-23"
+        },
+        content: function() {
+            var element = $( this );
+            var liMenuItem = element.closest( ".a-TreeView-node" );
+            var labelMenuItem = liMenuItem.find('.a-TreeView-label');
+            var labelMenuText;
+            if(labelMenuItem) {
+                labelMenuText = labelMenuItem.text();
+                return labelMenuText;
+            }
+        
+        
+        console.log(labelMenuText);
+        // if ( element.is( "[data-geo]" ) ) {
+        //   var text = element.text();
+        //   return "<img class='map' alt='" + text +
+        //     "' src='https://maps.google.com/maps/api/staticmap?" +
+        //     "zoom=11&size=350x350&maptype=terrain&sensor=false&center=" +
+        //     text + "'>";
+        // }
+        // if ( element.is( "[title]" ) ) {
+        //   return element.attr( "title" );
+        // }
+        // if ( element.is( "img" ) ) {
+        //   return element.attr( "alt" );
+        // }
+      }
+    });
+  } );
+
+-------------------------------------------------------------
+
+REORDER_MODULE_ROWS
+CREATE_ADDITIONAL_SORT_BUTTTONS
+
+function createNumberListCantainers() {
+    let moduleListBlocks = document.querySelectorAll('#module-container .a-TMV--cards');
+    moduleListBlocks.forEach(el => {
+        let numberListCntr = document.createElement('span');
+        numberListCntr.classList.add('order-number');
+        el.appendChild(numberListCntr);
+
+        let buttonOrdCntr = document.createElement('div');
+        buttonOrdCntr.classList.add('ord-button-container');
+
+        let ordButtonTop = document.createElement('button');
+        ordButtonTop.classList.add('ord-button-top');
+        let ordIconTop = document.createElement('span');
+        ordIconTop.classList.add('fa');
+        ordIconTop.classList.add('fa-sort-asc');
+        ordButtonTop.appendChild(ordIconTop);
+
+        let ordButtonBottom = document.createElement('button');
+        ordButtonBottom.classList.add('ord-button-bottom');
+        let ordIconBottom = document.createElement('span');
+        ordIconBottom.classList.add('fa');
+        ordIconBottom.classList.add('fa-sort-desc');
+        ordButtonBottom.appendChild(ordIconBottom);
+
+        buttonOrdCntr.appendChild(ordButtonTop);
+        buttonOrdCntr.appendChild(ordButtonBottom);
+
+        el.appendChild(buttonOrdCntr);
+
+    });
+
+    buttonMoveUp();
+    buttonMoveDown();
+}
+
+createNumberListCantainers();
+
+function buttonMoveUp() {
+    $(".ord-button-top").on("click", function(event) {
+        event.preventDefault();
+        var elem = $(this).closest(".cards-item");
+        var prevElem = elem.prev();
+        
+        if (prevElem.length) {
+            elem.insertBefore(prevElem);
+            showSaveOrderButton();
+        }
+
+        moduleNumberList();
+    });
+}
+
+function buttonMoveDown() {
+    $(".ord-button-bottom").on("click", function(event) {
+        event.preventDefault();
+        var elem = $(this).closest(".cards-item");
+        var nextElem = elem.next();
+
+        if (nextElem.length) {
+            elem.insertAfter(nextElem);
+            showSaveOrderButton();
+        }
+        
+        moduleNumberList();
+    });
+}
+
+ENABLE_EDIT_MODE
+$( function() {
+    var element = $( '.a-TreeView  .fa-sort' );
+    var liMenuItem = element.closest( ".a-TreeView-node" );
+    var moduleContainer = $( '#module-container' );
+    var moduleWrapper = $( '#module-wrapper' );
+
+    liMenuItem.click(function(){
+        checkOrderStatus();
+        $( this ).toggleClass('active');
+            moduleContainer.toggleClass( "editable-mode" );
+            moduleWrapper.toggleClass( "editable-container" );
+
+            if (moduleContainer.hasClass('editable-mode')) {
+            enableSortable();
+            } else {
+                disableSortable();
+            }
+            moduleNumberList();
+    });
+})
+
+
+
+function moduleNumberList() {
+    $( '#module-container.editable-mode .order-number' ).each(function( index ) {
+        $(this).text(index+1 + '.');
+    });
+}
+
+function moduleDataAttrOrder() {
+    $( '#module-container.editable-mode .cards-item' ).each(function( index ) {
+        $(this).attr("data-order",index+1);
+    });
+}
+
+function showSaveOrderButton() {
+    $( '#save-order-button' ).addClass("active");
+}
+
+
+
+function checkOrderStatus() {
+    $(function() {
+        let moduleContainer = $("#module-container");
+        if (moduleContainer.hasClass("editable-mode")) {
+            enableSortable();
+        }
+    });
+}
+
+function enableSortable() {
+    let moduleContainer = $("#module-container");
+    if (!moduleContainer.hasClass('sortable-initialized')) {
+        moduleContainer.sortable({
+            placeholder: "ui-state-highlight",
+            update: function(event, ui) {
+                dataForSort();
+                moduleNumberList();
+                moduleDataAttrOrder();
+                showSaveOrderButton();  
+            }
+        });
+        moduleContainer.addClass('sortable-initialized');
+    }
+}
+
+function disableSortable() {
+    let moduleContainer = $("#module-container");
+    if (moduleContainer.hasClass('sortable-initialized')) {
+        moduleContainer.sortable("destroy");
+        moduleContainer.removeClass('sortable-initialized');
+    }
+}
+
+function dataForSort() {
+    var modulesId = [];
+    var orders = [];
+
+    $('#module-container .cards-item').each(function(index) {
+        console.log($(this))
+        modulesId.push($(this).data('module-id'));
+        //orders.push($(this).data('order'));
+        orders.push(index+1);
+    });
+
+    var modulesIdString = modulesId.join(',');
+    var ordersString = orders.join(',');
+
+    console.log(modulesIdString);
+    console.log(ordersString);
+    apex.item("P1_MODULE_ID").setValue(modulesIdString);
+    apex.item("P1_MODULE_ORDER").setValue(ordersString);
+}
+
+------------------------------------------------
+
+AUTO_REFRESH_MODULE_SCREEN
+SET_AUTO_REFRESH_BY_TIME
+// setInterval(function() {
+//     apex.region("mod-1").refresh();
+//   }, 5000);
+
+//   setInterval(function() {
+//     apex.region("mod-2").refresh();
+//   }, 8000);
+
+-------------------------------------------------
+
+save order-button action click
+SAVE_ORDER_ACTION
+SAVE_ORDER_DATA
+function saveModuleOrder() {
+
+// Get the sorted order of div items
+// var sortedOrder = [];
+// $('#module-container .cards-item').each(function() {
+//     sortedOrder.push({
+//         module_id: $(this).data('module-id'),
+//         module_order: $(this).data('order')
+//     });
+// });
+
+// Save the sorted order to an Oracle APEX collection
+// apex.collection("ORDER_MODULE").clear();
+// for (var i = 0; i < sortedOrder.length; i++) {
+//     apex.collection("ORDER_MODULE").add(sortedOrder[i]);
+// }
+
+// var modulesId = [];
+// var orders = [];
+
+// $('#module-container .cards-item').each(function() {
+//     modulesId.push($(this).data('module-id'));
+//     orders.push($(this).data('order'));
+// });
+
+// var modulesIdString = modulesId.join(',');
+// var ordersString = orders.join(',');
+
+// console.log(modulesIdString);
+// console.log(ordersString);
+// apex.item("P1_MODULE_ID").setValue(modulesIdString);
+// apex.item("P1_MODULE_ORDER").setValue(ordersString);
+
+var moduleIds = apex.item("P1_MODULE_ID").getValue();
+var orderNumbers = apex.item("P1_MODULE_ORDER").getValue();
+
+// var updateData = [
+//     {
+//         module_id: 11,
+//         module_order_number: 3
+//     },
+//     {
+//         module_id: 12,
+//         module_order_number: 2
+//     },
+//      {
+//         module_id: 14,
+//         module_order_number: 1
+//     }
+//     // Add more modules here
+// ];
+
+// var moduleIds = updateData.map(function(item) {
+//     return item.module_id;
+// }).join(',');
+
+// var orderNumbers = updateData.map(function(item) {
+//     return item.module_order_number;
+// }).join(',');
+
+apex.server.process(
+    'UPDATE_MODULE_ORDER_NUMBERS', {
+        x01: moduleIds,
+        x02: orderNumbers
+    }, 
+    {
+        dataType: 'text',
+        success: function(data) {
+            var moduleContainer = $( '#module-container' );
+            var moduleWrapper = $( '#module-wrapper' );
+            moduleContainer.toggleClass( "editable-mode" );
+            moduleWrapper.toggleClass( "editable-container" );
+            disableSortable();
+            apex.item( "P1_SUCCESS_SAVE_MESSAGE" ).setValue("Порядок модулів збережено");
+            $( ".success-save-message" ).addClass('active');
+            setTimeout(function() { 
+                    $( ".success-save-message" ).removeClass('active');
+                }, 3000);
+            
+        },
+        error: function( jqXHR, textStatus, errorThrown ) {
+          apex.item( "P21_OUTPUT" ).setValue("Виникла помилка: <br>"+textStatus + ": " + errorThrown+ "<br>");
+          $( ".error-save-message" ).addClass('active');
+            setTimeout(function() { 
+                    $( ".error-save-message" ).removeClass('active');
+                }, 3000);
+  }
+    }
+);
+
+$( "#save-order-button" ).removeClass('active');
+
+}
+
+saveModuleOrder();
+
+function disableSortable() {
+    let moduleContainer = $("#module-container");
+    if (moduleContainer.hasClass('sortable-initialized')) {
+        moduleContainer.sortable("destroy");
+        moduleContainer.removeClass('sortable-initialized');
+    }
+}
+-----------------------------------------

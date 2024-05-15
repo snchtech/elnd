@@ -1,0 +1,17 @@
+ajax callback
+UPDATE_MODULE_ORDER_NUMBERS
+declare
+l_modules_ids VARCHAR2(255);
+l_order_numbers VARCHAR2(255);
+begin
+l_modules_ids := apex_application.g_x01;
+l_order_numbers := apex_application.g_x02;
+
+apex_debug_message.log_message('-->idsMod: '||l_modules_ids);
+apex_debug_message.log_message('-->orderNumber: '||l_order_numbers);
+
+UPDATE_MODULE_ORDER_NUMBERS (
+    l_modules_ids,
+    l_order_numbers
+);
+end;

@@ -1,0 +1,23 @@
+CREATE TABLE  "MODULE_ORDER" 
+   (	"ID" NUMBER, 
+	"MODULE_ID" NUMBER, 
+	"ORDER_NUMBER" NUMBER
+   )
+/
+
+1	11	1
+2	12	3
+3	14	2
+
+
+-------------------------------
+
+create or replace function "GET_MODULE_ORDER_VALUE"
+(module_id in NUMBER)
+return NUMBER
+is
+l_order_position NUMBER;
+begin
+l_order_position := 3;
+return l_order_position;
+end;

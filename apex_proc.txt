@@ -1,0 +1,31 @@
+create or replace PROCEDURE UPDATE_MODULE_ORDER_NUMBERS (
+    p_module_ids IN VARCHAR2,
+    p_order_numbers IN VARCHAR2
+) AS
+    l_module_id_list VARCHAR2(4000) := p_module_ids;
+    l_order_number_list VARCHAR2(4000) := p_order_numbers;
+BEGIN
+    FOR i IN 1..LENGTH(p_module_ids) - LENGTH(REPLACE(p_module_ids, ',', '')) + 1 LOOP
+        DECLARE
+            l_module_id VARCHAR2(20);
+            l_order_number VARCHAR2(20);
+        BEGIN
+            IF i = 1 THEN
+                l_module_id := TO_NUMBER(SUBSTR(l_module_id_list, 1, INSTR(l_module_id_list, ',', 1, 1) - 1));
+                l_order_number := TO_NUMBER(SUBSTR(l_order_number_list, 1, INSTR(l_order_number_list, ',', 1, 1) - 1));
+            ELSIF i = (LENGTH(p_module_ids) - LENGTH(REPLACE(p_module_ids, ',', '')) + 1) THEN
+                l_module_id := TO_NUMBER(SUBSTR(l_module_id_list, INSTR(l_module_id_list, ',', 1, i - 1) + 1));
+                l_order_number := TO_NUMBER(SUBSTR(l_order_number_list, INSTR(l_order_number_list, ',', 1, i - 1) + 1));
+            ELSE
+                l_module_id := TO_NUMBER(SUBSTR(l_module_id_list, INSTR(l_module_id_list, ',', 1, i - 1) + 1, INSTR(l_module_id_list, ',', 1, i) - INSTR(l_module_id_list, ',', 1, i - 1) - 1));
+                l_order_number := TO_NUMBER(SUBSTR(l_order_number_list, INSTR(l_order_number_list, ',', 1, i - 1) + 1, INSTR(l_order_number_list, ',', 1, i) - INSTR(l_order_number_list, ',', 1, i - 1) - 1));
+            END IF;
+            -- Update the module order number in the database table using the extracted values
+            UPDATE MODULE_ORDER
+            SET ORDER_NUMBER = l_order_number
+            WHERE MODULE_ID = l_module_id;
+        END;
+    END LOOP;
+    
+    COMMIT;
+END;

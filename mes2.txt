@@ -1,0 +1,12 @@
+1. **Users Table:**
+   - user_id (Primary Key)
+   - username
+   - other user details (if needed)
+
+2. **Messages Table:**
+   - message_id (Primary Key)
+   - sender_id (Foreign Key referencing Users table)
+   - receiver_id (Foreign Key referencing Users table)
+   - send_date
+   - message_text
+   - status (e.g., unread, read)

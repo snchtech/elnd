@@ -1,0 +1,60 @@
+1. Create a button in your Oracle APEX application with the name "duplicate" and set the action to "Execute PL/SQL Code".
+
+2. Add the following PL/SQL code to the button's action to duplicate the collections COL_APP1 and COL_APP2 into COL_APP3 and COL_APP4:
+
+DECLARE
+    v_data CLOB;
+BEGIN
+    -- Duplicate COL_APP1 to COL_APP3
+    SELECT c001
+    INTO v_data
+    FROM apex_collections
+    WHERE collection_name = 'COL_APP1';
+
+    APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY (
+        p_collection_name => 'COL_APP3',
+        p_query => 'SELECT * FROM (' || v_data || ')'
+    );
+
+    -- Duplicate COL_APP2 to COL_APP4
+    SELECT c001
+    INTO v_data
+    FROM apex_collections
+    WHERE collection_name = 'COL_APP2';
+
+    APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY (
+        p_collection_name => 'COL_APP4',
+        p_query => 'SELECT * FROM (' || v_data || ')'
+    );
+END;
+
+
+
+
+
+BEGIN
+    FOR i IN (SELECT * FROM apex_collections WHERE collection_name = 'COL_APP3') LOOP
+        INSERT INTO your_table_name (column1, column2, column3)
+        VALUES (i.c001, i.c002, i.c003);
+    END LOOP;
+
+    FOR j IN (SELECT * FROM apex_collections WHERE collection_name = 'COL_APP4') LOOP
+        INSERT INTO your_table_name (column1, column2, column3)
+        VALUES (j.c001, j.c002, j.c003);
+    END LOOP;
+END;
+
+
+DECLARE
+    v_data VARCHAR2(4000);
+BEGIN
+    SELECT c001 || ',' || c002 || ',' || c003
+    INTO v_data
+    FROM apex_collections
+    WHERE collection_name = 'COL_APP2';
+
+    APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY (
+        p_collection_name => 'COL_APP4',
+        p_query => 'SELECT c001, c002, c003 FROM (' || v_data || ')'
+    );
+END;

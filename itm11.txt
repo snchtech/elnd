@@ -1,0 +1,20 @@
+$("#P1_ITEM2, #P1_ITEM3").change(function() {
+    if ($(this).val() === '') {
+        $(this).addClass('is-invalid');
+        $(this).after('<div class="invalid-feedback">This field is required.</div>');
+    } else {
+        $(this).removeClass('is-invalid');
+        $(this).next('.invalid-feedback').remove();
+    }
+});
+
+
+javascript
+$('.add-p').click(function(event) {
+    // Perform form field validation here
+    if (/* Validation condition */) {
+        // Prevent the default button event
+        event.preventDefault();
+        // Show error message or perform validation logic
+    }
+});

@@ -1,0 +1,11 @@
+1. Create a new select list item in your Oracle APEX application.
+
+2. Set the List of Values Source of the select list item to "SQL Query."
+
+3. Use the following SQL query to populate the select list with role names and role IDs without the "p_" construction for a specific app_id (e.g., 25):
+
+sql
+SELECT role_name AS display_value,
+       TO_NUMBER(REGEXP_REPLACE(role_id, '[^0-9]', '')) AS return_value
+FROM your_table_name
+WHERE app_id = :P25_APP_ID

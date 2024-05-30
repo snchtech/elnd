@@ -1,0 +1,10 @@
+$('.stage_item').each(function() {
+  if ($(this).find('.mark.check').length > 0) {
+    $(this).find('.plus').hide();
+    $(this).find('.mark').addClass('protected');
+  }
+});
+
+$('.sortable').sortable({
+  items: ':not(.protected)'
+});

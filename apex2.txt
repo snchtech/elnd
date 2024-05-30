@@ -1,0 +1,20 @@
+$(document).ready(function() {
+  $('button').on('click', function() {
+    var hasEmptySigner = false;
+
+    $('.row_itm').each(function() {
+      if ($(this).find('.signer').text() === '') {
+        hasEmptySigner = true;
+        return false; // Exit the loop if an empty signer is found
+      }
+    });
+
+    if (hasEmptySigner) {
+      $('.error-message').text('Confirm is not OK');
+      $('button').hide();
+      $('.row_itm').find('span').text('Wait');
+    } else {
+      $('.error-message').text('');
+    }
+  });
+});

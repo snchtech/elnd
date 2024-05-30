@@ -1,0 +1,47 @@
+// Perform validation using jQuery
+if (yourValidationFunction()) {
+  // If validation is successful, start the APEX server process
+  $.ajax({
+    type: 'POST',
+    url: 'wwv_flow.show',
+    data: {
+      p_request: 'APPLICATION_PROCESS=your_apex_server_process_name',
+      p_flow_id: $v('pFlowId'),
+      p_flow_step_id: $v('pFlowStepId'),
+      p_instance: $v('pInstance')
+    },
+    success: function(data) {
+      // Handle success response
+      console.log('APEX server process started successfully');
+      
+      // Start a new APEX server process
+      $.ajax({
+        type: 'POST',
+        url: 'wwv_flow.show',
+        data: {
+          p_request: 'APPLICATION_PROCESS=your_new_apex_server_process_name',
+          p_flow_id: $v('pFlowId'),
+          p_flow_step_id: $v('pFlowStepId'),
+          p_instance: $v('pInstance')
+        },
+        success: function(data) {
+          // Handle success response of the new process
+          console.log('New APEX server process started successfully');
+        },
+        error: function(xhr, status, error) {
+          // Handle error response of the new process
+          console.error('Error starting new APEX server process: ' + error);
+        }
+      });
+    },
+    error: function(xhr, status, error) {
+      // Handle error response
+      console.error('Error starting APEX server process: ' + error);
+    }
+  });
+}
+
+function yourValidationFunction() {
+  // Implement your validation logic here
+  return true; // Return true if validation is successful
+}

@@ -1,0 +1,15 @@
+// Get the select list element by its ID
+var selectList = document.getElementById('P1_SELECT_LIST_ID');
+
+// Loop through each option in the select list
+for (var i = 0; i < selectList.options.length; i++) {
+    var option = selectList.options[i];
+    
+    // Split the u_id value to extract the position and department
+    var u_id = option.value;
+    var position = u_id.startsWith('P_') ? 'POS' : 'DEP';
+    var displayText = position + ' - ' + option.text;
+    
+    // Update the display text of the option
+    option.text = displayText;
+}

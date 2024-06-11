@@ -1,0 +1,33 @@
+// JavaScript code to populate the checkbox item with positions and departments
+
+// Fetch data from the APEX item
+var itemValue = $v('P1_CHECKBOX_ITEM'); // Replace 'P1_CHECKBOX_ITEM' with the actual item name
+
+// Parse the data into JSON format
+var data = JSON.parse(itemValue);
+
+// Define variables to hold checkboxes for positions and departments
+var positionsCheckboxes = "";
+var departmentsCheckboxes = "";
+
+// Loop through the data and create checkboxes for positions and departments
+for (var i = 0; i < data.length; i++) {
+    var name = data[i].name;
+    var u_id = data[i].u_id;
+
+    // Check if the u_id starts with 'P_' or 'D_' to distinguish between positions and departments
+    if (u_id.startsWith('P_')) {
+        positionsCheckboxes += "<input type='checkbox' name='positions' value='" + u_id + "' id='position_" + i + "'>";
+        positionsCheckboxes += "<label for='position_" + i + "'>" + name + "</label><br>";
+    } else if (u_id.startsWith('D_')) {
+        departmentsCheckboxes += "<input type='checkbox' name='departments' value='" + u_id + "' id='department_" + i + "'>";
+        departmentsCheckboxes += "<label for='department_" + i + "'>" + name + "</label><br>";
+    }
+}
+
+// Construct the final HTML for the checkbox item
+var checkboxHtml = "<fieldset><legend>POS</legend>" + positionsCheckboxes + "</fieldset>";
+checkboxHtml += "<fieldset><legend>DEP</legend>" + departmentsCheckboxes + "</fieldset>";
+
+// Set the HTML for the checkbox item
+$('#P1_CHECKBOX_ITEM').html(checkboxHtml); // Replace 'P1_CHECKBOX_ITEM' with the actual item name

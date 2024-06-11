@@ -1,0 +1,21 @@
+$(document).ready(function() {
+    // Event listener for checkboxes in the POS list
+    $('input[name="positions"]').change(function() {
+        // Get the value of the selected position
+        var selectedPosition = $(this).val();
+
+        // If the selected position is position3, disable checkboxes in the DEP list
+        if (selectedPosition === 'P_3') {
+            $('input[name="departments"]').prop('disabled', true).prop('checked', false);
+        } else {
+            // Enable checkboxes in the DEP list
+            $('input[name="departments"]').prop('disabled', false);
+        }
+    });
+
+    // Event listener for checkboxes in the DEP list
+    $('input[name="departments"]').change(function() {
+        // Uncheck all other checkboxes in the DEP list
+        $('input[name="departments"]').not(this).prop('checked', false);
+    });
+});

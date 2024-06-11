@@ -1,0 +1,19 @@
+$(document).ready(function() {
+    // Event listener for checkboxes in the POS list
+    $('input[name="positions"]').change(function() {
+        // Uncheck all other checkboxes in the POS list
+        $('input[name="positions"]').not(this).prop('checked', false);
+    });
+
+    // Event listener for checkboxes in the DEP list
+    $('input[name="departments"]').change(function() {
+        // Uncheck all other checkboxes in the DEP list
+        $('input[name="departments"]').not(this).prop('checked', false);
+    });
+});
+
+
+The $(document).ready() function ensures that the code runs once the document (i.e., the webpage) has finished loading.
+The change event listener is attached to all checkboxes in the "POS" and "DEP" lists.
+When a checkbox in the "POS" list is changed ($('input[name="positions"]').change()), the function unchecks all other checkboxes in the "POS" list except the one that was just clicked ($('input[name="positions"]').not(this)).
+Similarly, when a checkbox in the "DEP" list is changed, the function unchecks all other checkboxes in the "DEP" list except the one that was just clicked.

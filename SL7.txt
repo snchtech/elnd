@@ -1,0 +1,31 @@
+$(document).ready(function(){
+    // Create an object to store checkbox options by type
+    var checkboxGroups = {
+        'P': [],
+        'D': []
+    };
+
+    // Iterate through each option in the checkbox group
+    $('input[type="checkbox"][name="YOUR_CHECKBOX_GROUP_ITEM_NAME"]').each(function(){
+        // Extract the display value
+        var displayValue = $(this).next('label').text().trim();
+        
+        // Extract the prefix (e.g., Nss, Ct, etc.) and the type (P or D)
+        var parts = displayValue.split('_');
+        var prefix = parts[0];
+        var type = parts[1];
+        
+        // Add the checkbox option to the corresponding group
+        checkboxGroups[type].push($(this).parent());
+
+        // Update the display value to remove everything after the first '_'
+        var updatedDisplayValue = prefix;
+        $(this).next('label').text(updatedDisplayValue);
+    });
+
+    // Add a title for each group
+    Object.keys(checkboxGroups).forEach(function(key) {
+        var groupTitle = key === 'P' ? 'Position' : 'Department'; // Title based on the type
+        $('<div class="group-title">' + groupTitle + '</div>').insertBefore(checkboxGroups[key][0]);
+    });
+});

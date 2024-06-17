@@ -1,0 +1,39 @@
+$(document).ready(function() {
+    // Add event listeners to checkboxes
+    $('input[type="checkbox"]').change(function() {
+        // Logic for scenario 1
+        if ($('input[type="checkbox"][value="r"]:checked').length > 0 && $('input[type="checkbox"][value!="r"]:checked').length === 0) {
+            // Enable button
+            $('#buttonId').prop('disabled', false);
+        } else {
+            // Disable button
+            $('#buttonId').prop('disabled', true);
+        }
+
+        // Logic for scenario 2
+        if ($('input[type="checkbox"][value="p"]:checked').length > 0 && $('input[type="checkbox"][value="p"]:checked').val() === '1') {
+            // Enable button
+            $('#buttonId').prop('disabled', false);
+        } else if ($('input[type="checkbox"][value="p"]:checked').val() === '2') {
+            if ($('input[type="checkbox"][value="u"]:checked').length > 0) {
+                // Enable button
+                $('#buttonId').prop('disabled', false);
+            } else {
+                // Disable button
+                $('#buttonId').prop('disabled', true);
+                // Append error message to 'u' group title div
+                $('#uGroupTitle').append('Error message for value 2');
+            }
+        } else if ($('input[type="checkbox"][value="p"]:checked').val() === '3') {
+            if ($('input[type="checkbox"][value="d"]:checked').length > 0) {
+                // Enable button
+                $('#buttonId').prop('disabled', false);
+            } else {
+                // Disable button
+                $('#buttonId').prop('disabled', true);
+                // Append error message to 'd' group title div
+                $('#dGroupTitle').append('Error message for value 3');
+            }
+        }
+    });
+});

@@ -1,0 +1,50 @@
+1. Set up your APEX Application
+Create a new page: Decide which page type suits your needs (e.g., Interactive Report, Form, Chart).
+Create a navigation menu: Include a menu item named "Stats" that users can click on to reveal the sliding panel.
+2. Design the Sliding Panel Region
+Create a new region on the page where you want the sliding panel to appear. Use a region type that supports dynamic visibility and position it off-screen initially.
+
+For example, you can use a "Static Content" region or an "HTML" region.
+
+Configure the region properties:
+
+Ensure it’s initially hidden (Display > Display Condition: False).
+Optionally, set CSS classes or styles (Appearance > CSS Classes).
+3. Implement JavaScript for Sliding Animation
+APEX provides a JavaScript API (apex.util.toggleRegion) that toggles the visibility of a region. You’ll use this to slide the panel in and out.
+
+Here’s a basic example of how you can achieve the sliding effect:
+
+javascript
+Копіювати код
+$(document).ready(function(){
+    // Hide the panel initially (if not hidden by default through APEX settings)
+    $('#your-region-static-id').hide();
+
+    // Click event handler for Stats menu item
+    $('#stats-menu-item').on('click', function(){
+        // Toggle the visibility of the region with sliding animation
+        apex.util.toggleRegion('your-region-static-id', {
+            useAnimation: true,
+            animationType: 'slide'
+        });
+    });
+});
+Replace 'your-region-static-id' with the Static ID of your region in APEX.
+Replace 'stats-menu-item' with the appropriate selector for your Stats menu item.
+4. Customize Content and Styling
+Add content: Inside the sliding panel region, add your cards or any other content you want to display.
+
+Styling: Use CSS to adjust the appearance of the sliding panel (Template Options > Custom CSS in APEX or inline styles).
+
+Additional Tips
+Handling Responsive Design: Ensure your sliding panel works well on different screen sizes by testing responsiveness.
+
+Performance Considerations: APEX handles basic animations well, but extensive JavaScript or complex interactions might affect performance on slower devices.
+
+Final Steps
+Testing: Always test your application thoroughly after implementing such features.
+
+Documentation: Document any custom JavaScript or CSS for future maintenance.
+
+By following these steps, you can create a functional sliding information panel in your Oracle APEX application that appears when users click on the "Stats" menu item. Adjust the specifics according to your application's requirements and design preferences.

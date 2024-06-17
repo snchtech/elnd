@@ -1,0 +1,7 @@
+sql
+WITH data AS (
+  SELECT '21,650,148,27' AS id_list FROM dual
+)
+SELECT COUNT(REGEXP_SUBSTR(d.id_list, '[^,]+', 1, LEVEL)) AS id_count
+FROM data d
+CONNECT BY REGEXP_SUBSTR(d.id_list, '[^,]+', 1, LEVEL) IS NOT NULL;

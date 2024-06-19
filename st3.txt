@@ -1,0 +1,10 @@
+// JavaScript code to check IR rows and update P1_NEW_LIST
+$(document).ready(function() {
+    // Check if IR report has entries
+    var hasEntries = $('#my_ir').find('.a-IRR-table').find('tbody').children('tr').length > 0;
+
+    // If no entries found, set P1_NEW_LIST to 0
+    if (!hasEntries) {
+        apex.item('P1_NEW_LIST').setValue(0); // Set P1_NEW_LIST to 0
+    }
+});

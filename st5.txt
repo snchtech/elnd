@@ -1,0 +1,15 @@
+DECLARE
+    l_ir_region_id NUMBER;
+BEGIN
+    -- Get the region ID of the Interactive Report (replace 'my_ir' with your Static ID)
+    l_ir_region_id := APEX_IR.GET_IR_REPORT_ID('my_ir');
+
+    -- Add filter to the Interactive Report
+    APEX_IR.ADD_FILTER(
+        p_page_id       => :APP_PAGE_ID,  -- Current page ID
+        p_region_id     => l_ir_region_id,  -- IR region ID
+        p_column_name   => 'RECORD_ID',  -- Column to filter on (replace with your column name)
+        p_operator      => 'IN',  -- Operator for the filter
+        p_filter_value  => '14,18,27,12'  -- List of record IDs to filter by
+    );
+END;

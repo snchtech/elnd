@@ -1,0 +1,48 @@
+To create a URL in Oracle APEX that directs to another APEX application while passing parameters and ensuring shared cookies (for Single Sign-On or session continuity), you can utilize the built-in APEX functions. Here’s how you can achieve this:
+
+### Step-by-Step Solution:
+
+1. **Constructing the URL with Parameters**:
+   - Use `APEX_UTIL.PREPARE_URL` function to build the URL with the necessary parameters.
+   - Ensure you specify the correct APEX application ID (`v_app_id`) and page number (`v_page_number`) of the target application.
+
+2. **Ensuring Shared Cookies**:
+   - By default, if both APEX applications are under the same domain and configured properly, they should share cookies. Ensure that they have the same cookie domain and settings for session management.
+
+3. **Passing APEX Item Values**:
+   - Use `APEX_UTIL.URL_ENCODE` to encode the values of APEX items you want to pass as parameters in the URL.
+
+### Example Code:
+
+Assuming you want to create a URL in your current APEX application that navigates to another APEX application (`target_app_id`), and passes the value of APEX item `P1_NEW_LIST` to another application's page (`target_page_number`):
+
+```sql
+DECLARE
+    v_url VARCHAR2(4000);
+    v_app_id NUMBER := target_app_id; -- Replace with the target APEX application ID
+    v_page_number NUMBER := target_page_number; -- Replace with the target page number
+    v_param_value VARCHAR2(4000) := APEX_UTIL.URL_ENCODE(:P1_NEW_LIST); -- Encode the parameter value
+BEGIN
+    v_url := APEX_UTIL.PREPARE_URL(
+               p_url => 'f?p=' || v_app_id || ':' || v_page_number || ':&SESSION.::NO::P1_NEW_LIST:' || v_param_value
+             );
+    -- Output the URL (you can redirect to this URL or use it in a link or button)
+    HTP.P(v_url);
+END;
+```
+
+### Explanation:
+
+- **APEX_UTIL.PREPARE_URL**: This function constructs a URL for navigating to another APEX application. It includes the application ID (`v_app_id`), page number (`v_page_number`), and parameters (`P1_NEW_LIST` in this case).
+
+- **URL Encoding**: `APEX_UTIL.URL_ENCODE(:P1_NEW_LIST)` ensures that the parameter value is properly encoded for URL transmission to handle special characters and spaces.
+
+- **Session Management**: APEX applications within the same domain and properly configured should share cookies by default, ensuring session continuity (Single Sign-On).
+
+### Usage:
+
+- Replace `target_app_id` and `target_page_number` with the actual APEX application ID and page number of your target application.
+- Ensure `P1_NEW_LIST` corresponds to the correct APEX item in your current application.
+- You can output `v_url` in a report, as a link, or use it in a button's redirect URL in your current APEX application.
+
+This approach leverages APEX’s built-in functions to ensure secure and correct URL construction while maintaining session integrity between applications that share cookies. Adjust parameters and application IDs as per your specific application setup.

@@ -1,0 +1,12 @@
+DECLARE
+    l_new_list_value VARCHAR2(4000);
+BEGIN
+    -- Get the value of P1_NEW_LIST from session state
+    l_new_list_value := APEX_UTIL.GET_SESSION_STATE('P1_NEW_LIST');
+
+    -- Check if P1_NEW_LIST exists and meets your conditions
+    IF l_new_list_value IS NULL OR l_new_list_value = '' THEN
+        -- No value found or condition met (e.g., no IR entries), set it to 0
+        APEX_UTIL.SET_SESSION_STATE('P1_NEW_LIST', '0');
+    END IF;
+END;

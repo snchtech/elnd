@@ -1,0 +1,64 @@
+fa-bar-chart
+
+// Function to calculate and update the sum in the navigation bar
+function updateCountSum() {
+    // Find all elements with class 'count-new'
+    var countElems = document.getElementsByClassName('count-new');
+    var totalSum = 0;
+
+    // Iterate through each element with class 'count-new'
+    for (var i = 0; i < countElems.length; i++) {
+        // Get inner text of the element and convert it to a number
+        var countText = countElems[i].innerText.trim();
+        var countNumber = parseInt(countText, 10); // Parse as base-10 integer
+
+        // Add the parsed number to totalSum
+        totalSum += countNumber;
+    }
+
+    // Update the span with class 'new-updt' in the navigation bar
+    var newUpdtSpan = document.getElementsByClassName('new-updt')[0];
+    if (newUpdtSpan) {
+        newUpdtSpan.innerText = totalSum;
+    }
+}
+
+// Call the updateCountSum function when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    updateCountSum();
+});
+
+-----------------------
+
+
+// Function to calculate and update the sum in the navigation bar
+function updateCountSum() {
+    // Find all elements with class 'count-new'
+    var countElems = document.getElementsByClassName('count-new');
+    var totalSum = 0;
+
+    // Iterate through each element with class 'count-new'
+    for (var i = 0; i < countElems.length; i++) {
+        // Get inner text of the element and convert it to a number
+        var countText = countElems[i].innerText.trim();
+        var countNumber = parseInt(countText, 10); // Parse as base-10 integer
+
+        // Add the parsed number to totalSum
+        totalSum += countNumber;
+    }
+
+    // Update the span with class 'new-updt' in the navigation bar
+    var newUpdtSpan = document.getElementsByClassName('new-updt')[0];
+    if (newUpdtSpan) {
+        newUpdtSpan.innerText = totalSum;
+    }
+}
+
+// Call updateCountSum function initially when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    updateCountSum();
+
+    // Set interval to update count every 1 minute (60000 milliseconds)
+    setInterval(updateCountSum, 60000); // 60000 ms = 1 minute
+});
+

@@ -1,0 +1,33 @@
+es these steps:
+
+1function updateLinkHref() {
+2    // Given string
+3    const originalString = 'javascript:apex.theme42.dialog.close(true, "/ords/page")';
+4
+5    // Regular expression to match the content inside brackets and quotes
+6    const regex = /(\(.*?\))/g;
+7    const match = regex.exec(originalString);
+8
+9    if (match && match.length > 1) {
+10        // Extract the content inside brackets and quotes
+11        const bracketContent = match[1];
+12
+13        // Further extract the URL part from the bracket content
+14        const url = bracketContent.match(/"(.*?)"/)[1];
+15
+16        // Assuming there's an anchor element with id 'myLink'
+17        const link = document.getElementById('myLink');
+18
+19        if (link) {
+20            // Update the href attribute of the link
+21            link.href = url;
+22        } else {
+23            console.error('Link with id "myLink" not found.');
+24        }
+25    } else {
+26        console.error('No match found in the string.');
+27    }
+28}
+29
+30// Call the function
+31updateLinkHref();

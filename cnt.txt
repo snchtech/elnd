@@ -1,0 +1,42 @@
+function setCountTop() {
+    apex.server.process ( "SET_CNT",
+        null,
+        {
+                dataType: "text",
+                success: function( pData ) {
+                    // do something here
+
+                    console.log(pData)
+        
+                    // Parse JSON if necessary
+                if (typeof pData === 'string') {
+                    pData = JSON.parse(pData); // Parse the JSON string to object
+                }
+        
+                
+                // console.log('Parsed data:', pData.tryse); // Verify the parsed data
+        
+
+                    $('#counter-reg .count-top').text(pData.tryse);
+                    $('.top-counter-number').text(pData.tryse);
+                    
+                }
+        } );
+}
+
+setCountTop();
+
+------------------------------------
+declare
+l_tt VARCHAR2(100);
+begin
+:P1_TOP_COUNT := 12;
+
+l_tt := TO_CHAR(:P1_TOP_COUNT);
+
+
+
+-- Retrieve additional data to send back to the frontend
+htp.p('{"tryse": "' || l_tt || '"}');
+
+end;

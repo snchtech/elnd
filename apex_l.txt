@@ -1,0 +1,23 @@
+DECLARE
+    v_role_id VARCHAR2(100) := 'P_2548'; -- Example role ID
+    v_position NUMBER;
+    v_depart NUMBER;
+    v_un NUMBER;
+BEGIN
+    -- Extract numeric part for different roles
+    IF SUBSTR(v_role_id, 1, 1) = 'P' THEN
+        v_position := TO_NUMBER(SUBSTR(v_role_id, 3));
+    ELSIF SUBSTR(v_role_id, 1, 1) = 'D' THEN
+        v_depart := TO_NUMBER(SUBSTR(v_role_id, 3));
+    ELSIF SUBSTR(v_role_id, 1, 1) = 'U' THEN
+        v_un := TO_NUMBER(SUBSTR(v_role_id, 3));
+    ELSE
+        -- Handle other cases if necessary
+        NULL;
+    END IF;
+
+    -- Output the extracted values
+    DBMS_OUTPUT.PUT_LINE('Position: ' || v_position);
+    DBMS_OUTPUT.PUT_LINE('Depart: ' || v_depart);
+    DBMS_OUTPUT.PUT_LINE('Un: ' || v_un);
+END;

@@ -1,0 +1,30 @@
+DECLARE
+    l_role VARCHAR2(50);
+BEGIN
+    l_role := APEX_UTIL.GET_SESSION_ROLE;
+    
+    IF l_role = 'BOSS' THEN
+        RETURN TRUE;
+    ELSE
+        RETURN FALSE;
+    END IF;
+END;
+
+
+-----------------------------------------------------------
+
+DECLARE
+    l_has_boss_role BOOLEAN;
+BEGIN
+    l_has_boss_role := APEX_UTIL.HAS_ROLES('BOSS');
+    
+    IF l_has_boss_role THEN
+        -- User has the 'BOSS' role
+        DBMS_OUTPUT.PUT_LINE('User has the BOSS role.');
+        -- Your logic here for when the user has the 'BOSS' role
+    ELSE
+        -- User does not have the 'BOSS' role
+        DBMS_OUTPUT.PUT_LINE('User does not have the BOSS role.');
+        -- Your logic here for when the user does not have the 'BOSS' role
+    END IF;
+END;

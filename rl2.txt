@@ -1,0 +1,2 @@
+SELECT NVL(LISTAGG(id, ',') WITHIN GROUP (ORDER BY id), '') AS id_list
+FROM (SELECT id FROM dual WHERE 1=0);

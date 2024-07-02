@@ -1,0 +1,23 @@
+function parseStringValues(str, delimiter = '/') {
+    // Split the string using the specified delimiter
+    var parts = str.split(delimiter);
+
+    // Prepare an object to store parameter names and values
+    var result = {};
+
+    // Define parameter names (you can customize these as needed)
+    var paramNames = ['param1', 'param2', 'param3', 'param4', 'param5'];
+
+    // Iterate over the parts and assign them to the corresponding parameter names
+    for (var i = 0; i < parts.length && i < paramNames.length; i++) {
+        result[paramNames[i]] = parts[i].trim();
+    }
+
+    return result;
+}
+
+// Example usage:
+var inputString = "1/7/15"; // Example input string
+var parsedValues = parseStringValues(inputString);
+
+console.log(parsedValues); // Output: { param1: "1", param2: "7", param3: "15" }

@@ -1,0 +1,56 @@
+function parseStringValues(str, delimiter = '/') {
+    var parts = str.split(delimiter);
+    var result = {};
+    var paramNames = ['param1', 'param2', 'param3']; // Adjust as needed
+
+    for (var i = 0; i < parts.length && i < paramNames.length; i++) {
+        result[paramNames[i]] = parts[i].trim();
+    }
+
+    return result;
+}
+
+---------------------
+
+
+function buildHtmlString(parsedValues) {
+    var htmlString = '';
+
+    // Example of constructing HTML based on parsed values
+    htmlString += '<span class="param1">' + parsedValues.param1 + '</span>';
+    htmlString += '<span class="param2">' + parsedValues.param2 + '</span>';
+    htmlString += '<span class="param3">' + parsedValues.param3 + '</span>';
+
+    return htmlString;
+}
+
+
+------------------------
+
+function processCards(containerClass, cardsClass) {
+    // Find the container element
+    var container = document.querySelector('.' + containerClass);
+
+    if (container) {
+        // Find all cards within the container
+        var cards = container.querySelectorAll('.' + cardsClass);
+
+        // Iterate through each card
+        cards.forEach(function(card) {
+            // Get the card's text content
+            var cardText = card.textContent.trim();
+
+            // Parse the card text to get parameter values
+            var parsedValues = parseStringValues(cardText);
+
+            // Build HTML based on parsed values
+            var newHtml = buildHtmlString(parsedValues);
+
+            // Update the card's HTML content
+            card.innerHTML = newHtml;
+        });
+    }
+}
+
+// Example usage:
+processCards('containerClass', 'cardsClass');

@@ -1,0 +1,29 @@
+function buildHtmlString(attributes) {
+    var html_mltpl_crsd = '';
+
+    // Check if allCount is set and not null
+    if (attributes.allCount != null) {
+        html_mltpl_crsd += '<span class="all-count">' + attributes.allCount + '</span>';
+    }
+
+    // Check if inAction is set and not null
+    if (attributes.inAction != null) {
+        html_mltpl_crsd += '<span class="in-action">' + attributes.inAction + '</span>';
+    }
+
+    // Check if withWarning is set and not null
+    if (attributes.withWarning != null) {
+        html_mltpl_crsd += '<span class="with-warning">' + attributes.withWarning + '</span>';
+    }
+
+    return html_mltpl_crsd;
+}
+
+// Example usage:
+var attributes1 = { allCount: 7, inAction: 15, withWarning: 0 };
+var htmlString1 = buildHtmlString(attributes1);
+console.log(htmlString1); // Output: '<span class="all-count">7</span><span class="in-action">15</span><span class="with-warning">0</span>'
+
+var attributes2 = { inAction: 10 };
+var htmlString2 = buildHtmlString(attributes2);
+console.log(htmlString2); // Output: '<span class="in-action">10</span>'

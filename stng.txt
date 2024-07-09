@@ -1,0 +1,59 @@
+To enhance the database structure for storing user settings in Oracle APEX, incorporating the page ID where the setting applies and handling scenarios where one option can have multiple values, we can adjust the table structure and provide examples accordingly.
+
+### Updated Database Structure
+
+Let's modify the structure to include `PAGE_ID` and handle scenarios where one option (`SETTING_NAME`) can have multiple values (`SETTING_VALUE`).
+
+```sql
+CREATE TABLE USER_SETTINGS (
+    USER_ID      NUMBER,            -- Assuming USER_ID is the primary key for users
+    PAGE_ID      NUMBER,            -- Page ID where the setting applies
+    SETTING_NAME VARCHAR2(100),     -- Name or identifier of the setting
+    SETTING_TYPE VARCHAR2(50),      -- Type of setting (e.g., checkbox, list)
+    SETTING_VALUE VARCHAR2(4000),   -- Value of the setting
+    CONSTRAINT user_settings_pk PRIMARY KEY (USER_ID, PAGE_ID, SETTING_NAME)
+);
+```
+
+### Examples of Storing Settings
+
+#### Example 1: Checkbox Value
+
+Storing a checkbox setting where `SETTING_NAME` is `CHECKBOX_SETTING` and it applies to `PAGE_ID = 1`:
+
+```sql
+INSERT INTO USER_SETTINGS (USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, SETTING_VALUE)
+VALUES (123, 1, 'CHECKBOX_SETTING', 'checkbox', 'Y'); -- 'Y' for checked, 'N' for unchecked
+```
+
+#### Example 2: List of Input Items
+
+Storing multiple values for a setting (`INPUT_LIST_SETTING`) where `SETTING_NAME` can have multiple `SETTING_VALUE` options, applicable to `PAGE_ID = 1`:
+
+```sql
+INSERT INTO USER_SETTINGS (USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, SETTING_VALUE)
+VALUES (123, 1, 'INPUT_LIST_SETTING', 'list', '30sec');
+
+INSERT INTO USER_SETTINGS (USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, SETTING_VALUE)
+VALUES (123, 1, 'INPUT_LIST_SETTING', 'list', '60sec');
+```
+
+### Retrieving Settings
+
+To retrieve settings including scenarios where one option (`SETTING_NAME`) can have multiple values (`SETTING_VALUE`), you can use SQL queries similar to the following:
+
+```sql
+SELECT USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, LISTAGG(SETTING_VALUE, ', ') WITHIN GROUP (ORDER BY SETTING_VALUE) AS SETTING_VALUES
+FROM USER_SETTINGS
+WHERE USER_ID = :APP_USER
+  AND PAGE_ID = :PAGE_ID -- Optional: If you want settings for a specific page
+GROUP BY USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE;
+```
+
+### Considerations
+
+- **PAGE_ID**: Identifies the specific page in your APEX application where the setting applies. This allows you to manage settings per page.
+- **Multiple Values**: Using multiple rows for settings that can have multiple values (`SETTING_NAME`) allows for easier management and querying.
+- **Data Management**: Ensure proper indexing and query optimization based on your application's usage patterns to maintain performance.
+
+This enhanced structure provides flexibility to store and retrieve user-specific settings for different pages in your Oracle APEX application, accommodating scenarios where settings can have multiple values under the same `SETTING_NAME`. Adjust the structure further based on additional requirements or specific use cases in your application.

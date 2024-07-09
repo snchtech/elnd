@@ -1,0 +1,66 @@
+To retrieve data from a RESTful service within an Oracle APEX application using PL/SQL, you can utilize the `APEX_WEB_SERVICE` package. This package provides procedures and functions to make HTTP requests and handle responses from external web services. Here’s a step-by-step example of how you can achieve this:
+
+### Example: Using PL/SQL to Retrieve Data from a RESTful Service
+
+Assume you have a RESTful service endpoint that returns JSON data. You'll use PL/SQL in Oracle APEX to call this endpoint and process the returned data.
+
+#### 1. Create a Web Source Module (Optional)
+
+If you haven't already created a Web Source Module in your APEX application for the RESTful service, follow the steps in the previous examples to create it. Note down the Web Source Module ID or the URL of your REST API endpoint.
+
+#### 2. Create a PL/SQL Process in APEX
+
+1. **Navigate to Page Designer**:
+   - Go to the specific page in your APEX application where you want to retrieve data from the RESTful service.
+
+2. **Create a PL/SQL Process**:
+   - Add a new "Process" under the "Processing" section of your page.
+
+3. **Write PL/SQL Code**:
+   - Use the `APEX_WEB_SERVICE` package to call the RESTful service and process the response.
+
+   ```sql
+   DECLARE
+       l_clob_response CLOB;
+       l_json_response apex_json.t_values;
+   BEGIN
+       -- Call the RESTful service
+       l_clob_response := apex_web_service.make_rest_request(
+                             p_url => 'https://api.example.com/data', -- Replace with your REST API endpoint URL
+                             p_http_method => 'GET'  -- Adjust HTTP method as needed (GET, POST, etc.)
+                          );
+
+       -- Parse JSON response
+       apex_json.parse(l_json_response, l_clob_response);
+
+       -- Process JSON data
+       FOR i IN 1 .. apex_json.get_count(p_path => 'items') LOOP
+           -- Extract values from JSON
+           DBMS_OUTPUT.put_line('Item Name: ' || apex_json.get_varchar2(p_path => 'items[%d].name', p0 => i));
+           DBMS_OUTPUT.put_line('Item Price: ' || apex_json.get_number(p_path => 'items[%d].price', p0 => i));
+           -- Process further or store data in database tables as needed
+       END LOOP;
+   END;
+   ```
+
+4. **Adjust the PL/SQL Code**:
+   - Replace `'https://api.example.com/data'` with the actual URL of your RESTful service endpoint.
+   - Adjust the JSON parsing and processing (`FOR` loop and data extraction) based on the structure of the JSON response from your API.
+
+5. **Save and Execute**:
+   - Save the PL/SQL process.
+   - Execute the page or trigger the process based on your application’s flow.
+
+### Explanation
+
+- **`apex_web_service.make_rest_request`**: This function makes an HTTP request to the specified URL (`p_url`) using the specified HTTP method (`p_http_method`). It returns the response as a CLOB (character large object).
+- **`apex_json` Package**: The `apex_json` package is used to parse and manipulate JSON data within PL/SQL. You can use its functions (`parse`, `get_varchar2`, `get_number`, etc.) to extract specific data fields from the JSON response.
+- **Processing**: Within the `FOR` loop, iterate through JSON data (`items` in this example) and extract specific values. You can then process or store these values in your Oracle database tables as needed.
+
+### Additional Considerations
+
+- **Error Handling**: Implement error handling in your PL/SQL code (`EXCEPTION` block) to manage potential issues with the REST API call.
+- **Authentication**: If your REST API requires authentication (e.g., OAuth tokens, API keys), include these parameters in the request using `apex_web_service.add_parameter`.
+- **Performance**: Optimize your PL/SQL code and consider batching requests or using bulk processing techniques for large datasets.
+
+By following these steps, you can effectively retrieve data from a RESTful service within your Oracle APEX application using PL/SQL. Adjust the code based on your specific REST API endpoint and data processing requirements.

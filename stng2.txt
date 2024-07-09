@@ -1,0 +1,66 @@
+Certainly! Let's create an example where a user can set options that include two input fields with text values, and then demonstrate how you can save and retrieve these settings using the database structure we discussed.
+
+### Example: Saving Options with Two Input Fields
+
+Suppose you have an option in your application where users can set two input fields with text values, such as a pair of fields for "Refresh Interval" where they can specify values for different modes.
+
+#### 1. Database Structure
+
+We'll use the previously defined `USER_SETTINGS` table structure with adjustments for storing the two input fields as separate settings under the same `SETTING_NAME`.
+
+```sql
+CREATE TABLE USER_SETTINGS (
+    USER_ID      NUMBER,
+    PAGE_ID      NUMBER,
+    SETTING_NAME VARCHAR2(100),
+    SETTING_TYPE VARCHAR2(50),
+    SETTING_VALUE VARCHAR2(4000),
+    CONSTRAINT user_settings_pk PRIMARY KEY (USER_ID, PAGE_ID, SETTING_NAME)
+);
+```
+
+#### 2. Saving Settings Example
+
+Let's save settings for "Refresh Interval" where a user can specify two different values:
+
+```sql
+-- Assume user 123 is setting the refresh intervals for page 1
+-- Option 1: Refresh Interval for Mode 1
+INSERT INTO USER_SETTINGS (USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, SETTING_VALUE)
+VALUES (123, 1, 'REFRESH_INTERVAL_MODE1', 'text', '30sec');
+
+-- Option 2: Refresh Interval for Mode 2
+INSERT INTO USER_SETTINGS (USER_ID, PAGE_ID, SETTING_NAME, SETTING_TYPE, SETTING_VALUE)
+VALUES (123, 1, 'REFRESH_INTERVAL_MODE2', 'text', '60sec');
+```
+
+#### 3. Retrieving Settings in Oracle APEX
+
+To retrieve these settings in your Oracle APEX application, you can use SQL queries to fetch both values for "Refresh Interval":
+
+```sql
+SELECT SETTING_NAME,
+       MAX(CASE WHEN SETTING_TYPE = 'text' AND ROWNUM = 1 THEN SETTING_VALUE END) AS MODE1_VALUE,
+       MAX(CASE WHEN SETTING_TYPE = 'text' AND ROWNUM = 2 THEN SETTING_VALUE END) AS MODE2_VALUE
+FROM USER_SETTINGS
+WHERE USER_ID = :APP_USER
+  AND PAGE_ID = :PAGE_ID
+  AND SETTING_NAME IN ('REFRESH_INTERVAL_MODE1', 'REFRESH_INTERVAL_MODE2')
+GROUP BY SETTING_NAME;
+```
+
+This query uses conditional aggregation (`MAX(CASE ...)`) to pivot the `SETTING_VALUE` based on the `SETTING_TYPE` and retrieves both values (`MODE1_VALUE` and `MODE2_VALUE`) for the specified user and page.
+
+### Explanation
+
+- **Setting Names**: Each setting (`REFRESH_INTERVAL_MODE1`, `REFRESH_INTERVAL_MODE2`) represents a distinct pair of input fields.
+- **Setting Type**: `text` indicates that the setting value is a text input.
+- **Insert Statements**: Each `INSERT INTO USER_SETTINGS` statement inserts a separate setting value into the table.
+- **Retrieval Query**: The retrieval query fetches these settings by filtering on `USER_ID`, `PAGE_ID`, and `SETTING_NAME`, ensuring only relevant settings are fetched.
+
+### Notes
+
+- Ensure that `USER_ID` and `PAGE_ID` are appropriately managed based on your application's authentication and navigation logic.
+- Adjust the SQL queries according to your specific database schema and naming conventions.
+
+This example demonstrates how you can save and retrieve settings for options that include two input fields with text values in Oracle APEX using the provided database structure. Adjustments can be made based on additional requirements or specific use cases in your application.

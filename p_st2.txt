@@ -1,0 +1,41 @@
+CREATE OR REPLACE FUNCTION GetSettingValue(
+    p_login IN VARCHAR2,
+    p_set_name IN VARCHAR2
+) RETURN VARCHAR2
+IS
+    v_set_attr_id INT;
+    v_set_attr_val_id INT;
+    v_set_val_id INT;
+    v_set_val_name VARCHAR2(255);
+BEGIN
+    -- Step 1: Find set_attr_id from test_setting_attr by set_name
+    SELECT set_attr_id INTO v_set_attr_id
+    FROM test_setting_attr
+    WHERE set_attr_name = p_set_name
+    AND ROWNUM = 1;
+
+    -- Step 2: Find set_attr_val_id from test_user_settings by user_login and set_attr_id
+    SELECT u.f_set_attr_val_id INTO v_set_attr_val_id
+    FROM test_user_settings u
+    JOIN test_setting_attr_val av ON u.f_set_attr_val_id = av.set_attr_val_id
+    WHERE u.user_login = p_login AND av.f_set_attr_id = v_set_attr_id
+    AND ROWNUM = 1;
+
+    -- Step 3: Find set_val_id from test_setting_attr_val by set_attr_val_id
+    SELECT f_set_val_id INTO v_set_val_id
+    FROM test_setting_attr_val
+    WHERE set_attr_val_id = v_set_attr_val_id
+    AND ROWNUM = 1;
+
+    -- Step 4: Find set_val_name from test_setting_val by set_val_id
+    SELECT set_val_name INTO v_set_val_name
+    FROM test_setting_val
+    WHERE set_val_id = v_set_val_id
+    AND ROWNUM = 1;
+
+    RETURN v_set_val_name;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+END;
+/

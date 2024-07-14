@@ -1,0 +1,51 @@
+CREATE OR REPLACE PROCEDURE UpdateUserSettings(
+    p_login IN VARCHAR2,
+    p_set_name IN VARCHAR2,
+    p_set_val IN VARCHAR2
+)
+AS
+    v_set_attr_id INT;
+    v_set_val_id INT;
+    v_set_attr_val_id INT;
+    v_settings_id INT;
+BEGIN
+    -- Step 1: Find set_attr_id from test_setting_attr by set_name
+    SELECT set_attr_id INTO v_set_attr_id
+    FROM test_setting_attr
+    WHERE set_attr_name = p_set_name
+    AND ROWNUM = 1;
+
+    -- Step 2: Find set_val_id from test_setting_val by set_val
+    SELECT set_val_id INTO v_set_val_id
+    FROM test_setting_val
+    WHERE set_val_name = p_set_val
+    AND ROWNUM = 1;
+
+    -- Step 3: Find set_attr_val_id from test_setting_attr_val by combination of set_attr_id and set_val_id
+    SELECT set_attr_val_id INTO v_set_attr_val_id
+    FROM test_setting_attr_val
+    WHERE f_set_attr_id = v_set_attr_id AND f_set_val_id = v_set_val_id
+    AND ROWNUM = 1;
+
+    -- Step 4: Check if the combination exists in test_user_settings
+    BEGIN
+        SELECT settings_id INTO v_settings_id
+        FROM test_user_settings
+        WHERE user_login = p_login AND f_set_attr_val_id = v_set_attr_val_id
+        AND ROWNUM = 1;
+
+        -- Step 5: If the combination exists, check if value needs to be updated
+        -- Uncomment the following lines if you want to enforce an update check
+        /*
+        UPDATE test_user_settings
+        SET f_set_attr_val_id = v_set_attr_val_id
+        WHERE settings_id = v_settings_id AND f_set_attr_val_id != v_set_attr_val_id;
+        */
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            -- Step 6: If the combination does not exist, insert a new record
+            INSERT INTO test_user_settings (user_login, f_set_attr_val_id)
+            VALUES (p_login, v_set_attr_val_id);
+    END;
+END;
+/

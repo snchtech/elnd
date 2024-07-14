@@ -1,0 +1,85 @@
+To set the value of `P1_SHOW_BLOCK` to session state in Oracle APEX, you indeed need to use a PL/SQL Dynamic Action or an AJAX callback. Here’s how you can do it:
+
+### Hide Block on OK Button Click with Session State Update
+
+1. **Create a PL/SQL Process:**
+   - Go to your target page.
+   - Create a PL/SQL Process (let’s call it `Set P1_SHOW_BLOCK to N`).
+   - Set the process point to `On Demand (AJAX Callback)`.
+   - In the PL/SQL Code, add:
+     ```plsql
+     BEGIN
+       :P1_SHOW_BLOCK := 'N';
+     END;
+     ```
+
+2. **Create a Dynamic Action on OK Button:**
+   - Go to the OK button on your page.
+   - Create a new Dynamic Action.
+
+3. **Dynamic Action Setup:**
+   - **Event:** Click
+   - **Selection Type:** Button
+   - **Button:** OK Button (e.g., `btn_ok`)
+
+4. **True Action 1: Execute PL/SQL Code:**
+   - **Action:** Execute PL/SQL Code
+   - **Code:**
+     ```plsql
+     BEGIN
+       :P1_SHOW_BLOCK := 'N';
+     END;
+     ```
+   - **Items to Submit:** P1_SHOW_BLOCK
+
+5. **True Action 2: Execute JavaScript Code:**
+   - **Action:** Execute JavaScript Code
+   - **Code:**
+     ```javascript
+     apex.server.process('Set P1_SHOW_BLOCK to N', {pageItems: '#P1_SHOW_BLOCK'}, {
+       success: function() {
+         $('#form_block').hide(); // Hide the form block
+       }
+     });
+     ```
+
+### Steps Summary:
+
+1. **PL/SQL Process (On-Demand AJAX Callback):**
+   - Name: `Set P1_SHOW_BLOCK to N`
+   - Code:
+     ```plsql
+     BEGIN
+       :P1_SHOW_BLOCK := 'N';
+     END;
+     ```
+
+2. **Dynamic Action on OK Button:**
+   - **Event:** Click
+   - **Selection Type:** Button
+   - **Button:** OK Button (e.g., `btn_ok`)
+
+3. **True Actions:**
+   - **Execute PL/SQL Code:**
+     ```plsql
+     BEGIN
+       :P1_SHOW_BLOCK := 'N';
+     END;
+     ```
+     - **Items to Submit:** P1_SHOW_BLOCK
+
+   - **Execute JavaScript Code:**
+     ```javascript
+     apex.server.process('Set P1_SHOW_BLOCK to N', {pageItems: '#P1_SHOW_BLOCK'}, {
+       success: function() {
+         $('#form_block').hide(); // Hide the form block
+       }
+     });
+     ```
+
+### Additional Adjustments
+
+- Ensure your OK button has a Static ID (`btn_ok`) for easy reference.
+- Make sure your `P1_SHOW_BLOCK` item is correctly configured to be a hidden item or a display-only item on the page.
+
+By following these steps, you ensure that the value of `P1_SHOW_BLOCK` is updated in the session state when the user clicks the OK button, and the block is hidden accordingly.

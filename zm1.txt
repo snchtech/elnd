@@ -1,0 +1,101 @@
+To achieve this functionality in your Oracle APEX application, you can follow these steps:
+
+### 1. Create the Login Redirect
+After a user logs in, redirect them to a specific page where you will display the form block.
+
+### 2. Create the Form Block
+Create a region on your target page for the form block that includes a select input, OK, and Cancel buttons.
+
+### 3. Control the Block Display
+Use a combination of Dynamic Actions and Application Items to control the visibility of the block.
+
+### Detailed Steps:
+
+1. **Create an Application Item:**
+   - Go to Shared Components > Application Items.
+   - Create an item, e.g., `SHOW_BLOCK`.
+   - Set the default value to `Y`.
+
+2. **Create a Region for the Form Block:**
+   - Go to your target page.
+   - Create a region (e.g., Inline Dialog or a regular region with specific styling to look like a block).
+   - Add the select input and buttons (OK and Cancel) inside this region.
+
+3. **Set Up the Dynamic Actions:**
+
+   - **Hide Block on OK Button Click:**
+     - Create a Dynamic Action on the OK button (e.g., button with Static ID `btn_ok`).
+     - Action: Execute JavaScript Code.
+     - Code:
+       ```javascript
+       apex.item('P1_SELECT_ITEM').setValue(''); // Reset select input value
+       $s('P1_SHOW_BLOCK', 'N'); // Set Application Item to 'N'
+       $('#form_block').hide(); // Hide the form block
+       ```
+
+   - **Hide Block on Cancel Button Click:**
+     - Create a Dynamic Action on the Cancel button (e.g., button with Static ID `btn_cancel`).
+     - Action: Execute JavaScript Code.
+     - Code:
+       ```javascript
+       $('#form_block').hide(); // Hide the form block
+       ```
+
+   - **Show Block on Page Load:**
+     - Create a Dynamic Action on Page Load.
+     - Condition: `P1_SHOW_BLOCK = 'Y'`.
+     - Action: Execute JavaScript Code.
+     - Code:
+       ```javascript
+       $('#form_block').show(); // Show the form block
+       ```
+
+4. **Modify the Login Process:**
+
+   - After the authentication process, set the `SHOW_BLOCK` item to `Y`.
+   - Go to Shared Components > Authentication Schemes.
+   - In the Post-Authentication Procedure, add the following PL/SQL code:
+     ```plsql
+     BEGIN
+       :SHOW_BLOCK := 'Y';
+     END;
+     ```
+
+5. **Styling and Layout:**
+
+   - Ensure your form block region is correctly styled and positioned.
+   - You can use CSS to style the region to appear as a block from the top or side panel.
+
+### Example CSS (for top panel block):
+
+```css
+#form_block {
+  display: none; /* Initially hide the block */
+  position: fixed;
+  top: 0;
+  width: 100%;
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #ccc;
+  padding: 10px;
+  z-index: 1000;
+}
+```
+
+### Example CSS (for side panel block):
+
+```css
+#form_block {
+  display: none; /* Initially hide the block */
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 300px;
+  background-color: #f9f9f9;
+  border-right: 1px solid #ccc;
+  padding: 10px;
+  z-index: 1000;
+}
+```
+
+By following these steps, you can create a form block that appears when a user logs in, and hides once the user interacts with it, only to reappear when the user logs in again.

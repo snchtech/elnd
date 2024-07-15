@@ -1,0 +1,43 @@
+radio-group ignore static value
+text_item
+
+static region blank - changeWorkTime id
+
+
+
+
+Створіть динамічну дію для радіо групи (P1_RADIO_GROUP) з подією "Change".
+Додайте дію "Execute PL/SQL Code" з наступним кодом:
+
+sql
+
+BEGIN
+    :P1_TEXT_ITEM := :P1_RADIO_GROUP;
+    APEX_UTIL.SET_SESSION_STATE('P1_TEXT_ITEM', :P1_RADIO_GROUP);
+END;
+
+В полі "Items to Submit" додайте P1_RADIO_GROUP.
+Додайте дію "Set Value" з наступним налаштуванням:
+
+    "Set Type": "PL/SQL Function Body"
+    "PL/SQL Function Body":
+
+    sql
+
+RETURN :P1_RADIO_GROUP;
+
+"Items to Submit": P1_RADIO_GROUP
+"Affected Elements": P1_TEXT_ITEM
+
+-----------------------
+
+da 2 two item affected
+
+da3
+
+BEGIN
+    APEX_UTIL.SET_SESSION_STATE('P1_SHOW_BLOCK', 0);
+END;
+
+da 4 
+hide region

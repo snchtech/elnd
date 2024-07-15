@@ -1,0 +1,78 @@
+To show a static block (region) when a navigation bar item is clicked in Oracle APEX, you need to use dynamic actions and JavaScript. Here's a step-by-step guide:
+
+### 1. Create the Hidden Item to Control Visibility
+1. Add a hidden item on your page to control the visibility, for example, `P1_SHOW_BLOCK`.
+
+### 2. Create the Static Content Block (Region)
+1. Ensure you have a block (region) with static content, for example, a region named `STATIC_CONTENT_BLOCK`.
+2. Set a Static ID for the region, for example, `staticContentBlock`.
+
+### 3. Set Up the Server-Side Condition for the Block
+1. Go to the settings of the `STATIC_CONTENT_BLOCK` region.
+2. In the right-hand pane, go to the "Server-side Condition" tab.
+3. Set the following:
+   - **Condition Type**: Item = Value
+   - **Item**: `P1_SHOW_BLOCK`
+   - **Value**: Y
+
+### 4. Add Initialization for the Hidden Item on Page Load
+1. Add a "Page Load" dynamic action to initialize the hidden item `P1_SHOW_BLOCK` to a default value of 'N'.
+   - Go to the Page Designer, select the page itself (not any specific item or region).
+   - In the right-hand pane, go to the "Dynamic Actions" tab and click "Create" to add a new dynamic action.
+   - **Name**: Initialize P1_SHOW_BLOCK
+   - **Event**: Page Load
+   - **Action**: Execute PL/SQL Code
+     ```sql
+     BEGIN
+         :P1_SHOW_BLOCK := 'N';
+     END;
+     ```
+   - **Items to Submit**: `P1_SHOW_BLOCK`
+
+### 5. Create a Dynamic Action to Show the Block on Menu Item Click
+1. Go to the shared components and find the navigation bar item you want to use to show the block.
+2. In the navigation bar item settings, set the "Target" to "URL" and use a JavaScript function call as the URL, like this:
+   ```javascript
+   javascript:showStaticBlock();
+   ```
+
+### 6. Add JavaScript Code to Show the Block
+1. Go to the Page Designer and open the "JavaScript" section (you can find it under "Page Attributes" -> "JavaScript").
+2. In the "Function and Global Variable Declaration" section, add the following JavaScript code:
+   ```javascript
+   function showStaticBlock() {
+       // Set the hidden item value to 'Y'
+       $s('P1_SHOW_BLOCK', 'Y');
+
+       // Update the session state
+       apex.server.process("SET_SESSION_STATE", {
+           pageItems: "#P1_SHOW_BLOCK"
+       }, {
+           success: function(pData) {
+               // Show the static content block
+               $('#staticContentBlock').show();
+           }
+       });
+   }
+   ```
+
+### 7. Create the Server-Side Process for Session State Update
+1. Go to the Page Designer, select the page itself (not any specific item or region).
+2. In the right-hand pane, go to the "Processing" tab and click "Create" to add a new process.
+3. Set the following:
+   - **Name**: SET_SESSION_STATE
+   - **Type**: PL/SQL
+   - **Point**: On Demand
+   - **PL/SQL Code**:
+     ```sql
+     BEGIN
+         APEX_UTIL.SET_SESSION_STATE('P1_SHOW_BLOCK', :P1_SHOW_BLOCK);
+     END;
+     ```
+
+### Testing
+- On page load, the block should be hidden because `P1_SHOW_BLOCK` is initialized to 'N'.
+- When the user clicks the navigation bar item, the `showStaticBlock` JavaScript function is called.
+- The JavaScript function sets `P1_SHOW_BLOCK` to 'Y', updates the session state, and shows the static content block.
+
+By following these steps, you can control the visibility of a static block using a navigation bar item click in Oracle APEX.

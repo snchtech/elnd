@@ -1,0 +1,10 @@
+load
+
+plsql code
+
+:P1_SHOW_BLOCK := 1
+
+submit return
+
+fire on initilization 
+Suppress Change Event

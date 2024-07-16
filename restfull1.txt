@@ -1,0 +1,104 @@
+Деякі з наведених функцій і методів можуть не працювати в Oracle 12.1 без коригування. Давайте розглянемо конкретно, як адаптувати код для Oracle 12.1.
+
+### Створення функції для виклику RESTful API
+
+```sql
+CREATE OR REPLACE FUNCTION get_json_from_rest_api RETURN CLOB IS
+  l_http_request   UTL_HTTP.req;
+  l_http_response  UTL_HTTP.resp;
+  l_response_text  CLOB;
+  l_buffer         VARCHAR2(32767);
+BEGIN
+  -- Створення HTTP запиту
+  l_http_request := UTL_HTTP.begin_request('http://your_api_endpoint', 'GET');
+  -- Виконання запиту
+  l_http_response := UTL_HTTP.get_response(l_http_request);
+
+  -- Читання відповіді
+  DBMS_LOB.createtemporary(l_response_text, TRUE);
+  BEGIN
+    LOOP
+      UTL_HTTP.read_text(l_http_response, l_buffer, 32767);
+      DBMS_LOB.writeappend(l_response_text, LENGTH(l_buffer), l_buffer);
+    END LOOP;
+  EXCEPTION
+    WHEN UTL_HTTP.end_of_body THEN
+      NULL;
+  END;
+
+  -- Закриття HTTP відповіді
+  UTL_HTTP.end_response(l_http_response);
+
+  -- Повернення результату
+  RETURN l_response_text;
+EXCEPTION
+  WHEN OTHERS THEN
+    UTL_HTTP.end_response(l_http_response);
+    RAISE;
+END;
+/
+```
+
+### Створення функції для парсингу JSON
+
+У Oracle 12.1 немає повної підтримки для `JSON_VALUE`, але можна використовувати `DBMS_LOB.SUBSTR` та інші методи для роботи з JSON.
+
+```sql
+CREATE OR REPLACE FUNCTION get_value_from_json(p_json CLOB, p_index NUMBER) RETURN NUMBER IS
+  l_value NUMBER;
+  l_json_value VARCHAR2(32767);
+BEGIN
+  -- Знаходження значення в JSON
+  l_json_value := DBMS_LOB.SUBSTR(p_json, 4000, INSTR(p_json, '"values":[') + 10 + p_index * 3);
+  l_json_value := SUBSTR(l_json_value, 1, INSTR(l_json_value, ',') - 1);
+  IF l_json_value IS NULL THEN
+    l_json_value := SUBSTR(l_json_value, 1, INSTR(l_json_value, ']') - 1);
+  END IF;
+
+  -- Перетворення значення в число
+  l_value := TO_NUMBER(l_json_value);
+  
+  RETURN l_value;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    RETURN NULL;
+  WHEN VALUE_ERROR THEN
+    RETURN NULL;
+END;
+/
+```
+
+### Використання функції в SQL-запитах
+
+```sql
+WITH json_data AS (
+  SELECT get_json_from_rest_api() AS json_text FROM dual
+)
+SELECT 
+  get_value_from_json(json_text, 0) as value1,
+  get_value_from_json(json_text, 1) as value2,
+  get_value_from_json(json_text, 2) as value3
+FROM json_data;
+```
+
+### Створення представлення (View)
+
+```sql
+CREATE OR REPLACE VIEW my_json_view AS
+WITH json_data AS (
+  SELECT get_json_from_rest_api() AS json_text FROM dual
+)
+SELECT 
+  get_value_from_json(json_text, 0) as value1,
+  get_value_from_json(json_text, 1) as value2,
+  get_value_from_json(json_text, 2) as value3
+FROM json_data;
+```
+
+### Використання представлення
+
+```sql
+SELECT * FROM my_json_view;
+```
+
+Цей код має працювати в Oracle 12.1. Можуть виникнути деякі незначні проблеми із синтаксисом чи функціональністю, тому рекомендується ретельно тестувати кожен компонент.

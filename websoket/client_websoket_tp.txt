@@ -1,0 +1,140 @@
+To achieve the desired functionality, you'll need to:
+
+1. **Set the client type when opening the WebSocket connection.**
+2. **Handle the incoming data and update the Oracle APEX items accordingly.**
+3. **Make an AJAX callback to update the APEX collection based on the `appid` received from the WebSocket server.**
+
+Here's how you can implement this:
+
+### 1. Setting Client Type When Opening WebSocket Connection
+
+You can send the client type as soon as the WebSocket connection is opened.
+
+### 2. Handling Incoming Data
+
+Receive and process the data structure sent by the WebSocket server. Update the APEX items accordingly.
+
+### 3. AJAX Callback for Updating APEX Collection
+
+Use APEX's `apex.server.process` function to make an AJAX call to a PL/SQL process that updates the collection.
+
+```javascript
+// Create a WebSocket connection to the server
+var ws = new WebSocket('ws://10.15.15.160:8080');
+
+// Set the client type (e.g., 'chief', 'departmanager', 'commandmanager')
+var clientType = 'chief'; // Example client type
+
+ws.onopen = function() {
+  // Send client type to the server
+  ws.send(JSON.stringify({ type: clientType }));
+};
+
+// Handle incoming messages
+ws.onmessage = function(event) {
+  var data = JSON.parse(event.data); // Parse the JSON data
+  console.log('Data received from server:', data);
+
+  // Assuming data structure received includes 'appid', 'param1', 'param2', 'param3', 'color', 'class', 'url'
+  var appid = data.appid;
+  var param1 = data.param1;
+  var param2 = data.param2;
+  var param3 = data.param3;
+  var color = data.color;
+  var className = data.class;
+  var url = data.url;
+
+  // Update APEX items or regions with the new data
+  apex.item('P1_APPID').setValue(appid);
+  apex.item('P1_PARAM1').setValue(param1);
+  apex.item('P1_PARAM2').setValue(param2);
+  apex.item('P1_PARAM3').setValue(param3);
+  apex.item('P1_COLOR').setValue(color);
+  apex.item('P1_CLASS').setValue(className);
+  apex.item('P1_URL').setValue(url);
+
+  // Call an APEX AJAX process to update the collection with the new data
+  apex.server.process('UPDATE_COLLECTION', {
+    x01: appid,
+    x02: param1,
+    x03: param2,
+    x04: param3,
+    x05: color,
+    x06: className,
+    x07: url
+  }, {
+    success: function(pData) {
+      console.log('Collection updated successfully:', pData);
+    },
+    error: function(pError) {
+      console.error('Error updating collection:', pError);
+    }
+  });
+};
+
+// Handle WebSocket errors
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+
+// Optionally handle WebSocket connection closure
+ws.onclose = function() {
+  console.log('WebSocket connection closed');
+};
+```
+
+### Explanation
+
+1. **Setting Client Type:** 
+   - On WebSocket connection open (`ws.onopen`), the client sends its type to the server. This information is used by the server to send appropriate data to the client.
+
+2. **Handling Incoming Data:**
+   - The incoming data from the WebSocket server is parsed, and the necessary APEX items are updated with the values from the data object.
+
+3. **APEX Items Update:** 
+   - The values received from the server (`appid`, `param1`, `param2`, `param3`, `color`, `class`, `url`) are used to set the corresponding APEX items (`P1_APPID`, `P1_PARAM1`, `P1_PARAM2`, `P1_PARAM3`, `P1_COLOR`, `P1_CLASS`, `P1_URL`).
+
+4. **AJAX Callback:** 
+   - `apex.server.process` is used to call an APEX AJAX process named `UPDATE_COLLECTION`. The process receives data in the form of `x01`, `x02`, etc., which are then used in the PL/SQL process to update the collection in the database.
+
+### PL/SQL Process (`UPDATE_COLLECTION`)
+
+In your Oracle APEX application, you need to create a PL/SQL AJAX callback process named `UPDATE_COLLECTION`. This process will receive the parameters and update the corresponding collection.
+
+Example PL/SQL code for the AJAX process:
+
+```plsql
+DECLARE
+  v_appid NUMBER := TO_NUMBER(apex_application.g_x01);
+  v_param1 NUMBER := TO_NUMBER(apex_application.g_x02);
+  v_param2 NUMBER := TO_NUMBER(apex_application.g_x03);
+  v_param3 NUMBER := TO_NUMBER(apex_application.g_x04);
+  v_color  VARCHAR2(100) := apex_application.g_x05;
+  v_class  VARCHAR2(100) := apex_application.g_x06;
+  v_url    VARCHAR2(4000) := apex_application.g_x07;
+BEGIN
+  -- Assuming collection name is 'MY_COLLECTION'
+  IF NOT APEX_COLLECTION.COLLECTION_EXISTS('MY_COLLECTION') THEN
+    APEX_COLLECTION.CREATE_COLLECTION('MY_COLLECTION');
+  END IF;
+
+  -- Update the collection based on appid or other criteria
+  APEX_COLLECTION.DELETE_MEMBER(
+    p_collection_name => 'MY_COLLECTION',
+    p_c001 => v_appid
+  );
+
+  APEX_COLLECTION.ADD_MEMBER(
+    p_collection_name => 'MY_COLLECTION',
+    p_c001 => v_appid,
+    p_c002 => v_param1,
+    p_c003 => v_param2,
+    p_c004 => v_param3,
+    p_c005 => v_color,
+    p_c006 => v_class,
+    p_c007 => v_url
+  );
+END;
+```
+
+This process first checks if the collection exists and creates it if not. Then it deletes the existing member(s) with the specified `appid` and adds a new member with the updated data. This ensures that the collection contains the most recent data from the WebSocket server.

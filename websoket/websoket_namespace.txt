@@ -1,0 +1,130 @@
+To implement a Namespace-Based Architecture in Node.js without using `socket.io`, you can use the `ws` library. In this example, we'll manually manage namespaces by adding a simple layer of logic to differentiate between them.
+
+### Server-side Code
+
+First, install the `ws` library:
+
+```bash
+npm install ws
+```
+
+Here is the server-side code using `ws`:
+
+```javascript
+const WebSocket = require('ws');
+
+// Create a WebSocket server on port 8080
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Define namespaces
+const namespaces = {
+  '/general': [],
+  '/sports': []
+};
+
+wss.on('connection', (ws) => {
+  let currentNamespace = null;
+
+  console.log('New client connected');
+
+  // Handle messages received from clients
+  ws.on('message', (message) => {
+    const parsedMessage = JSON.parse(message);
+    const { type, namespace, data } = parsedMessage;
+
+    switch (type) {
+      case 'join':
+        if (namespaces[namespace]) {
+          // Join the client to the specified namespace
+          currentNamespace = namespace;
+          namespaces[namespace].push(ws);
+          console.log(`Client joined namespace ${namespace}`);
+        } else {
+          console.log(`Namespace ${namespace} does not exist`);
+        }
+        break;
+
+      case 'message':
+        if (currentNamespace) {
+          // Broadcast the message to all clients in the same namespace
+          namespaces[currentNamespace].forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ namespace: currentNamespace, data }));
+            }
+          });
+        }
+        break;
+
+      default:
+        console.log('Unknown message type');
+    }
+  });
+
+  // Handle client disconnection
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    if (currentNamespace && namespaces[currentNamespace]) {
+      namespaces[currentNamespace] = namespaces[currentNamespace].filter((client) => client !== ws);
+    }
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### Client-side Code
+
+Here’s how you can connect to different namespaces from the client-side:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket Namespace Example</title>
+</head>
+<body>
+  <script>
+    // Function to connect to a namespace
+    function connectToNamespace(namespace) {
+      const ws = new WebSocket('ws://localhost:8080');
+
+      ws.onopen = () => {
+        console.log(`Connected to ${namespace}`);
+        ws.send(JSON.stringify({ type: 'join', namespace: namespace }));
+        ws.send(JSON.stringify({ type: 'message', data: `Hello, ${namespace} channel!` }));
+      };
+
+      ws.onmessage = (event) => {
+        const { namespace, data } = JSON.parse(event.data);
+        console.log(`Received in ${namespace}: ${data}`);
+      };
+
+      ws.onclose = () => {
+        console.log(`Disconnected from ${namespace}`);
+      };
+
+      return ws;
+    }
+
+    // Connect to the "general" namespace
+    const generalSocket = connectToNamespace('/general');
+
+    // Connect to the "sports" namespace
+    const sportsSocket = connectToNamespace('/sports');
+  </script>
+</body>
+</html>
+```
+
+### How It Works
+
+1. **Server-side**:
+   - The server listens for connections and maintains a list of clients for each namespace (`/general` and `/sports` in this example).
+   - When a client connects, it can send a message to join a specific namespace using the `type: 'join'` message type.
+   - Messages sent to a namespace are broadcasted to all clients in that namespace.
+
+2. **Client-side**:
+   - Clients connect to the WebSocket server and specify the namespace they want to join.
+   - They send messages within their connected namespace and listen for messages broadcasted by the server to that namespace.
+
+This example demonstrates a basic implementation of namespaces without using `socket.io`. You can further enhance this by adding error handling, more namespaces, and other features as needed.

@@ -1,0 +1,177 @@
+To handle different types of clients and send them specific information based on their roles (chief, departmanager, command manager), you can use a few strategies:
+
+1. **Identify Client Type:** Identify the type of client when they connect, either through a parameter during the WebSocket connection or through an initial message sent by the client. This can be achieved using a protocol or a specific message format that includes client type information.
+
+2. **Fetch Data Based on Client Type:** Fetch data from different database views depending on the client type.
+
+3. **Broadcast Specific Data:** Send the appropriate data to each client type based on the data fetched for their specific needs.
+
+Here’s an outline of how this can be implemented:
+
+### 1. Identifying Client Type
+
+When a client connects, you can identify their type. For simplicity, let's assume the client sends a message with their type as soon as they connect.
+
+### 2. Fetching Data Based on Client Type
+
+You will need to have separate functions for fetching data for each client type from different views.
+
+### 3. Broadcasting Specific Data
+
+Send the fetched data to the clients based on their type.
+
+#### Example Implementation
+
+```javascript
+const WebSocket = require('ws');
+const oracledb = require('oracledb');
+
+// Oracle DB connection configuration
+const dbConfig = {
+  user: 'sys',
+  password: 'Manager_2023',
+  connectString: '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=DESKTOP-F3ETQJJ)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=XE)))',
+  privilege: oracledb.SYSDBA
+};
+
+// Create a new WebSocket server
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Store clients and their types
+const clients = new Map();
+
+// Fetch data for chief client
+async function fetchChiefData() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(`
+      SELECT * FROM chief_view
+    `);
+    return result.rows;
+  } catch (err) {
+    console.error('Error fetching chief data:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Fetch data for departmanager client
+async function fetchDepartManagerData() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(`
+      SELECT * FROM departmanager_view
+    `);
+    return result.rows;
+  } catch (err) {
+    console.error('Error fetching departmanager data:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Fetch data for command manager client
+async function fetchCommandManagerData() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(`
+      SELECT * FROM commandmanager_view
+    `);
+    return result.rows;
+  } catch (err) {
+    console.error('Error fetching command manager data:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Broadcast data to all connected clients based on their type
+async function updateClients() {
+  const chiefData = await fetchChiefData();
+  const departManagerData = await fetchDepartManagerData();
+  const commandManagerData = await fetchCommandManagerData();
+
+  clients.forEach((clientInfo, client) => {
+    let data;
+    switch (clientInfo.type) {
+      case 'chief':
+        data = chiefData;
+        break;
+      case 'departmanager':
+        data = departManagerData;
+        break;
+      case 'commandmanager':
+        data = commandManagerData;
+        break;
+      default:
+        return;
+    }
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// Periodically fetch data and update clients
+setInterval(updateClients, 10000); // Adjust interval as needed
+
+// Handle client connections
+wss.on('connection', (ws) => {
+  console.log('Client connected');
+
+  // Handle incoming messages to identify client type
+  ws.on('message', (message) => {
+    try {
+      const { type } = JSON.parse(message);
+      clients.set(ws, { type });
+    } catch (err) {
+      console.error('Error parsing message:', err);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    clients.delete(ws);
+  });
+});
+
+console.log('WebSocket server running on port 8080');
+```
+
+### Explanation
+
+1. **Client Identification:** Upon connection, each client sends a message indicating their type (`chief`, `departmanager`, or `commandmanager`). This type is stored in a `Map` along with the WebSocket connection object.
+
+2. **Data Fetching Functions:** Separate functions fetch data from different database views based on the client type. These functions are `fetchChiefData`, `fetchDepartManagerData`, and `fetchCommandManagerData`.
+
+3. **Broadcasting Data:** The `updateClients` function fetches data for each client type and sends the relevant data to each client based on their stored type.
+
+### Notes
+
+- **Security:** Ensure that clients are authenticated and authorized to access specific data, as this simple example doesn't include security measures.
+- **Scalability:** Consider scalability and performance, especially if you have many clients and large datasets.
+- **Error Handling:** Improve error handling to cover edge cases and potential issues.

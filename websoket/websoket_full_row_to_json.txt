@@ -1,0 +1,112 @@
+To filter rows where `appid = 3` and send this data to connected WebSocket clients, you need to modify the SQL query to include a `WHERE` clause. Additionally, you'll need to iterate over the result set and format the data appropriately before broadcasting it to the clients.
+
+Here's the updated code to achieve this:
+
+```javascript
+const WebSocket = require('ws');
+const oracledb = require('oracledb');
+
+// Oracle DB connection configuration
+const dbConfig = {
+  user: 'sys',
+  password: 'Manager_2023',
+  connectString: '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=DESKTOP-F3ETQJJ)(PORT=1521))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=XE)))',
+  privilege: oracledb.SYSDBA
+};
+
+// Create a new WebSocket server
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Function to fetch data from Oracle database
+async function fetchDataFromOracle() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    // Execute SQL query to get data where appid = 3
+    const result = await connection.execute(`
+      SELECT
+        appid,
+        param1,
+        param2,
+        param3,
+        color,
+        class,
+        url
+      FROM your_data_view
+      WHERE appid = 3
+    `);
+
+    console.log(result);
+
+    // Assuming result.rows contains the data
+    const data = result.rows.map(row => ({
+      appid: row[0],
+      param1: row[1],
+      param2: row[2],
+      param3: row[3],
+      color: row[4],
+      class: row[5],
+      url: row[6]
+    }));
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching data from Oracle:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Broadcast data to all connected clients
+function broadcast(data) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// Fetch data and broadcast to clients
+async function updateClients() {
+  const data = await fetchDataFromOracle();
+  if (data) {
+    broadcast(data);
+  }
+}
+
+// Periodically fetch data and update clients
+setInterval(updateClients, 10000); // Adjust interval as needed
+
+// Handle client connections
+wss.on('connection', ws => {
+  console.log('Client connected');
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+console.log('WebSocket server running on port 8080');
+```
+
+### Key Changes and Additions
+
+1. **SQL Query with `WHERE` Clause:** The query now includes `WHERE appid = 3` to filter the rows for `appid` equal to 3.
+
+2. **Mapping the Result Set:** The result set is mapped to an array of objects, where each object represents a row with properties corresponding to the columns in the database.
+
+3. **Broadcasting the Data:** The `broadcast` function sends the array of filtered data to all connected WebSocket clients.
+
+### Notes
+
+- Replace `your_data_view` with the actual name of your data view or table.
+- The `appid` value and any other conditions can be adjusted as needed.
+- Ensure that your database structure and connection details are correct and that you handle any potential errors gracefully.

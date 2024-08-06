@@ -1,0 +1,73 @@
+To implement role-based redirection using a branch on the home page in Oracle APEX, you can follow these steps:
+
+1. **Create Authorization Schemes for Roles**:
+   - Define authorization schemes that determine whether the logged-in user has the 'Chief' or 'Manager' role. This will be used to conditionally navigate to different pages.
+
+2. **Set Up Branches on the Home Page**:
+   - Create branches on the home page that redirect users based on their roles. You can set conditions on these branches so that only one branch executes depending on the user's role.
+
+### Step-by-Step Instructions
+
+#### 1. **Create Authorization Schemes**
+
+First, you need to define authorization schemes for each role.
+
+1. Go to **Shared Components** > **Security** > **Authorization Schemes**.
+2. Create a new authorization scheme for the 'Chief' role:
+   - **Name**: Chief Role
+   - **Type**: PL/SQL Function Returning Boolean
+   - **PL/SQL Function**:
+     ```sql
+     RETURN APEX_ACL.HAS_USER_ROLE(
+       p_application_id  => :APP_ID,
+       p_user_name       => :APP_USER,
+       p_role_static_id  => 'CHIEF'
+     );
+     ```
+3. Create another authorization scheme for the 'Manager' role similarly:
+   - **Name**: Manager Role
+   - **Type**: PL/SQL Function Returning Boolean
+   - **PL/SQL Function**:
+     ```sql
+     RETURN APEX_ACL.HAS_USER_ROLE(
+       p_application_id  => :APP_ID,
+       p_user_name       => :APP_USER,
+       p_role_static_id  => 'MANAGER'
+     );
+     ```
+
+#### 2. **Create Branches on the Home Page**
+
+1. Navigate to the home page (or the initial landing page after login) in your APEX application.
+2. Under **Page Designer**, go to the **Processing** section.
+3. **Create Branch for Chief Role**:
+   - Click on the "+" icon to create a new branch.
+   - **Type**: Page or URL (Redirect)
+   - **Target**:
+     - **Page**: Specify the page number you want to redirect to for the 'Chief' role, e.g., 10.
+   - **Server-side Condition**:
+     - **Type**: Authorization Scheme
+     - **Authorization Scheme**: Chief Role
+4. **Create Branch for Manager Role**:
+   - Click on the "+" icon to create another branch.
+   - **Type**: Page or URL (Redirect)
+   - **Target**:
+     - **Page**: Specify the page number you want to redirect to for the 'Manager' role, e.g., 20.
+   - **Server-side Condition**:
+     - **Type**: Authorization Scheme
+     - **Authorization Scheme**: Manager Role
+
+5. **Default Branch for Other Users**:
+   - Optionally, create a default branch that redirects to a general or error page if the user doesn't have either role.
+
+#### 3. **Testing and Verification**
+
+1. **Test the Login Process**: 
+   - Log in with different users having 'Chief' and 'Manager' roles, and ensure they are redirected to the appropriate pages.
+   
+2. **Verify Branch Execution**: 
+   - You can use APEX's debug mode to ensure that the correct branches are being executed based on the user's role.
+
+### Summary
+
+This approach leverages APEX's branching mechanism along with authorization schemes to conditionally navigate users to different pages based on their roles. This way, no additional PL/SQL redirection code is needed, and the navigation logic remains within the APEX page flow.

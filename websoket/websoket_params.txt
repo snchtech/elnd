@@ -1,0 +1,205 @@
+To achieve the scenario where you send specific parameters from an Oracle APEX application to a Node.js WebSocket server, and then based on those parameters, the server queries the database and returns different data collections, you can follow the approach outlined below.
+
+### 1. **Send Parameters from Oracle APEX**
+
+In your APEX application, use JavaScript to send a request to the `/start-check` endpoint with specific parameters. You can send the parameters using `apex.server.process` or a direct AJAX call if needed.
+
+**Example JavaScript in APEX:**
+
+```javascript
+// Data to send to the Node.js server
+var params = {
+  position: apex.item('P1_POSITION').getValue(),  // Example APEX item
+  department: apex.item('P1_DEPARTMENT').getValue() // Example APEX item
+};
+
+// Send a signal to the Node.js server to start checking parameters
+apex.server.process('START_CHECK', {
+  x01: JSON.stringify(params)
+}, {
+  success: function(response) {
+    console.log('Signal sent successfully:', response);
+  },
+  error: function(error) {
+    console.error('Error sending signal:', error);
+  }
+});
+```
+
+In this code:
+- The `params` object contains the parameters `position` and `department`, which are gathered from APEX items.
+- `apex.server.process` sends these parameters to the Node.js server's `/start-check` endpoint.
+
+### 2. **Handle the Signal and Parameters in the WebSocket Server**
+
+Modify the Node.js server to receive the parameters, process them, and then query the Oracle database accordingly.
+
+**WebSocket Server (`wsServer.js`):**
+
+```javascript
+const WebSocket = require('ws');
+const express = require('express');
+const bodyParser = require('body-parser');
+const oracledb = require('oracledb');
+
+const app = express();
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection configuration
+const dbConfig = {
+  user: 'your_username',
+  password: 'your_password',
+  connectString: 'your_connection_string'
+};
+
+// Middleware to parse JSON body
+app.use(bodyParser.json());
+
+// Store connected clients
+let clients = [];
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  clients.push(ws);
+  console.log('Client connected');
+
+  ws.on('close', () => {
+    clients = clients.filter(client => client !== ws);
+    console.log('Client disconnected');
+  });
+});
+
+// Function to fetch data from Oracle database based on parameters
+async function fetchDataFromOracle(params) {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    let query = '';
+    let queryParams = {};
+
+    if (params.position) {
+      query = `
+        SELECT (SELECT COUNT(*) FROM employees WHERE position = :position) AS position_count
+        FROM dual
+      `;
+      queryParams = { position: params.position };
+    } else if (params.department) {
+      query = `
+        SELECT (SELECT COUNT(*) FROM employees WHERE department = :department) AS department_count
+        FROM dual
+      `;
+      queryParams = { department: params.department };
+    } else {
+      // Default or error case if needed
+      query = `
+        SELECT (SELECT COUNT(*) FROM employees) AS total_count
+        FROM dual
+      `;
+    }
+
+    const result = await connection.execute(query, queryParams);
+    const [row] = result.rows;
+    let data = {};
+
+    if (params.position) {
+      data = { position_count: row[0] };
+    } else if (params.department) {
+      data = { department_count: row[0] };
+    } else {
+      data = { total_count: row[0] };
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching data from Oracle:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Function to broadcast data to all connected WebSocket clients
+function broadcast(data) {
+  clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// REST endpoint to receive signal and parameters from APEX
+app.post('/start-check', (req, res) => {
+  const params = req.body; // Extract parameters sent from APEX
+
+  console.log('Received signal from APEX with parameters:', params);
+
+  // Start checking parameters and broadcast results
+  fetchDataFromOracle(params).then(data => {
+    if (data) {
+      broadcast(data);
+    }
+  });
+
+  res.sendStatus(200); // Respond to APEX request
+});
+
+// Start the HTTP server
+app.listen(3000, () => {
+  console.log('HTTP server running on port 3000');
+});
+
+console.log('WebSocket server running on port 8080');
+```
+
+In this code:
+- **`fetchDataFromOracle`**: The function is extended to differentiate between different parameters (`position` and `department`). Depending on the parameters received, it constructs a query and fetches the appropriate data.
+- **`app.post('/start-check')`**: This endpoint now receives the parameters from APEX, passes them to `fetchDataFromOracle`, and broadcasts the data.
+
+### 3. **Client-Side JavaScript to Receive Data in APEX**
+
+The client-side JavaScript in APEX remains mostly unchanged, as it simply listens for messages from the WebSocket server.
+
+**Example Client-Side JavaScript in APEX:**
+
+```javascript
+// Create a WebSocket connection to the server
+var ws = new WebSocket('ws://your_server_address:8080');
+
+// Handle incoming messages
+ws.onmessage = function(event) {
+  var data = JSON.parse(event.data); // Parse the JSON data
+  console.log('Data received from server:', data);
+
+  // Conditionally update APEX items or regions based on received data
+  if (data.position_count !== undefined) {
+    apex.item('P1_POSITION_COUNT').setValue(data.position_count);
+  } else if (data.department_count !== undefined) {
+    apex.item('P1_DEPARTMENT_COUNT').setValue(data.department_count);
+  } else if (data.total_count !== undefined) {
+    apex.item('P1_TOTAL_COUNT').setValue(data.total_count);
+  }
+
+  apex.region('data_region').refresh(); // Refresh a region if necessary
+};
+
+// Handle WebSocket errors
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+
+// Optionally handle WebSocket connection closure
+ws.onclose = function() {
+  console.log('WebSocket connection closed');
+};
+```
+
+### Summary
+
+This setup allows the Oracle APEX application to send specific parameters to a Node.js server. The server processes these parameters, queries the Oracle database accordingly, and sends the results back to the client via WebSocket. The client-side JavaScript in APEX then updates the UI based on the received data. This method ensures that the data shown in the APEX application is dynamic and can respond to specific conditions or requests.

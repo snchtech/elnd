@@ -1,0 +1,195 @@
+To implement a mechanism where the WebSocket server receives a signal (from an external application, like Oracle APEX) to start checking parameters from the Oracle database, you can follow these steps:
+
+1. **Set Up the WebSocket Server and HTTP Endpoint**: The WebSocket server should have an HTTP endpoint that listens for the signal.
+2. **Handle the Signal in the WebSocket Server**: Upon receiving the signal, the server should initiate a database query and send the results to the connected WebSocket clients.
+
+### 1. Set Up the WebSocket Server and HTTP Endpoint
+
+**WebSocket Server (`wsServer.js`):**
+
+```javascript
+const WebSocket = require('ws');
+const express = require('express');
+const bodyParser = require('body-parser');
+const oracledb = require('oracledb');
+
+const app = express();
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection configuration
+const dbConfig = {
+  user: 'your_username',
+  password: 'your_password',
+  connectString: 'your_connection_string'
+};
+
+// Middleware to parse JSON body
+app.use(bodyParser.json());
+
+// Store connected clients
+let clients = [];
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  clients.push(ws);
+  console.log('Client connected');
+
+  ws.on('close', () => {
+    clients = clients.filter(client => client !== ws);
+    console.log('Client disconnected');
+  });
+});
+
+// Function to fetch data from Oracle database
+async function fetchDataFromOracle() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    // Execute SQL query to get the counts and other params
+    const result = await connection.execute(`
+      SELECT
+        (SELECT COUNT(*) FROM table1 WHERE condition1) AS count1,
+        (SELECT COUNT(*) FROM table2 WHERE condition2) AS count2,
+        (SELECT COUNT(*) FROM table3 WHERE condition3) AS count3
+      FROM dual
+    `);
+
+    // Assuming result.rows contains the counts
+    const [row] = result.rows;
+    const data = {
+      count1: row[0],
+      count2: row[1],
+      count3: row[2]
+      // Add more params as needed
+    };
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching data from Oracle:', err);
+    return null;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+
+// Function to broadcast data to all connected WebSocket clients
+function broadcast(data) {
+  clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// REST endpoint to receive signal from APEX
+app.post('/start-check', (req, res) => {
+  console.log('Received signal from APEX to start checking parameters');
+
+  // Start checking parameters and broadcast results
+  fetchDataFromOracle().then(data => {
+    if (data) {
+      broadcast(data);
+    }
+  });
+
+  res.sendStatus(200); // Respond to APEX request
+});
+
+// Start the HTTP server
+app.listen(3000, () => {
+  console.log('HTTP server running on port 3000');
+});
+
+console.log('WebSocket server running on port 8080');
+```
+
+In this setup:
+- A WebSocket server runs on port `8080`.
+- An Express HTTP server runs on port `3000` to handle the `/start-check` endpoint. This endpoint listens for signals from Oracle APEX or any other application.
+
+### 2. Handle the Signal in the WebSocket Server
+
+When the `/start-check` endpoint receives a POST request, it triggers the `fetchDataFromOracle` function. This function queries the database and fetches the required parameters. The results are then broadcast to all connected WebSocket clients.
+
+### 3. Sending the Signal from Oracle APEX
+
+In Oracle APEX, you can use a JavaScript call or a PL/SQL process to send an HTTP POST request to the `/start-check` endpoint of the Node.js server.
+
+**Example JavaScript in APEX:**
+
+```javascript
+// Send a signal to the Node.js server to start checking parameters
+apex.server.process('START_CHECK', {}, {
+  success: function(response) {
+    console.log('Signal sent successfully:', response);
+  },
+  error: function(error) {
+    console.error('Error sending signal:', error);
+  }
+});
+```
+
+**Example PL/SQL Process in APEX:**
+
+```plsql
+DECLARE
+  l_http_request  UTL_HTTP.REQ;
+  l_http_response UTL_HTTP.RESP;
+  l_url           VARCHAR2(200);
+BEGIN
+  -- Define the URL of the Node.js server
+  l_url := 'http://your_server_address:3000/start-check';
+
+  -- Create the HTTP request
+  l_http_request := UTL_HTTP.BEGIN_REQUEST(l_url, 'POST', 'HTTP/1.1');
+  UTL_HTTP.SET_HEADER(l_http_request, 'Content-Type', 'application/json');
+
+  -- Send the request
+  l_http_response := UTL_HTTP.GET_RESPONSE(l_http_request);
+  UTL_HTTP.END_RESPONSE(l_http_response);
+END;
+```
+
+### 4. Client-Side: Receiving Data in APEX
+
+The WebSocket clients (in your APEX application) will receive the data when the server broadcasts it.
+
+**Example Client-Side JavaScript in APEX:**
+
+```javascript
+// Create a WebSocket connection to the server
+var ws = new WebSocket('ws://your_server_address:8080');
+
+// Handle incoming messages
+ws.onmessage = function(event) {
+  var data = JSON.parse(event.data); // Parse the JSON data
+  console.log('Data received from server:', data);
+
+  // Update APEX items or regions with the new data
+  apex.item('P1_COUNT1').setValue(data.count1);
+  apex.item('P1_COUNT2').setValue(data.count2);
+  apex.item('P1_COUNT3').setValue(data.count3);
+  apex.region('data_region').refresh(); // Refresh a region if necessary
+};
+
+// Handle WebSocket errors
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+
+// Optionally handle WebSocket connection closure
+ws.onclose = function() {
+  console.log('WebSocket connection closed');
+};
+```
+
+### Conclusion
+
+This setup allows an external application, like Oracle APEX, to send a signal to the WebSocket server. Upon receiving the signal, the server checks the necessary parameters in the Oracle database and sends the data to all connected WebSocket clients. This pattern is useful for triggering real-time updates based on specific events or actions initiated by a user or system.

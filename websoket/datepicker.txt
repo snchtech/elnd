@@ -1,0 +1,21 @@
+You can use jQuery to move the Date Picker item into the `.datetime` div within the parent div that has the class `current`. Here's how you can achieve that:
+
+1. First, make sure you include the jQuery library in your Oracle APEX app if it's not already included.
+2. Then, you can use the following jQuery script to move the Date Picker item.
+
+```javascript
+$(document).ready(function() {
+  // Select the Date Picker item
+  var datePickerItem = $('#P1_DATE_PICKER'); // Replace '#P1_DATE_PICKER' with the actual ID of your Date Picker item
+
+  // Find the .datetime div inside the .current parent and insert the Date Picker item
+  $('.row.current .datetime').append(datePickerItem);
+});
+```
+
+### Explanation:
+- `$(document).ready(function() { ... });`: Ensures the script runs after the document is fully loaded.
+- `var datePickerItem = $('#P1_DATE_PICKER');`: Selects the Date Picker item. Replace `#P1_DATE_PICKER` with the actual ID of your Date Picker item.
+- `$('.row.current .datetime').append(datePickerItem);`: Finds the `.datetime` div inside the `.row` div with the `current` class and appends the Date Picker item to it.
+
+This script should be placed in a JavaScript file or directly in the HTML page where your Oracle APEX app resides, ensuring it runs after the page content is fully loaded.

@@ -1,0 +1,93 @@
+Sure, let's modify the functions to determine the shift based on the current time within the function body instead of taking it as an argument.
+
+### Function to Count Orders Starting Within the Current Shift
+
+```sql
+CREATE OR REPLACE FUNCTION orderStartOnShift 
+RETURN NUMBER
+IS
+    v_count NUMBER;
+    v_shift_start DATE;
+    v_shift_end DATE;
+    shift_number NUMBER;
+BEGIN
+    -- Determine the shift based on current time
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '22:45' AND '23:59' OR TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '00:00' AND '07:00' THEN
+        shift_number := 1;
+        v_shift_start := TRUNC(SYSDATE - 1) + INTERVAL '22:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '07:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:45' AND '15:00' THEN
+        shift_number := 2;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '06:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '15:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:45' AND '23:00' THEN
+        shift_number := 3;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '14:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '23:00' HOUR TO MINUTE;
+    ELSE
+        RETURN 0; -- Invalid time for all shifts
+    END IF;
+
+    -- Count the orders that start within the shift times
+    SELECT COUNT(order_id)
+    INTO v_count
+    FROM orders
+    WHERE order_start BETWEEN v_shift_start AND v_shift_end;
+
+    RETURN v_count;
+END;
+/
+```
+
+### Function to Count Orders Ending Within the Current Shift
+
+```sql
+CREATE OR REPLACE FUNCTION orderEndOnShift 
+RETURN NUMBER
+IS
+    v_count NUMBER;
+    v_shift_start DATE;
+    v_shift_end DATE;
+    shift_number NUMBER;
+BEGIN
+    -- Determine the shift based on current time
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '22:45' AND '23:59' OR TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '00:00' AND '07:00' THEN
+        shift_number := 1;
+        v_shift_start := TRUNC(SYSDATE - 1) + INTERVAL '22:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '07:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:45' AND '15:00' THEN
+        shift_number := 2;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '06:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '15:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:45' AND '23:00' THEN
+        shift_number := 3;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '14:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '23:00' HOUR TO MINUTE;
+    ELSE
+        RETURN 0; -- Invalid time for all shifts
+    END IF;
+
+    -- Count the orders that end within the shift times
+    SELECT COUNT(order_id)
+    INTO v_count
+    FROM orders
+    WHERE order_end BETWEEN v_shift_start AND v_shift_end;
+
+    RETURN v_count;
+END;
+/
+```
+
+### Explanation
+
+1. **Shift Determination**: The functions determine the current shift based on the current time (`SYSDATE`). The time is checked against the defined shift ranges to set the shift number and corresponding start and end times.
+2. **Order Counting**: After determining the shift, the functions count the orders that start or end within the calculated shift times using a `SELECT COUNT` query.
+
+### Usage Example
+
+```sql
+SELECT orderStartOnShift FROM dual;
+SELECT orderEndOnShift FROM dual;
+```
+
+These calls will return the count of orders starting and ending within the current shift respectively.

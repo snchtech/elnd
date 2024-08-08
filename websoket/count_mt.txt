@@ -1,0 +1,84 @@
+Sure, let's create the functions to count orders in the specified states with the given constraints.
+
+### Function to Count Orders with `id_state` 50 (Wait)
+
+```sql
+CREATE OR REPLACE FUNCTION orderWaitStatus (unitArgument IN NUMBER)
+RETURN NUMBER
+IS
+    v_count NUMBER;
+BEGIN
+    -- Count the orders with id_state 50 (Wait) for the given unit
+    SELECT COUNT(id_order)
+    INTO v_count
+    FROM orders
+    WHERE id_state = 50
+      AND unit = unitArgument
+      AND order_date >= TRUNC(SYSDATE);
+
+    RETURN v_count;
+END;
+/
+```
+
+### Function to Count Orders with `id_state` 53 (In Process) within the Current Shift
+
+```sql
+CREATE OR REPLACE FUNCTION orderInProcessOnShift (unitArgument IN NUMBER)
+RETURN NUMBER
+IS
+    v_count NUMBER;
+    v_shift_start DATE;
+    v_shift_end DATE;
+    shift_number NUMBER;
+BEGIN
+    -- Determine the shift based on current time
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '22:45' AND '23:59' OR TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '00:00' AND '07:00' THEN
+        shift_number := 1;
+        v_shift_start := TRUNC(SYSDATE - 1) + INTERVAL '22:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '07:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:45' AND '15:00' THEN
+        shift_number := 2;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '06:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '15:00' HOUR TO MINUTE;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:45' AND '23:00' THEN
+        shift_number := 3;
+        v_shift_start := TRUNC(SYSDATE) + INTERVAL '14:45' HOUR TO MINUTE;
+        v_shift_end := TRUNC(SYSDATE) + INTERVAL '23:00' HOUR TO MINUTE;
+    ELSE
+        RETURN 0; -- Invalid time for all shifts
+    END IF;
+
+    -- Count the orders with id_state 53 (In Process) within the shift times and for the given unit
+    SELECT COUNT(id_order)
+    INTO v_count
+    FROM orders
+    WHERE id_state = 53
+      AND unit = unitArgument
+      AND order_date >= v_shift_start
+      AND order_date < v_shift_end;
+
+    RETURN v_count;
+END;
+/
+```
+
+### Explanation
+
+1. **`orderWaitStatus` Function**:
+    - This function takes `unitArgument` as an input and counts the number of orders with `id_state` 50 (Wait) for that unit.
+    - The `order_date` is filtered to include orders from `TRUNC(SYSDATE)`, which means from the beginning of the current day.
+
+2. **`orderInProcessOnShift` Function**:
+    - This function also takes `unitArgument` as an input and counts the number of orders with `id_state` 53 (In Process) for that unit within the current shift.
+    - The current shift is determined based on the time of `SYSDATE`, and appropriate start and end times are calculated for the shift.
+    - The `order_date` is filtered to include orders within the calculated shift times.
+
+### Usage Example
+
+```sql
+SELECT orderWaitStatus(1) FROM dual;
+SELECT orderInProcessOnShift(2) FROM dual;
+```
+
+These calls will return the count of orders in the specified state (Wait or In Process) for the given unit.

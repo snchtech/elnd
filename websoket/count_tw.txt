@@ -1,0 +1,96 @@
+To achieve the functionality you're looking for, you can write a set of Oracle SQL functions that will calculate the count of orders that start and end within the given shift times. Here is a step-by-step guide on how to write these functions.
+
+### Function to Count Orders Starting Within a Shift
+
+First, let's create a function to count the orders that start within a specific shift. 
+
+```sql
+CREATE OR REPLACE FUNCTION orderStartOnShift (shift_number IN NUMBER)
+RETURN NUMBER
+IS
+    v_count NUMBER;
+    v_shift_start DATE;
+    v_shift_end DATE;
+BEGIN
+    -- Determine the shift times based on shift number
+    CASE shift_number
+        WHEN 1 THEN
+            v_shift_start := TRUNC(SYSDATE - 1) + INTERVAL '22:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '07:00' HOUR TO MINUTE;
+        WHEN 2 THEN
+            v_shift_start := TRUNC(SYSDATE) + INTERVAL '06:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '15:00' HOUR TO MINUTE;
+        WHEN 3 THEN
+            v_shift_start := TRUNC(SYSDATE) + INTERVAL '14:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '23:00' HOUR TO MINUTE;
+        ELSE
+            RETURN 0; -- Invalid shift number
+    END CASE;
+
+    -- Count the orders that start within the shift times
+    SELECT COUNT(order_id)
+    INTO v_count
+    FROM orders
+    WHERE order_start BETWEEN v_shift_start AND v_shift_end;
+
+    RETURN v_count;
+END;
+/
+```
+
+### Function to Count Orders Ending Within a Shift
+
+Similarly, let's create a function to count the orders that end within a specific shift.
+
+```sql
+CREATE OR REPLACE FUNCTION orderEndOnShift (shift_number IN NUMBER)
+RETURN NUMBER
+IS
+    v_count NUMBER;
+    v_shift_start DATE;
+    v_shift_end DATE;
+BEGIN
+    -- Determine the shift times based on shift number
+    CASE shift_number
+        WHEN 1 THEN
+            v_shift_start := TRUNC(SYSDATE - 1) + INTERVAL '22:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '07:00' HOUR TO MINUTE;
+        WHEN 2 THEN
+            v_shift_start := TRUNC(SYSDATE) + INTERVAL '06:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '15:00' HOUR TO MINUTE;
+        WHEN 3 THEN
+            v_shift_start := TRUNC(SYSDATE) + INTERVAL '14:45' HOUR TO MINUTE;
+            v_shift_end := TRUNC(SYSDATE) + INTERVAL '23:00' HOUR TO MINUTE;
+        ELSE
+            RETURN 0; -- Invalid shift number
+    END CASE;
+
+    -- Count the orders that end within the shift times
+    SELECT COUNT(order_id)
+    INTO v_count
+    FROM orders
+    WHERE order_end BETWEEN v_shift_start AND v_shift_end;
+
+    RETURN v_count;
+END;
+/
+```
+
+### Explanation
+
+1. **Shift Time Calculation**: For each function, the shift times are determined based on the shift number provided as an input. The `TRUNC(SYSDATE)` function is used to get the current date without the time portion, and `INTERVAL` is added to get the exact shift start and end times.
+
+2. **Order Counting**: The `SELECT COUNT(order_id)` query is used to count the number of orders that start or end within the calculated shift times.
+
+3. **Invalid Shift Handling**: If an invalid shift number is provided, the function returns `0`.
+
+You can call these functions with the appropriate shift number to get the count of orders starting or ending within that shift.
+
+### Usage Example
+
+```sql
+SELECT orderStartOnShift(1) FROM dual;
+SELECT orderEndOnShift(2) FROM dual;
+```
+
+These calls will return the count of orders starting and ending within the specified shifts respectively.

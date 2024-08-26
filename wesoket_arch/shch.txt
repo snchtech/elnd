@@ -1,0 +1,203 @@
+To send and receive data at different time intervals between the WebSocket server and client, you can implement scheduled tasks on the server side or the client side to handle these time-based operations.
+
+Here are a few approaches you can take:
+
+### **1. Scheduled Data Push from Server to Client**
+
+You can use `setInterval` on the server side to periodically send data to the client at specific intervals.
+
+#### Example: Server Sending Data at Intervals
+
+In this example, the server sends different parts of data at different intervals.
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// WebSocket server connection handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Handle incoming messages and route them
+  ws.on('message', (message) => {
+    routeMessage(ws, message, dbConfig);
+  });
+
+  // Example: Sending different parts of data at different intervals
+  const interval1 = setInterval(() => {
+    // Fetch some data and send it to the client
+    const data1 = { part: 'data_part_1', value: Math.random() };
+    ws.send(JSON.stringify(data1));
+  }, 5000);  // Every 5 seconds
+
+  const interval2 = setInterval(() => {
+    // Fetch some other data and send it to the client
+    const data2 = { part: 'data_part_2', value: Math.random() * 10 };
+    ws.send(JSON.stringify(data2));
+  }, 10000);  // Every 10 seconds
+
+  // Clear intervals when client disconnects
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    clearInterval(interval1);
+    clearInterval(interval2);
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **Explanation:**
+1. **`setInterval`**: This is used to send different parts of the data to the client at specific intervals (e.g., every 5 seconds and every 10 seconds).
+2. **`clearInterval`**: This ensures that the intervals are cleared when the client disconnects, preventing memory leaks or unnecessary processing.
+
+### **2. Scheduled Data Fetch Requests from Client to Server**
+
+On the client side, you can use `setInterval` or similar methods to periodically send requests to the server, asking for specific data at different intervals.
+
+#### Example: Client Requesting Data at Intervals
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080');
+
+// On WebSocket open, start sending requests at intervals
+ws.onopen = function() {
+  // Request first type of data every 5 seconds
+  setInterval(() => {
+    ws.send(JSON.stringify({ type: 'request_data_part_1' }));
+  }, 5000);
+
+  // Request second type of data every 10 seconds
+  setInterval(() => {
+    ws.send(JSON.stringify({ type: 'request_data_part_2' }));
+  }, 10000);
+};
+
+// Handle incoming messages from server
+ws.onmessage = function(event) {
+  const response = JSON.parse(event.data);
+  console.log('Received:', response);
+};
+```
+
+### **Explanation:**
+1. The client sends specific requests for different parts of the data at different intervals using `setInterval`.
+2. The server can respond to these requests as needed, and the client will handle and display the data accordingly.
+
+### **3. Mixing Both Approaches: Server Push + Client Pull**
+
+You can combine both methods. Some data can be pushed from the server at regular intervals, while the client can request other data at different intervals.
+
+#### Example: Mixed Approach
+
+- **Server**: Pushes data at regular intervals.
+- **Client**: Requests specific data at different intervals.
+
+**Server Code:**
+
+```javascript
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Push data to the client every 10 seconds
+  const intervalPush = setInterval(() => {
+    const pushData = { part: 'server_push_data', value: Math.random() * 100 };
+    ws.send(JSON.stringify(pushData));
+  }, 10000);  // Every 10 seconds
+
+  ws.on('message', async (message) => {
+    const { type } = JSON.parse(message);
+
+    if (type === 'request_data_part_1') {
+      // Handle client data request
+      const data = { part: 'data_part_1', value: Math.random() };
+      ws.send(JSON.stringify(data));
+    } else if (type === 'request_data_part_2') {
+      // Handle different client data request
+      const data = { part: 'data_part_2', value: Math.random() * 10 };
+      ws.send(JSON.stringify(data));
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    clearInterval(intervalPush);
+  });
+});
+```
+
+**Client Code:**
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080');
+
+ws.onopen = function() {
+  // Request part 1 of the data every 5 seconds
+  setInterval(() => {
+    ws.send(JSON.stringify({ type: 'request_data_part_1' }));
+  }, 5000);
+
+  // Request part 2 of the data every 15 seconds
+  setInterval(() => {
+    ws.send(JSON.stringify({ type: 'request_data_part_2' }));
+  }, 15000);
+};
+
+ws.onmessage = function(event) {
+  const response = JSON.parse(event.data);
+  console.log('Received:', response);
+};
+```
+
+### **4. Using a Task Scheduler Library**
+
+If your WebSocket server requires more complex scheduling, you can use a task scheduler library like `node-schedule` or `cron` to schedule data processing and sending at specific times.
+
+#### Example Using `node-schedule`:
+
+1. **Install `node-schedule`**:
+   ```bash
+   npm install node-schedule
+   ```
+
+2. **Server Code Example**:
+
+```javascript
+import schedule from 'node-schedule';
+import WebSocket from 'ws';
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Schedule a job to run at specific times, e.g., every minute
+  const job = schedule.scheduleJob('* * * * *', () => {
+    const data = { part: 'scheduled_data', value: Math.random() };
+    ws.send(JSON.stringify(data));
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    job.cancel();  // Cancel the job when the client disconnects
+  });
+});
+```
+
+### **Summary of Options:**
+1. **Server Push with `setInterval`**: Automatically send data to the client at different time intervals.
+2. **Client Pull with `setInterval`**: The client requests specific data at different intervals.
+3. **Mixed Approach**: Combine server push and client pull for more flexibility.
+4. **Task Scheduler Libraries**: Use advanced scheduling with libraries like `node-schedule` for more control over timing.
+
+By combining these approaches, you can create a dynamic system where the WebSocket server and clients can exchange data at different intervals based on your specific requirements.

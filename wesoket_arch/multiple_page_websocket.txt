@@ -1,0 +1,223 @@
+To handle multiple Oracle APEX pages (and potentially multiple applications in the future) with a single WebSocket server, you need to design a flexible and scalable architecture for your WebSocket server that can handle different messages and contexts from different pages and applications. Here’s an outline of how to structure the code and architecture:
+
+### **Architecture Overview**
+
+- **WebSocket Server**: A single WebSocket server that listens on one port, capable of handling multiple APEX pages and multiple APEX applications.
+- **Message Routing**: You will need to differentiate messages based on the source page or application and route them to the correct handler function.
+- **Dynamic Parameters**: Each page or application can send and receive different parameters. These will be processed separately depending on the page or application.
+- **Scalability**: Design the server in a modular way so that you can add new pages or applications easily in the future.
+
+### **Code Structure**
+
+Let’s break down the code into modules for clarity and maintainability:
+
+1. **Main WebSocket Server**
+2. **Message Handlers for Each Page or Application**
+3. **Dynamic Message Parsing**
+
+### 1. **Main WebSocket Server**
+
+The main WebSocket server will listen for incoming connections and route messages based on the page or application they originate from.
+
+```javascript
+const WebSocket = require('ws');
+const oracledb = require('oracledb');
+
+// Import message handlers for different pages
+const page1Handler = require('./handlers/page1Handler');
+const page2Handler = require('./handlers/page2Handler');
+// Continue importing handlers for other pages
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// WebSocket server connection handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Listen for messages
+  ws.on('message', async (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+
+      // Extract common metadata (application, page, etc.)
+      const { appId, pageId, type, params } = parsedMessage;
+
+      // Route to the appropriate handler based on the appId and pageId
+      if (appId === 'app1') {
+        if (pageId === 'page1') {
+          await page1Handler(ws, type, params, dbConfig);
+        } else if (pageId === 'page2') {
+          await page2Handler(ws, type, params, dbConfig);
+        }
+        // Continue routing for other pages within app1
+      } else if (appId === 'app2') {
+        // Similarly, route messages for a different app (if applicable in future)
+        // ...
+      } else {
+        console.log('Unknown application or page');
+      }
+    } catch (err) {
+      console.error('Error handling message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  });
+
+  // Handle connection close
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### 2. **Message Handlers for Each Page or Application**
+
+For each page or application, create a dedicated handler module that processes the specific logic for that page. This helps keep the code organized and modular.
+
+#### Example: Page 1 Handler (`./handlers/page1Handler.js`)
+
+```javascript
+const oracledb = require('oracledb');
+
+module.exports = async function page1Handler(ws, type, params, dbConfig) {
+  let connection;
+
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    switch (type) {
+      case 'get_counts':
+        const { ap_id, pos, dep, unit } = params;
+        
+        // Fetch data using your PL/SQL functions
+        const result1 = await connection.execute(
+          `BEGIN :result := countParam1(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        const result2 = await connection.execute(
+          `BEGIN :result := countParam2(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        // Send results back to client
+        ws.send(JSON.stringify({
+          countParam1: result1.outBinds.result,
+          countParam2: result2.outBinds.result
+        }));
+        break;
+
+      // Add more cases for other operations needed on this page
+
+      default:
+        console.log('Unknown message type for page 1');
+    }
+
+  } catch (err) {
+    console.error('Error in page1Handler:', err);
+    ws.send(JSON.stringify({ error: 'Failed to retrieve counts' }));
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+};
+```
+
+#### Example: Page 2 Handler (`./handlers/page2Handler.js`)
+
+```javascript
+module.exports = async function page2Handler(ws, type, params, dbConfig) {
+  // Similar to page1Handler, implement page-specific logic here
+  // Example:
+  console.log('Handling message for page 2 with params:', params);
+
+  // You can also query the database, call PL/SQL functions, etc.
+  ws.send(JSON.stringify({ response: 'Data for page 2' }));
+};
+```
+
+### 3. **Dynamic Message Parsing**
+
+Your message format should include metadata to identify the origin of the message (which APEX application and page sent the message). This allows the server to correctly route the messages.
+
+#### Example Message Structure:
+
+```json
+{
+  "appId": "app1",
+  "pageId": "page1",
+  "type": "get_counts",
+  "params": {
+    "ap_id": 123,
+    "pos": "POS1",
+    "dep": "DEP1",
+    "unit": "UNIT1"
+  }
+}
+```
+
+- **`appId`**: Identifies the APEX application (e.g., `app1`, `app2`).
+- **`pageId`**: Identifies the specific page (e.g., `page1`, `page2`).
+- **`type`**: Specifies the type of request (e.g., `get_counts`).
+- **`params`**: Contains the parameters specific to the request.
+
+### **Oracle APEX Frontend Integration**
+
+On the frontend (Oracle APEX), each page will send messages in the above format. Here's an example of how to modify the JavaScript in APEX to accommodate different `appId` and `pageId`:
+
+```javascript
+var appId = 'app1';  // Set the appId based on the application
+var pageId = 'page1'; // Set the pageId based on the current page
+
+var params = {
+  ap_id: "&P1_AP_ID.",
+  pos: "&P1_POS.",
+  dep: "&P1_DEP.",
+  unit: "&P1_UNIT."
+};
+
+var ws = new WebSocket('ws://localhost:8080');
+
+ws.onopen = function() {
+  var payload = {
+    appId: appId,
+    pageId: pageId,
+    type: 'get_counts',
+    params: params
+  };
+  ws.send(JSON.stringify(payload));
+};
+
+ws.onmessage = function(event) {
+  var response = JSON.parse(event.data);
+  console.log("Received response:", response);
+
+  // Optionally set APEX page items with the response
+  $s('P1_COUNT_PARAM1', response.countParam1);
+  $s('P1_COUNT_PARAM2', response.countParam2);
+};
+```
+
+### **Handling Future Applications**
+
+1. **New Applications**: Add new handlers for new applications, and add routing logic to the main WebSocket server based on `appId` and `pageId`.
+2. **Scalability**: The modular approach allows you to scale easily by simply adding new handler files for each page or application without modifying the core WebSocket server logic.
+
+### **Conclusion**
+
+By organizing your WebSocket server into modules (based on application and page), you ensure that your code is scalable, maintainable, and flexible for future growth. Each page or application can handle different parameters and logic while sharing a common WebSocket server.
+
+This architecture allows you to scale to multiple APEX applications and pages, handling various requests and responses efficiently using a single WebSocket server.

@@ -1,0 +1,167 @@
+To rewrite the WebSocket server code using ES6 module syntax, we need to replace `require` with `import`. Additionally, Node.js needs to support ES6 modules. You can do this by either setting `"type": "module"` in your `package.json` or using the `.mjs` file extension.
+
+Here’s how to rewrite the code:
+
+1. **Convert `require` to `import`:** Replace all instances of `require` with `import`.
+2. **Ensure Compatibility:** Ensure that the `package.json` has the following line to enable ES6 modules:
+   ```json
+   {
+     "type": "module"
+   }
+   ```
+
+Here is the rewritten code:
+
+### **Main WebSocket Server (ES6 Version)**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+
+// Import message handlers for different pages
+import page1Handler from './handlers/page1Handler.js';
+import page2Handler from './handlers/page2Handler.js';
+// Continue importing handlers for other pages
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// WebSocket server connection handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Listen for messages
+  ws.on('message', async (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+
+      // Extract common metadata (application, page, etc.)
+      const { appId, pageId, type, params } = parsedMessage;
+
+      // Route to the appropriate handler based on the appId and pageId
+      if (appId === 'app1') {
+        if (pageId === 'page1') {
+          await page1Handler(ws, type, params, dbConfig);
+        } else if (pageId === 'page2') {
+          await page2Handler(ws, type, params, dbConfig);
+        }
+        // Continue routing for other pages within app1
+      } else if (appId === 'app2') {
+        // Similarly, route messages for a different app (if applicable in future)
+        // ...
+      } else {
+        console.log('Unknown application or page');
+      }
+    } catch (err) {
+      console.error('Error handling message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  });
+
+  // Handle connection close
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **Page 1 Handler (ES6 Version)**
+
+Update the handler files to use ES6 modules as well.
+
+```javascript
+import oracledb from 'oracledb';
+
+export default async function page1Handler(ws, type, params, dbConfig) {
+  let connection;
+
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    switch (type) {
+      case 'get_counts':
+        const { ap_id, pos, dep, unit } = params;
+
+        // Fetch data using your PL/SQL functions
+        const result1 = await connection.execute(
+          `BEGIN :result := countParam1(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        const result2 = await connection.execute(
+          `BEGIN :result := countParam2(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        // Send results back to client
+        ws.send(JSON.stringify({
+          countParam1: result1.outBinds.result,
+          countParam2: result2.outBinds.result
+        }));
+        break;
+
+      // Add more cases for other operations needed on this page
+
+      default:
+        console.log('Unknown message type for page 1');
+    }
+
+  } catch (err) {
+    console.error('Error in page1Handler:', err);
+    ws.send(JSON.stringify({ error: 'Failed to retrieve counts' }));
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+```
+
+### **Page 2 Handler (ES6 Version)**
+
+```javascript
+export default async function page2Handler(ws, type, params, dbConfig) {
+  // Similar to page1Handler, implement page-specific logic here
+  // Example:
+  console.log('Handling message for page 2 with params:', params);
+
+  // You can also query the database, call PL/SQL functions, etc.
+  ws.send(JSON.stringify({ response: 'Data for page 2' }));
+}
+```
+
+### **package.json Configuration**
+
+Ensure your `package.json` includes the `"type": "module"` key so that Node.js recognizes the code as using ES6 modules.
+
+```json
+{
+  "name": "websocket-server",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.0.0",
+    "oracledb": "^5.0.0"
+  }
+}
+```
+
+### Key Changes in ES6:
+
+1. **Imports**: We now use `import` to load modules.
+2. **Exports**: Handlers are exported using `export default`.
+3. **File Extensions**: Make sure to include `.js` in the import statements unless your bundler (e.g., Webpack) can resolve them automatically.
+
+By organizing your server code in this modular way using ES6, it remains scalable and flexible to handle multiple applications and pages while making future enhancements easier.

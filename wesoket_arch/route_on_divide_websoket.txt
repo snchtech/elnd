@@ -1,0 +1,175 @@
+ To divide the route handler part of your WebSocket server into separate parts, you can implement a **router** or **dispatcher** pattern. This will allow you to organize the routing logic cleanly and modularly by separating the concerns of routing messages and handling specific logic for different pages or applications.
+
+Here’s a structured approach:
+
+### **1. Create a Router Module**
+
+The router will handle incoming WebSocket messages and determine which handler should process the message. The router will be responsible for parsing the `appId` and `pageId` from the message and invoking the corresponding handler.
+
+#### **router.js**
+
+```javascript
+// Import all the page handlers
+import page1Handler from './handlers/page1Handler.js';
+import page2Handler from './handlers/page2Handler.js';
+// Import other page handlers as needed
+
+export default function routeMessage(ws, message, dbConfig) {
+  try {
+    const { appId, pageId, type, params } = JSON.parse(message);
+
+    // Route based on appId and pageId
+    if (appId === 'app1') {
+      routeApp1(ws, pageId, type, params, dbConfig);
+    } else if (appId === 'app2') {
+      routeApp2(ws, pageId, type, params, dbConfig);
+    } else {
+      throw new Error('Unknown application');
+    }
+  } catch (err) {
+    console.error('Error routing message:', err);
+    ws.send(JSON.stringify({ error: 'Failed to process message' }));
+  }
+}
+
+// Router for Application 1
+function routeApp1(ws, pageId, type, params, dbConfig) {
+  switch (pageId) {
+    case 'page1':
+      page1Handler(ws, type, params, dbConfig);
+      break;
+    case 'page2':
+      page2Handler(ws, type, params, dbConfig);
+      break;
+    // Add more pages as needed
+    default:
+      throw new Error(`Unknown pageId: ${pageId} in app1`);
+  }
+}
+
+// Router for Application 2
+function routeApp2(ws, pageId, type, params, dbConfig) {
+  // Similarly, route for pages in app2
+  switch (pageId) {
+    case 'page1':
+      // Call app2's page1 handler
+      break;
+    case 'page2':
+      // Call app2's page2 handler
+      break;
+    // Add more pages as needed
+    default:
+      throw new Error(`Unknown pageId: ${pageId} in app2`);
+  }
+}
+```
+
+### **2. Modify WebSocket Server to Use Router**
+
+Now, modify the WebSocket server to use the router for routing messages. The server will no longer have the routing logic directly but will delegate that responsibility to the `router.js` module.
+
+#### **server.js**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// WebSocket server connection handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  // Listen for messages and route them
+  ws.on('message', (message) => {
+    routeMessage(ws, message, dbConfig);  // Delegate routing to the router module
+  });
+
+  // Handle connection close
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **3. Handler Modules**
+
+Your handler modules remain the same. Each handler processes the specific logic related to that page or application.
+
+#### **handlers/page1Handler.js**
+
+```javascript
+import oracledb from 'oracledb';
+
+export default async function page1Handler(ws, type, params, dbConfig) {
+  let connection;
+
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    switch (type) {
+      case 'get_counts':
+        const { ap_id, pos, dep, unit } = params;
+
+        // Fetch data using your PL/SQL functions
+        const result1 = await connection.execute(
+          `BEGIN :result := countParam1(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        const result2 = await connection.execute(
+          `BEGIN :result := countParam2(:ap_id, :pos, :dep, :unit); END;`,
+          { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }, ap_id, pos, dep, unit }
+        );
+
+        // Send results back to client
+        ws.send(JSON.stringify({
+          countParam1: result1.outBinds.result,
+          countParam2: result2.outBinds.result
+        }));
+        break;
+
+      // Add more cases for other operations needed on this page
+
+      default:
+        console.log('Unknown message type for page 1');
+    }
+
+  } catch (err) {
+    console.error('Error in page1Handler:', err);
+    ws.send(JSON.stringify({ error: 'Failed to retrieve counts' }));
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing connection:', err);
+      }
+    }
+  }
+}
+```
+
+### **4. Future Scalability**
+
+When you want to add more applications or pages in the future, simply add new routing logic in `router.js` and import new handler modules as needed. The router will handle all the logic of dispatching the correct handler based on the application and page information in the message.
+
+#### **Adding New Pages or Applications**
+To add new applications or pages:
+1. **Create a New Handler**: Add a new handler module for the page or application.
+2. **Modify `router.js`**: Add the new routing logic for the new application or page.
+3. **Update the Client**: Ensure the WebSocket messages from the Oracle APEX application include the correct `appId` and `pageId` so they can be routed correctly.
+
+### **Summary**
+
+By dividing the routing logic into a dedicated `router.js` module and separating handlers by page and application, you create a clean, modular architecture. This approach simplifies adding new functionality in the future, whether it’s new pages or even new applications, while keeping the codebase organized and scalable.

@@ -1,0 +1,168 @@
+To achieve this, you need to implement a workflow where the Oracle APEX application sends data (e.g., `ap_id`, `pos`, `dep`, `unit`) to the WebSocket server. The WebSocket server then calls the PL/SQL functions to get the count of records and sends the result back to the client.
+
+Here’s how you can approach it:
+
+### 1. **Oracle APEX Client (Frontend) to WebSocket Server**
+
+First, in Oracle APEX, you can use JavaScript on a dynamic action to establish a WebSocket connection and send the necessary data to the WebSocket server.
+
+#### Oracle APEX (JavaScript Code)
+Here’s how you can establish the WebSocket connection and send the data from Oracle APEX using JavaScript.
+
+```javascript
+var ap_id = "&P1_AP_ID.";  // Example of getting APEX page item value
+var pos = "&P1_POS.";
+var dep = "&P1_DEP.";
+var unit = "&P1_UNIT.";
+
+var ws = new WebSocket('ws://localhost:8080');
+
+ws.onopen = function() {
+    var payload = {
+        type: 'get_counts',
+        ap_id: ap_id,
+        pos: pos,
+        dep: dep,
+        unit: unit
+    };
+    ws.send(JSON.stringify(payload));
+};
+
+ws.onmessage = function(event) {
+    var response = JSON.parse(event.data);
+    console.log("Received counts: ", response);
+    
+    // Optionally set APEX page items with the counts
+    $s('P1_COUNT_PARAM1', response.countParam1);
+    $s('P1_COUNT_PARAM2', response.countParam2);
+};
+
+ws.onclose = function() {
+    console.log("WebSocket connection closed");
+};
+
+ws.onerror = function(error) {
+    console.log("WebSocket error: " + error);
+};
+```
+
+In this script:
+- The APEX page items (`P1_AP_ID`, `P1_POS`, etc.) are retrieved via JavaScript.
+- A WebSocket connection is established, and the data is sent to the WebSocket server in JSON format.
+- The WebSocket server responds with the count values, which can be used to update page items in Oracle APEX.
+
+### 2. **WebSocket Server Processing**
+
+The WebSocket server needs to receive the data, call the PL/SQL functions, and send the counts back to the client.
+
+#### Example WebSocket Server Code (Node.js with `oracledb`)
+First, install the `oracledb` package to interact with the Oracle database:
+
+```bash
+npm install oracledb
+```
+
+Here’s an example of the WebSocket server code:
+
+```javascript
+const WebSocket = require('ws');
+const oracledb = require('oracledb');
+
+// Create WebSocket server on port 8080
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle database connection configuration
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// Function to get count from PL/SQL functions
+async function getCounts(ap_id, pos, dep, unit) {
+  let connection;
+
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+
+    // Execute countParam1
+    const result1 = await connection.execute(
+      `BEGIN :result := countParam1(:ap_id, :pos, :dep, :unit); END;`,
+      { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+        ap_id: ap_id, pos: pos, dep: dep, unit: unit }
+    );
+
+    // Execute countParam2
+    const result2 = await connection.execute(
+      `BEGIN :result := countParam2(:ap_id, :pos, :dep, :unit); END;`,
+      { result: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+        ap_id: ap_id, pos: pos, dep: dep, unit: unit }
+    );
+
+    return {
+      countParam1: result1.outBinds.result,
+      countParam2: result2.outBinds.result
+    };
+
+  } catch (err) {
+    console.error('Error executing PL/SQL functions:', err);
+    throw err;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing the connection:', err);
+      }
+    }
+  }
+}
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  ws.on('message', async (message) => {
+    const { type, ap_id, pos, dep, unit } = JSON.parse(message);
+
+    if (type === 'get_counts') {
+      try {
+        // Get counts from the database
+        const counts = await getCounts(ap_id, pos, dep, unit);
+
+        // Send counts back to the client
+        ws.send(JSON.stringify(counts));
+      } catch (err) {
+        ws.send(JSON.stringify({ error: 'Failed to retrieve counts' }));
+      }
+    } else {
+      console.log('Unknown message type');
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **Explanation:**
+
+1. **Oracle APEX Client:**
+   - In the Oracle APEX client (via JavaScript), you establish a WebSocket connection and send the data (`ap_id`, `pos`, `dep`, `unit`) to the server.
+   - The WebSocket server processes this data and calls the PL/SQL functions to get the counts, then sends the results back to the client.
+   - You can then display the results on the APEX page by setting values to specific page items.
+
+2. **WebSocket Server:**
+   - The WebSocket server uses the `oracledb` package to connect to the Oracle database and call the PL/SQL functions (`countParam1`, `countParam2`).
+   - Once the counts are retrieved, they are sent back to the client via the WebSocket connection.
+   - The client receives the counts and displays them on the page.
+
+### 3. **Oracle Database Setup**
+Ensure that your Oracle database has the necessary PL/SQL functions (`countParam1`, `countParam2`) properly defined and accessible to the user you are connecting with in the Node.js WebSocket server.
+
+### Summary
+
+By following this approach, you can send data from the Oracle APEX frontend to the WebSocket server, invoke PL/SQL functions in the database, and then send the results back to the client. This integration allows for dynamic interaction between APEX, the WebSocket server, and the Oracle database.

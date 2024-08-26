@@ -1,0 +1,131 @@
+To send a JWT token from the client and validate it on the WebSocket server, you can follow these steps:
+
+### 1. **Send JWT Token from Client**
+
+Modify the client code to include the JWT token in the messages sent to the WebSocket server. You can include the token as part of the initial message when joining a channel or as a separate message type.
+
+Here's an example of how to send the JWT token along with the join request:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080');
+
+// Your JWT token
+const jwtToken = "your_jwt_token_here";
+
+// Join a channel with the JWT token
+ws.onopen = () => {
+  ws.send(JSON.stringify({ type: 'join', channel: 'general', token: jwtToken }));
+};
+
+// Listen for messages
+ws.onmessage = (event) => {
+  const { channel, data } = JSON.parse(event.data);
+  console.log(`Received message on channel ${channel}: ${data}`);
+};
+
+// Send a message to the channel
+const sendMessage = (message) => {
+  ws.send(JSON.stringify({ type: 'message', data: message }));
+};
+
+// Example of sending a message after joining the channel
+ws.onopen = () => {
+  ws.send(JSON.stringify({ type: 'join', channel: 'general', token: jwtToken }));
+  sendMessage('Hello, channel!');
+};
+```
+
+### 2. **Validate JWT Token on the WebSocket Server**
+
+On the server side, you will need to validate the JWT token when the client sends the join request. To do this, you can use a library like `jsonwebtoken` to decode and verify the JWT.
+
+First, install the `jsonwebtoken` package:
+```bash
+npm install jsonwebtoken
+```
+
+Then, modify the server code to verify the JWT token:
+
+```javascript
+const WebSocket = require('ws');
+const jwt = require('jsonwebtoken');  // Import the jsonwebtoken library
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Store channels and their associated clients
+const channels = {};
+
+// Replace with your JWT secret key
+const JWT_SECRET = "your_jwt_secret_key_here";
+
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  ws.on('message', (message) => {
+    const { type, channel, data, token } = JSON.parse(message);
+
+    switch (type) {
+      case 'join':
+        try {
+          // Verify the JWT token
+          const decoded = jwt.verify(token, JWT_SECRET);
+
+          // If token is valid, join the channel
+          if (!channels[channel]) {
+            channels[channel] = [];
+          }
+          channels[channel].push(ws);
+          ws.channel = channel; // Save the channel to the ws instance
+          ws.user = decoded;    // Optionally, save user info from the token
+          console.log(`Client joined channel ${channel} with user ID: ${decoded.id}`);
+        } catch (err) {
+          console.log('Invalid token:', err.message);
+          ws.close();  // Close the connection if the token is invalid
+        }
+        break;
+
+      case 'message':
+        if (ws.channel) {
+          // Broadcast message to all clients in the channel
+          channels[ws.channel].forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ channel: ws.channel, data }));
+            }
+          });
+        }
+        break;
+
+      default:
+        console.log('Unknown message type');
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    if (ws.channel && channels[ws.channel]) {
+      channels[ws.channel] = channels[ws.channel].filter((client) => client !== ws);
+      if (channels[ws.channel].length === 0) {
+        delete channels[ws.channel];
+      }
+    }
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **Explanation:**
+
+1. **Client Side:**
+   - The client sends the JWT token along with the join request using the `token` field.
+
+2. **Server Side:**
+   - The server uses `jsonwebtoken` to verify the token when a client tries to join a channel.
+   - If the token is valid, the client is added to the channel.
+   - If the token is invalid, the server logs the error and closes the connection.
+
+3. **JWT Validation:**
+   - The `jwt.verify()` function checks the token's signature and validity against the secret key.
+   - You can customize the payload within the token (e.g., user ID) for further authorization checks.
+
+This approach ensures that only clients with valid JWT tokens can join the channels.

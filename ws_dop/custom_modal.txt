@@ -1,0 +1,91 @@
+To display a hidden region on the same Oracle APEX page in a modal window and update it with WebSocket data, you can use APEX's dynamic actions and JavaScript. Here’s how you can achieve this:
+
+### **Steps to Implement:**
+
+1. **Create the Hidden Region on the Page:**
+   - On your APEX page, create the region that you want to display in the modal.
+   - Set the `Server-Side Condition` to `Never` so that the region is hidden initially.
+   - Make sure to give the region a `Static ID`, as you’ll need this to reference it in JavaScript.
+
+2. **Add a Button or Link to Open the Modal:**
+   - Create a button or link on your page that will trigger the opening of the modal window.
+   - Set this button's `Action` to "Defined by Dynamic Action".
+
+3. **Create a Dynamic Action to Show the Modal:**
+   - Create a new Dynamic Action that is triggered when the button or link is clicked.
+   - Set the `Action` to "Execute JavaScript Code".
+   - In the JavaScript code, use the following to open the hidden region as a modal:
+
+     ```javascript
+     var regionStaticId = '#YOUR_REGION_STATIC_ID'; // Replace with your region's static ID
+     
+     // Open the region in a modal dialog
+     apex.region(regionStaticId).show();
+
+     // Optional: Add a CSS class to style it as a modal
+     $(regionStaticId).dialog({
+       modal: true,
+       title: "Your Modal Title",
+       width: 600,
+       height: 400,
+       close: function(event, ui) {
+         $(regionStaticId).dialog('destroy');  // Destroy the dialog instance when closed
+       }
+     });
+     ```
+
+4. **WebSocket Integration for Real-Time Updates:**
+   - Integrate your WebSocket code to receive updates and then update the content within the modal region dynamically.
+   - Example WebSocket code to update the region:
+
+     ```javascript
+     const ws = new WebSocket('ws://yourserver:8080');
+
+     ws.onmessage = function(event) {
+       const data = JSON.parse(event.data);
+       
+       // Update your region with the received data
+       document.querySelector('#YOUR_REGION_STATIC_ID .yourDataFieldClass').innerText = data.yourFieldData;
+
+       // If the region is open, update the content dynamically
+       if ($(regionStaticId).is(':visible')) {
+         // Additional logic to update the region's content
+       }
+     };
+
+     ws.onopen = function() {
+       console.log('WebSocket connection established');
+     };
+
+     ws.onerror = function(error) {
+       console.error('WebSocket error:', error);
+     };
+
+     ws.onclose = function() {
+       console.log('WebSocket connection closed');
+     };
+     ```
+
+5. **Styling the Modal:**
+   - Ensure the modal has the proper styling. You might need to add some custom CSS to handle the display and appearance of the modal:
+
+     ```css
+     .ui-dialog-titlebar-close {
+       display: none; /* Hide the close button if you want to handle closing differently */
+     }
+     ```
+
+6. **Closing the Modal:**
+   - To close the modal, you can either allow users to click a close button inside the modal or use another dynamic action or button to trigger the `dialog('close')` method.
+
+     ```javascript
+     function closeModal() {
+       $(regionStaticId).dialog('close');
+     }
+     ```
+
+### **Example Workflow:**
+
+- **User clicks the button** -> **Dynamic Action opens the hidden region as a modal** -> **WebSocket updates the region’s content in real-time**.
+
+This approach allows you to keep everything on the same page, leverage WebSocket for real-time updates, and use APEX's built-in functionality for modals, making the implementation smooth and integrated with your existing APEX application.

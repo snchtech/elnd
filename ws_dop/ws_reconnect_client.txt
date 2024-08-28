@@ -1,0 +1,112 @@
+To implement automatic reconnection in a WebSocket client, you can create a mechanism that attempts to reconnect whenever the connection is lost. This includes handling connection closure, errors, and even timeouts if a response isn't received. Below is an example of how you can achieve this:
+
+### **Client-Side WebSocket Example with Auto-Reconnect**
+
+```javascript
+class ReconnectingWebSocket {
+  constructor(url, protocols = []) {
+    this.url = url;
+    this.protocols = protocols;
+    this.reconnectInterval = 5000; // Time between reconnect attempts (5 seconds)
+    this.maxReconnectAttempts = 10; // Maximum number of reconnect attempts
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
+
+  connect() {
+    this.ws = new WebSocket(this.url, this.protocols);
+
+    // Handle successful connection
+    this.ws.onopen = () => {
+      console.log('Connected to WebSocket server');
+      this.reconnectAttempts = 0; // Reset the reconnect attempts on a successful connection
+    };
+
+    // Handle incoming messages
+    this.ws.onmessage = (event) => {
+      console.log('Received:', event.data);
+      // Handle the message from the server
+    };
+
+    // Handle connection errors
+    this.ws.onerror = (err) => {
+      console.error('WebSocket error:', err);
+      this.reconnect();
+    };
+
+    // Handle connection closure
+    this.ws.onclose = () => {
+      console.log('WebSocket connection closed');
+      this.reconnect();
+    };
+  }
+
+  reconnect() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      console.log(`Reconnecting attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
+      setTimeout(() => {
+        this.connect();
+      }, this.reconnectInterval);
+    } else {
+      console.error('Max reconnect attempts reached. Could not reconnect to WebSocket server.');
+    }
+  }
+
+  sendMessage(message) {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    } else {
+      console.error('Cannot send message, WebSocket is not open');
+    }
+  }
+
+  close() {
+    this.ws.close();
+  }
+}
+
+// Usage
+const wsClient = new ReconnectingWebSocket('ws://localhost:8080');
+
+// Example of sending a message
+const message = {
+  appId: 'app1',
+  pageId: 'page1',
+  type: 'someType',
+  params: { some: 'data' }
+};
+
+wsClient.sendMessage(message);
+```
+
+### **Explanation:**
+
+1. **`ReconnectingWebSocket` Class:**
+   - Encapsulates the WebSocket connection and handles reconnection logic.
+   - The constructor initializes the WebSocket connection and sets up the necessary event handlers.
+
+2. **`connect()` Method:**
+   - Establishes the WebSocket connection.
+   - Resets the `reconnectAttempts` counter on a successful connection.
+   - Sets up event handlers for `onopen`, `onmessage`, `onerror`, and `onclose`.
+
+3. **`reconnect()` Method:**
+   - Tries to reconnect when the WebSocket connection is closed or encounters an error.
+   - Limits the number of reconnection attempts with `maxReconnectAttempts` to avoid infinite reconnections.
+   - Uses a `setTimeout` to delay each reconnection attempt by `reconnectInterval`.
+
+4. **`sendMessage()` Method:**
+   - Sends a message to the server if the WebSocket connection is open.
+   - If the connection is not open, it logs an error.
+
+5. **`close()` Method:**
+   - Closes the WebSocket connection gracefully if needed.
+
+### **Usage:**
+
+- Create an instance of `ReconnectingWebSocket` with the desired WebSocket server URL.
+- Use `sendMessage` to send messages to the server.
+- The client will automatically attempt to reconnect if the connection is lost and will stop after reaching the maximum number of reconnection attempts.
+
+This approach ensures that the client can recover from network interruptions or server downtimes by attempting to reconnect automatically, improving the reliability of your WebSocket communication.

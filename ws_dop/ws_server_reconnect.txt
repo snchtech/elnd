@@ -1,0 +1,158 @@
+On the server side, WebSocket servers don't typically "reconnect" in the same way clients do, because the server usually remains running and available to accept new connections. However, you can implement mechanisms to handle client reconnections gracefully, such as tracking clients and managing reconnection attempts or timeouts. Below are a few strategies you can employ on the server side:
+
+### **1. Handling Client Reconnection Gracefully**
+
+When a client disconnects and then reconnects, the server should be able to recognize this and potentially restore any session or state associated with the client. Here's how you can achieve that:
+
+#### **Modifying the WebSocket Server to Handle Reconnection**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// Track connected clients
+const clients = new Map();
+
+wss.on('connection', (ws) => {
+  const clientId = generateClientId();
+  clients.set(clientId, ws);
+
+  console.log(`Client connected: ${clientId}`);
+
+  // Listen for messages and route them
+  ws.on('message', (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+      parsedMessage.clientId = clientId;
+      routeMessage(ws, message, dbConfig);
+    } catch (err) {
+      console.error('Failed to parse message:', err);
+      ws.send(JSON.stringify({ error: 'Invalid message format' }));
+    }
+  });
+
+  // Handle connection close
+  ws.on('close', () => {
+    clients.delete(clientId);
+    console.log(`Client disconnected: ${clientId}`);
+  });
+
+  // Handle connection errors
+  ws.on('error', (err) => {
+    console.error(`Error on connection with client ${clientId}:`, err);
+    clients.delete(clientId);  // Clean up on error
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+
+// Utility function to generate unique client IDs
+function generateClientId() {
+  return `client_${Math.random().toString(36).substr(2, 9)}`;
+}
+```
+
+### **Explanation:**
+
+1. **Tracking Clients:**
+   - The server tracks connected clients using a `Map`, where the key is a unique `clientId` and the value is the WebSocket connection object.
+   - A unique `clientId` is generated for each new connection using the `generateClientId()` function.
+
+2. **Handling Messages:**
+   - When a message is received, it’s parsed and the `clientId` is attached to the message before routing it. This allows the server to know which client sent the message and handle it accordingly.
+
+3. **Connection Management:**
+   - When a connection is closed (e.g., the client disconnects), the corresponding `clientId` is removed from the `clients` map.
+   - Errors on the connection also result in cleanup by removing the `clientId`.
+
+4. **Session or State Restoration (Optional):**
+   - If your application requires restoring the state for a client that reconnects, you can implement logic to check if a `clientId` was previously connected and restore the session.
+
+### **2. Handling Server Restarts**
+
+If your WebSocket server needs to restart (e.g., due to updates or crashes), clients will need to reconnect. Here’s how to handle this:
+
+#### **Handling Graceful Shutdowns and Restarts:**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+import process from 'process';
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// Track connected clients
+const clients = new Map();
+
+wss.on('connection', (ws) => {
+  const clientId = generateClientId();
+  clients.set(clientId, ws);
+
+  console.log(`Client connected: ${clientId}`);
+
+  ws.on('message', (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+      parsedMessage.clientId = clientId;
+      routeMessage(ws, message, dbConfig);
+    } catch (err) {
+      console.error('Failed to parse message:', err);
+      ws.send(JSON.stringify({ error: 'Invalid message format' }));
+    }
+  });
+
+  ws.on('close', () => {
+    clients.delete(clientId);
+    console.log(`Client disconnected: ${clientId}`);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`Error on connection with client ${clientId}:`, err);
+    clients.delete(clientId);
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+
+// Gracefully handle shutdown
+process.on('SIGINT', () => {
+  console.log('Shutting down server...');
+  wss.close(() => {
+    console.log('WebSocket server closed');
+    process.exit(0);
+  });
+});
+
+function generateClientId() {
+  return `client_${Math.random().toString(36).substr(2, 9)}`;
+}
+```
+
+### **Explanation:**
+
+1. **Graceful Shutdown Handling:**
+   - The server listens for a `SIGINT` signal (typically sent when you press `Ctrl+C` in the terminal) to start a graceful shutdown process.
+   - `wss.close()` is called, which closes the WebSocket server and all active connections, allowing them to finish any ongoing tasks.
+
+2. **Client Reconnection After Restart:**
+   - Clients need to handle reconnection on their side, as described in the previous client-side example. After a server restart, clients should automatically try to reconnect.
+
+By handling these scenarios, your WebSocket server can better manage client connections, including dealing with reconnections and server restarts, providing a more robust and reliable communication system.

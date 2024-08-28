@@ -1,0 +1,102 @@
+You can create a universal JavaScript function that accepts the JSON data as an argument and updates the corresponding fields in your HTML structure. The function will also apply the appropriate classes based on the conditions you described.
+
+Here’s how you can implement it:
+
+```javascript
+function updateFields(data) {
+  // Iterate over the data object
+  data.forEach((fieldData, index) => {
+    // Determine the field class name based on the index
+    const fieldClass = `.field${index + 1}`;
+
+    // Select the field block
+    const fieldBlock = document.querySelector(fieldClass);
+
+    if (fieldBlock) {
+      // Update the process_vl, action_vl, and dateend_vl spans
+      fieldBlock.querySelector('.process_vl').innerText = fieldData[`fied${index + 1}_process`];
+      fieldBlock.querySelector('.action_vl').innerText = fieldData[`fied${index + 1}_action`];
+      fieldBlock.querySelector('.dateend_vl').innerText = fieldData[`fied${index + 1}_dateend`];
+
+      // Determine the class to apply based on the conditions
+      const dateendVl = fieldData[`fied${index + 1}_dateend`];
+      const actionVl = fieldData[`fied${index + 1}_action`];
+
+      // Remove any existing color classes
+      fieldBlock.classList.remove('redcolor', 'greencolor', 'defaultcolor');
+
+      // Apply the appropriate class based on the conditions
+      if (dateendVl !== 0) {
+        fieldBlock.classList.add('redcolor');
+      } else if (dateendVl === 0 && actionVl !== 0) {
+        fieldBlock.classList.add('greencolor');
+      } else {
+        fieldBlock.classList.add('defaultcolor');
+      }
+    }
+  });
+}
+
+// Example JSON data
+const jsonData = [
+  {
+    "fied1_process": 1,
+    "fied1_action": 8,
+    "fied1_dateend": 0,
+  },
+  {
+    "fied2_process": 2,
+    "fied2_action": 5,
+    "fied2_dateend": 1,
+  },
+  {
+    "fied3_process": 3,
+    "fied3_action": 3,
+    "fied3_dateend": 9,
+  }
+];
+
+// Call the function to update fields with the example data
+updateFields(jsonData);
+```
+
+### **Explanation:**
+
+1. **`updateFields(data)` Function:**
+   - The function takes `data` as an argument, which is an array of objects representing the field data.
+   - It iterates through each object in the `data` array using `forEach`.
+   - For each object, it calculates the corresponding field's class name (`field1`, `field2`, etc.) based on the index.
+
+2. **Updating HTML Elements:**
+   - It updates the `process_vl`, `action_vl`, and `dateend_vl` spans inside the corresponding field block using `querySelector`.
+   - The span elements are updated with the values from the JSON data.
+
+3. **Applying Classes Based on Conditions:**
+   - It checks the `dateend_vl` and `action_vl` values and applies the appropriate class (`redcolor`, `greencolor`, or `defaultcolor`).
+   - Existing color classes are removed before applying the new class to ensure the correct styling.
+
+4. **Example Usage:**
+   - The function is called with the `jsonData` object, which simulates the data you would receive from the WebSocket.
+   - The HTML elements are updated, and classes are applied based on the conditions you specified.
+
+### **CSS Classes:**
+Ensure you have the `redcolor`, `greencolor`, and `defaultcolor` classes defined in your CSS:
+
+```css
+.redcolor {
+  background-color: red;
+  color: white;
+}
+
+.greencolor {
+  background-color: green;
+  color: white;
+}
+
+.defaultcolor {
+  background-color: transparent; /* Or another default color */
+  color: black;
+}
+```
+
+This approach allows you to dynamically update and style your HTML elements based on the data received from your WebSocket server.

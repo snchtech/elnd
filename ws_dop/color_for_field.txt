@@ -1,0 +1,100 @@
+You can achieve this by using JavaScript to check the values of `dateend_vl` and `action_vl` inside each `field` div and then apply the appropriate classes based on the conditions you described.
+
+Here’s an example of how to implement this logic:
+
+```javascript
+function updateFieldColors(data) {
+  const mod1 = document.getElementById('mod1');
+
+  // Iterate through each field in mod1
+  mod1.querySelectorAll('.field1, .field2, .field3').forEach(field => {
+    const processVl = field.querySelector('.process_vl');
+    const actionVl = field.querySelector('.action_vl').innerText;
+    const dateendVl = field.querySelector('.dateend_vl').innerText;
+
+    // Remove any existing color classes
+    field.classList.remove('redcolor', 'greencolor', 'defaultcolor');
+
+    // Apply the appropriate color class based on conditions
+    if (dateendVl !== '0') {
+      field.classList.add('redcolor');
+    } else if (dateendVl === '0' && actionVl !== '0' && actionVl !== '') {
+      field.classList.add('greencolor');
+    } else {
+      field.classList.add('defaultcolor');
+    }
+  });
+}
+
+// Example WebSocket message handler
+const ws = new WebSocket('ws://yourserver:8080');
+
+ws.onmessage = function(event) {
+  const data = JSON.parse(event.data);
+
+  // Assuming the data contains the process, action, and dateend values for each field
+  document.querySelector('.field1 .process_vl').innerText = data.field1.process;
+  document.querySelector('.field1 .action_vl').innerText = data.field1.action;
+  document.querySelector('.field1 .dateend_vl').innerText = data.field1.dateend;
+
+  document.querySelector('.field2 .process_vl').innerText = data.field2.process;
+  document.querySelector('.field2 .action_vl').innerText = data.field2.action;
+  document.querySelector('.field2 .dateend_vl').innerText = data.field2.dateend;
+
+  document.querySelector('.field3 .process_vl').innerText = data.field3.process;
+  document.querySelector('.field3 .action_vl').innerText = data.field3.action;
+  document.querySelector('.field3 .dateend_vl').innerText = data.field3.dateend;
+
+  // Update field colors based on the received data
+  updateFieldColors(data);
+};
+
+ws.onopen = function() {
+  console.log('WebSocket connection established');
+};
+
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = function() {
+  console.log('WebSocket connection closed');
+};
+```
+
+### **Explanation:**
+
+1. **`updateFieldColors(data)` Function:**
+   - This function iterates over each `.field1`, `.field2`, and `.field3` within the `#mod1` container.
+   - It checks the values of `dateend_vl` and `action_vl` in each field.
+   - Based on the conditions:
+     - If `dateend_vl !== '0'`, it applies the `redcolor` class.
+     - If `dateend_vl === '0'` and `action_vl` is not `0` and not empty, it applies the `greencolor` class.
+     - If `dateend_vl === '0'` and `action_vl` is `0` or empty, it applies the `defaultcolor` class.
+
+2. **WebSocket Handling:**
+   - The WebSocket receives data from the server and updates the text content of the corresponding `.process_vl`, `.action_vl`, and `.dateend_vl` elements.
+   - After updating the text content, it calls `updateFieldColors` to apply the appropriate classes based on the new data.
+
+### **CSS Classes:**
+
+Make sure to define the `redcolor`, `greencolor`, and `defaultcolor` classes in your CSS:
+
+```css
+.redcolor {
+  background-color: red;
+  color: white;
+}
+
+.greencolor {
+  background-color: green;
+  color: white;
+}
+
+.defaultcolor {
+  background-color: transparent; /* or whatever the default color should be */
+  color: black;
+}
+```
+
+This approach ensures that the correct styles are applied based on the dynamic data received via WebSocket, keeping your UI responsive and accurate.

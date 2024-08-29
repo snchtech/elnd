@@ -1,0 +1,159 @@
+To implement the structure you've described, where you manage WebSocket connections using `Map` objects and route messages accordingly, here’s how you can do it in your Node.js WebSocket server:
+
+### **1. Update WebSocket Server with Map Structure**
+
+You want to create a `Map` structure that holds WebSocket connections organized by `appId`, `channel`, etc. Here’s how you can achieve that:
+
+#### **server.js**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+
+const wss = new WebSocket.Server({ port: 8080 });
+
+// Oracle DB connection config
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+// Map to hold connections
+const websocketArch = new Map();
+
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+
+  ws.on('message', (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage; // Assume `channelId` is part of the message
+
+      if (!websocketArch.has(appId)) {
+        websocketArch.set(appId, new Map());
+      }
+
+      const appMap = websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());  // Use a Set to handle multiple connections per channel
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);  // Add the WebSocket connection to the channel's Set
+
+      // Now route the message
+      routeMessage(ws, message, dbConfig);
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+    // Optionally handle removing the client from the Map structure here
+  });
+});
+
+console.log('WebSocket server is running on ws://localhost:8080');
+```
+
+### **2. Sending Messages to a Specific Channel or All Clients**
+
+You can use the `websocketArch` map to broadcast messages to all clients within a specific `channelId` or `appId`.
+
+#### **Broadcast to All Clients in a Channel**
+
+```javascript
+function broadcastToChannel(appId, channelId, message) {
+  const appMap = websocketArch.get(appId);
+  if (appMap) {
+    const channelsMap = appMap.get('channels');
+    if (channelsMap) {
+      const channelSet = channelsMap.get(channelId);
+      if (channelSet) {
+        channelSet.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+          }
+        });
+      }
+    }
+  }
+}
+```
+
+#### **Broadcast to All Clients in an App**
+
+```javascript
+function broadcastToApp(appId, message) {
+  const appMap = websocketArch.get(appId);
+  if (appMap) {
+    const channelsMap = appMap.get('channels');
+    if (channelsMap) {
+      channelsMap.forEach((channelSet) => {
+        channelSet.forEach((ws) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+          }
+        });
+      });
+    }
+  }
+}
+```
+
+### **3. Client-Side Code**
+
+On the client side, you can handle WebSocket connections and messages like this:
+
+#### **client.js**
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080');
+
+// Example of sending a message to join a channel
+ws.onopen = function() {
+  const message = JSON.stringify({
+    appId: 'app1',
+    channelId: 'channel1',
+    type: 'join',
+    params: { /* any params */ }
+  });
+
+  ws.send(message);
+};
+
+// Handling incoming messages
+ws.onmessage = function(event) {
+  const message = JSON.parse(event.data);
+  console.log('Received:', message);
+};
+
+// Handling connection close
+ws.onclose = function() {
+  console.log('Connection closed');
+};
+
+// Handling errors
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+```
+
+### **4. Putting It All Together**
+
+- **Server:** Manages connections, routes messages, and handles broadcasting.
+- **Client:** Connects to the server, sends/receives messages, and interacts with specific channels.
+
+This setup provides a flexible architecture to manage multiple applications and channels, enabling you to broadcast messages to specific groups of clients based on your requirements.

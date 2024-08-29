@@ -1,0 +1,135 @@
+To rewrite the WebSocket server code logic into a class-based structure, you can encapsulate the server, connection handling, and routing logic within a class. This approach makes the code more modular and easier to maintain.
+
+Here’s an example of how you can do this:
+
+### **1. WebSocket Server Class**
+
+We'll define a `WebSocketServer` class that handles connections, routing, and message broadcasting. Each method within the class will correspond to the different functionalities.
+
+#### **WebSocketServer.js**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage; // Assume `channelId` is part of the message
+
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());  // Use a Set to handle multiple connections per channel
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);  // Add the WebSocket connection to the channel's Set
+
+      // Now route the message
+      routeMessage(ws, message, this.dbConfig);
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    // Optionally handle removing the client from the Map structure here
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  broadcastToApp(appId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        channelsMap.forEach((channelSet) => {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        });
+      }
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### **2. Explanation**
+
+- **Constructor:** Initializes the WebSocket server, sets up the `Map` structure, and starts listening for connections.
+  
+- **`handleConnection(ws)`:** Called when a new client connects. It sets up the WebSocket event listeners.
+
+- **`handleMessage(ws, message)`:** Processes incoming messages. This method manages the `Map` structure and delegates the message routing to the `routeMessage` function.
+
+- **`handleClose(ws)`:** Handles client disconnections. You can optionally remove the client from the `Map` here.
+
+- **`broadcastToChannel(appId, channelId, message)`:** Broadcasts a message to all clients connected to a specific channel within a specific app.
+
+- **`broadcastToApp(appId, message)`:** Broadcasts a message to all clients connected to a specific app, across all its channels.
+
+### **3. Client-Side Code**
+
+The client-side code remains the same as before. The main difference is that the server logic is now encapsulated in a class, making it easier to manage and extend.
+
+This structure allows you to easily add new methods, handle additional logic, and manage the WebSocket connections in a more organized way.

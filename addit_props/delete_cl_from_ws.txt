@@ -1,0 +1,143 @@
+To remove a client from the `channelId` when the client disconnects, you can modify the `handleClose` method. This method will need to traverse the `websocketArch` structure, find the relevant `channelId` for the disconnected client, and remove the WebSocket connection from the appropriate `Set`. If the `Set` becomes empty after removing the client, you can optionally clean up the `channelId` from the `Map`.
+
+Here's how you can update your code:
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import routeMessage from './router.js';  // Import the router
+
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage; // Assume `channelId` is part of the message
+
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());  // Use a Set to handle multiple connections per channel
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);  // Add the WebSocket connection to the channel's Set
+
+      // Now route the message
+      routeMessage(ws, message, this.dbConfig);
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    
+    // Iterate over the websocketArch to find and remove the disconnected client
+    for (const [appId, appMap] of this.websocketArch) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        for (const [channelId, channelSet] of channelsMap) {
+          if (channelSet.has(ws)) {
+            channelSet.delete(ws);  // Remove the client from the Set
+            
+            // If the Set is empty, remove the channelId
+            if (channelSet.size === 0) {
+              channelsMap.delete(channelId);
+            }
+            break;  // Client found and removed, no need to continue
+          }
+        }
+        
+        // If channelsMap is empty after cleanup, remove the 'channels' map
+        if (channelsMap.size === 0) {
+          appMap.delete('channels');
+        }
+      }
+
+      // If appMap is empty after cleanup, remove the appId
+      if (appMap.size === 0) {
+        this.websocketArch.delete(appId);
+      }
+    }
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  broadcastToApp(appId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        channelsMap.forEach((channelSet) => {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        });
+      }
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### Explanation:
+- **handleClose(ws)**: This method now iterates through the `websocketArch` structure to find and remove the WebSocket connection (`ws`) from the appropriate `Set` under the corresponding `channelId`.
+- If a `Set` becomes empty after removing the WebSocket, the `channelId` is removed from the `Map`.
+- If `channelsMap` becomes empty, it is removed from `appMap`, and if `appMap` becomes empty, it is removed from `websocketArch`.
+
+This ensures that the server cleans up unused resources, keeping the WebSocket server efficient.

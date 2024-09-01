@@ -1,0 +1,183 @@
+To implement this feature, we'll modify the `handleMessage` method to check whether the `appId` and `channelId` exist in the `mainWebsocketConfig` object. If the `appId` or `channelId` does not exist, the server will return an error message to the client and not connect the client to the channel.
+
+Here's how you can update the `handleMessage` method:
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import fs from 'fs';
+import path from 'path';
+import routeMessage from './router.js';  // Import the router
+
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+    this.mainWebsocketConfig = this.loadWebsocketConfig(); // Load all websocket configurations
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  // Load and combine all WebSocket configurations
+  async loadWebsocketConfig() {
+    const handlersDir = path.resolve(__dirname, 'handlers');
+    const configObjects = [];
+
+    const appDirs = fs.readdirSync(handlersDir).filter((dir) => dir.startsWith('app_'));
+
+    for (const appDir of appDirs) {
+      const configPath = path.join(handlersDir, appDir, 'ws_config.js');
+
+      if (fs.existsSync(configPath)) {
+        // Dynamically import the config file
+        const { default: config } = await import(configPath);
+        configObjects.push(config);
+      } else {
+        console.warn(`No ws_config.js found in ${appDir}`);
+      }
+    }
+
+    return configObjects;
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage;
+
+      // Check if the appId exists in the mainWebsocketConfig
+      const appConfig = this.mainWebsocketConfig.find((config) => config.appId === appId);
+      if (!appConfig) {
+        ws.send(JSON.stringify({ error: `AppId ${appId} does not exist` }));
+        return;
+      }
+
+      // Check if the channelId exists in the app's channels
+      if (!appConfig.channels[channelId]) {
+        ws.send(JSON.stringify({ error: `ChannelId ${channelId} does not exist for AppId ${appId}` }));
+        return;
+      }
+
+      // Proceed to handle the connection if the appId and channelId are valid
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);
+
+      // Route the message based on configuration
+      const channelConfig = appConfig.channels[channelId];
+      if (channelConfig && channelConfig.handlers) {
+        Object.values(channelConfig.handlers).forEach((handler) => {
+          handler(ws, parsedMessage, this.dbConfig);
+        });
+      }
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    for (const [appId, appMap] of this.websocketArch) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        for (const [channelId, channelSet] of channelsMap) {
+          if (channelSet.has(ws)) {
+            channelSet.delete(ws);
+            if (channelSet.size === 0) {
+              channelsMap.delete(channelId);
+            }
+            break;
+          }
+        }
+        if (channelsMap.size === 0) {
+          appMap.delete('channels');
+        }
+      }
+      if (appMap.size === 0) {
+        this.websocketArch.delete(appId);
+      }
+    }
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  broadcastToApp(appId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        channelsMap.forEach((channelSet) => {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        });
+      }
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### Explanation:
+1. **AppId and ChannelId Check:**
+   - The `handleMessage` method now checks if the `appId` exists in the `mainWebsocketConfig`. If it doesn't, an error is sent to the client.
+   - Similarly, it checks if the `channelId` exists under the `appId` in the `mainWebsocketConfig`. If the channel does not exist, another error message is sent to the client.
+   - If both the `appId` and `channelId` are valid, the client is connected to the channel.
+
+2. **Error Handling:**
+   - The code ensures that only valid connections are established based on the predefined configuration in the `ws_config.js` files. Invalid connections are rejected with descriptive error messages.
+
+This approach keeps your WebSocket server robust and ensures that clients can only connect to valid `appId` and `channelId` combinations as defined in your configuration files.

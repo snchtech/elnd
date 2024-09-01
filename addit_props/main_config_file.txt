@@ -1,0 +1,182 @@
+To implement the feature you described, we need to read each `ws_config.js` file from the folders in the `handlers` directory, import the configurations, and then merge them into a single `mainWebsocketConfig` object when the server starts. Below is an updated version of your server code that does this.
+
+### Step-by-Step Implementation
+
+1. **Directory Structure:**
+   - Ensure that your `handlers` directory has subdirectories named `app_{id}` (e.g., `app_118`, `app_84`), and each contains a `ws_config.js` file.
+
+2. **Dynamic Import of Config Files:**
+   - Use `fs` to read directories and files.
+   - Dynamically import each `ws_config.js` file to build the `mainWebsocketConfig` object.
+
+3. **Code Implementation:**
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import fs from 'fs';
+import path from 'path';
+import routeMessage from './router.js';  // Import the router
+
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+    this.mainWebsocketConfig = this.loadWebsocketConfig(); // Load all websocket configurations
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  // Load and combine all WebSocket configurations
+  loadWebsocketConfig() {
+    const handlersDir = path.resolve(__dirname, 'handlers');
+    const configObjects = [];
+
+    const appDirs = fs.readdirSync(handlersDir).filter((dir) => dir.startsWith('app_'));
+
+    for (const appDir of appDirs) {
+      const configPath = path.join(handlersDir, appDir, 'ws_config.js');
+
+      if (fs.existsSync(configPath)) {
+        // Dynamically import the config file
+        const { default: config } = await import(configPath);
+        configObjects.push(config);
+      } else {
+        console.warn(`No ws_config.js found in ${appDir}`);
+      }
+    }
+
+    return configObjects;
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage;
+
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);
+
+      // Route the message based on configuration
+      const appConfig = this.mainWebsocketConfig.find((config) => config.appId === appId);
+      if (appConfig) {
+        const channelConfig = appConfig.channels[channelId];
+        if (channelConfig && channelConfig.handlers) {
+          Object.values(channelConfig.handlers).forEach((handler) => {
+            handler(ws, parsedMessage, this.dbConfig);
+          });
+        }
+      }
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    for (const [appId, appMap] of this.websocketArch) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        for (const [channelId, channelSet] of channelsMap) {
+          if (channelSet.has(ws)) {
+            channelSet.delete(ws);
+            if (channelSet.size === 0) {
+              channelsMap.delete(channelId);
+            }
+            break;
+          }
+        }
+        if (channelsMap.size === 0) {
+          appMap.delete('channels');
+        }
+      }
+      if (appMap.size === 0) {
+        this.websocketArch.delete(appId);
+      }
+    }
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  broadcastToApp(appId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        channelsMap.forEach((channelSet) => {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        });
+      }
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### Explanation:
+- **Dynamic Config Loading (`loadWebsocketConfig`):**
+  - This method reads all `ws_config.js` files from the `handlers` directory and imports them.
+  - Each config file is imported and stored in the `mainWebsocketConfig` array.
+- **Routing Messages:**
+  - When a message is received, the server now checks the `mainWebsocketConfig` to find the appropriate handlers for the given `appId` and `channelId`.
+  - Each handler function is called, passing the WebSocket connection, the parsed message, and the database configuration.
+
+### Notes:
+- Make sure your project supports dynamic imports (`await import`). This typically requires using an asynchronous function or top-level await if your Node.js version supports it.
+- The code assumes that all `ws_config.js` files are structured similarly to the example you provided.

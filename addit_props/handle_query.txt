@@ -1,0 +1,10 @@
+async function query(connection) {
+  const result = await connection.execute(`SELECT param1, param2 FROM your_table`);
+  // Transform the result into the desired format
+  const data = {
+    paramVL1: result.rows[0][0],
+    paramVL2: result.rows[0][1],
+    paramVL3: 'Some other value'
+  };
+  return data;
+}

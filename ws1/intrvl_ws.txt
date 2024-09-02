@@ -1,0 +1,278 @@
+To achieve this, you'll need to update both the WebSocket server code and the configuration files. Here’s how you can do it:
+
+### Update the Configuration File
+You'll need to add an `interval` property to each handler in the configuration file, specifying the time interval in milliseconds.
+
+```javascript
+import page1Handler from "./handlers/app_118/page1Handler.js";
+import page2Handler from "./handlers/app_118/page2Handler.js";
+import page3Handler from "./handlers/app_118/page3Handler.js";
+import page4Handler from "./handlers/app_118/page4Handler.js";
+
+const websocketConfig = {
+  "appId": 118,
+  "channels": {
+    "NZB": {
+      "handlers": {
+        page1Handler: {
+          handler: page1Handler,
+          interval: 60000 // 60 seconds
+        },
+        page3Handler: {
+          handler: page3Handler,
+          interval: 10000 // 10 seconds
+        },
+        page4Handler: {
+          handler: page4Handler,
+          interval: 120000 // 120 seconds (default if not specified)
+        }
+      }	
+    },
+    "NTS": {
+      "handlers": {
+        page2Handler: {
+          handler: page2Handler,
+          interval: 120000 // 120 seconds (default if not specified)
+        }
+      }	
+    }
+  }
+};
+
+export default websocketConfig;
+```
+
+### Update the WebSocket Server Code
+Next, modify the `WebSocketServer` class to use the interval values defined in the configuration file. You can set a default interval if it is not provided.
+
+Here's the updated server code:
+
+```javascript
+import WebSocket from 'ws';
+import oracledb from 'oracledb';
+import fs from 'fs';
+import path from 'path';
+import routeMessage from './router.js';  // Import the router
+
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+    this.mainWebsocketConfig = this.loadWebsocketConfig(); // Load all websocket configurations
+    this.intervalHandlers = new Map(); // To store interval handlers for channels
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  async loadWebsocketConfig() {
+    const handlersDir = path.resolve(__dirname, 'handlers');
+    const configObjects = [];
+
+    const appDirs = fs.readdirSync(handlersDir).filter((dir) => dir.startsWith('app_'));
+
+    for (const appDir of appDirs) {
+      const configPath = path.join(handlersDir, appDir, 'ws_config.js');
+
+      if (fs.existsSync(configPath)) {
+        const { default: config } = await import(configPath);
+        configObjects.push(config);
+      } else {
+        console.warn(`No ws_config.js found in ${appDir}`);
+      }
+    }
+
+    return configObjects;
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId } = parsedMessage;
+
+      const appConfig = this.mainWebsocketConfig.find((config) => config.appId === appId);
+      if (!appConfig) {
+        ws.send(JSON.stringify({ error: `AppId ${appId} does not exist` }));
+        return;
+      }
+
+      if (!appConfig.channels[channelId]) {
+        ws.send(JSON.stringify({ error: `ChannelId ${channelId} does not exist for AppId ${appId}` }));
+        return;
+      }
+
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());
+        this.setupChannelHandlers(appConfig, channelId, appId); // Setup data fetching for this channel
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);
+
+      const channelConfig = appConfig.channels[channelId];
+      if (channelConfig && channelConfig.handlers) {
+        Object.values(channelConfig.handlers).forEach((handlerObj) => {
+          handlerObj.handler(ws, parsedMessage, this.dbConfig);
+        });
+      }
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  setupChannelHandlers(appConfig, channelId, appId) {
+    const channelConfig = appConfig.channels[channelId];
+
+    for (const handlerName in channelConfig.handlers) {
+      const handlerObj = channelConfig.handlers[handlerName];
+      const interval = handlerObj.interval || 120000; // Set default interval to 120 seconds if not specified
+
+      const intervalId = setInterval(async () => {
+        try {
+          const data = await this.getDataForChannelHandler(handlerObj.handler, this.dbConfig);
+          this.broadcastToChannel(appId, channelId, data);
+        } catch (err) {
+          console.error(`Error fetching data for channel ${channelId} in app ${appId}:`, err);
+        }
+      }, interval);
+
+      if (!this.intervalHandlers.has(channelId)) {
+        this.intervalHandlers.set(channelId, []);
+      }
+
+      this.intervalHandlers.get(channelId).push(intervalId);
+    }
+  }
+
+  async getDataForChannelHandler(handler, dbConfig) {
+    let connection;
+    try {
+      connection = await oracledb.getConnection(dbConfig);
+
+      // Assume handler has a query method or similar to fetch data
+      const data = await handler.query(connection);
+
+      return data;
+    } catch (err) {
+      console.error('Database query error:', err);
+      throw err;
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+        } catch (err) {
+          console.error('Error closing database connection:', err);
+        }
+      }
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    for (const [appId, appMap] of this.websocketArch) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        for (const [channelId, channelSet] of channelsMap) {
+          if (channelSet.has(ws)) {
+            channelSet.delete(ws);
+            if (channelSet.size === 0) {
+              channelsMap.delete(channelId);
+              this.clearChannelIntervals(channelId); // Clear intervals if no clients are connected
+            }
+            break;
+          }
+        }
+        if (channelsMap.size === 0) {
+          appMap.delete('channels');
+        }
+      }
+      if (appMap.size === 0) {
+        this.websocketArch.delete(appId);
+      }
+    }
+  }
+
+  clearChannelIntervals(channelId) {
+    const intervalIds = this.intervalHandlers.get(channelId);
+    if (intervalIds) {
+      intervalIds.forEach(clearInterval);
+      this.intervalHandlers.delete(channelId);
+    }
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  broadcastToApp(appId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        channelsMap.forEach((channelSet) => {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        });
+      }
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### Explanation
+1. **Configuration File**: Each handler now includes an `interval` property, defining how often data should be fetched and sent to clients.
+2. **WebSocket Server**:
+   - `setupChannelHandlers` is modified to use the interval defined in the configuration file or a default interval of 120 seconds.
+   - Data retrieval and broadcasting are controlled by these intervals, ensuring that each handler operates at the desired frequency.
+   - If no clients are connected to a channel, the intervals are cleared to avoid unnecessary data fetching.
+
+This setup will ensure that your WebSocket server operates according to the intervals specified in your configuration files.

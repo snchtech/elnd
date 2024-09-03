@@ -1,0 +1,98 @@
+To accommodate the change from an array to a `Map` for storing the WebSocket configuration, you'll need to modify the `loadWebsocketConfig` method and adjust how `handleMessage` accesses the configuration data. Below is the updated code:
+
+### Updated `loadWebsocketConfig` Method
+
+```javascript
+async loadWebsocketConfig() {
+  const handlersDir = path.resolve(__dirname, 'handlers');
+  const configObjects = new Map();  // Change from array to Map
+
+  const appDirs = fs.readdirSync(handlersDir).filter((dir) => dir.startsWith('app_'));
+
+  for (const appDir of appDirs) {
+    const configPath = path.join(handlersDir, appDir, 'ws_config.js');
+
+    if (fs.existsSync(configPath)) {
+      const { default: config } = await import(configPath);
+      configObjects.set(config.appId, config);  // Store each config object in the Map with appId as the key
+    } else {
+      console.warn(`No ws_config.js found in ${appDir}`);
+    }
+  }
+
+  return configObjects;
+}
+```
+
+### Updated `handleMessage` Method
+
+In the `handleMessage` method, you'll need to adjust how you retrieve the `appConfig` and `channelConfig` from the `Map`.
+
+```javascript
+handleMessage(ws, message) {
+  try {
+    const parsedMessage = JSON.parse(message);
+    const { appId, channelId } = parsedMessage;
+
+    // Retrieve the appConfig from the Map using appId as the key
+    const appConfig = this.mainWebsocketConfig.get(appId);
+    if (!appConfig) {
+      ws.send(JSON.stringify({ error: `AppId ${appId} does not exist` }));
+      return;
+    }
+
+    // Retrieve the channelConfig from the appConfig
+    const channelConfig = appConfig.channels[channelId];
+    if (!channelConfig) {
+      ws.send(JSON.stringify({ error: `ChannelId ${channelId} does not exist for AppId ${appId}` }));
+      return;
+    }
+
+    if (!this.websocketArch.has(appId)) {
+      this.websocketArch.set(appId, new Map());
+    }
+
+    const appMap = this.websocketArch.get(appId);
+
+    if (!appMap.has('channels')) {
+      appMap.set('channels', new Map());
+    }
+
+    const channelsMap = appMap.get('channels');
+
+    if (!channelsMap.has(channelId)) {
+      channelsMap.set(channelId, new Set());
+    }
+
+    const channelSet = channelsMap.get(channelId);
+    channelSet.add(ws);
+
+    // Start the channel handlers only if it's the first client
+    if (channelSet.size === 1) {
+      this.setupChannelHandlers(appConfig, channelId, appId);
+    }
+
+    if (channelConfig && channelConfig.handlers) {
+      Object.values(channelConfig.handlers).forEach((handlerObj) => {
+        handlerObj.handler(ws, parsedMessage, this.dbConfig);
+      });
+    }
+
+  } catch (err) {
+    console.error('Error processing message:', err);
+    ws.send(JSON.stringify({ error: 'Failed to process message' }));
+  }
+}
+```
+
+### Summary of Changes
+
+1. **`loadWebsocketConfig`**:
+   - Changed `configObjects` from an array to a `Map` to store the configuration objects.
+   - Each configuration object is stored in the `Map` with `appId` as the key.
+
+2. **`handleMessage`**:
+   - Updated to retrieve `appConfig` and `channelConfig` from the `Map` using `appId` and `channelId`.
+   - This ensures that you efficiently access the configuration data stored in the `Map`.
+
+These changes allow the server to use a `Map` structure for more efficient lookups of configurations based on `appId`, and ensures that the message handling logic works seamlessly with this new structure.

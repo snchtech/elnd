@@ -1,0 +1,259 @@
+To add the functionality where a user sends a message to the WebSocket server, and that message is broadcast to all clients in the current channel only once, we can modify the server logic accordingly. Additionally, the existing channel handler can remain, but we will handle the user message separately from the scheduled interval-based handler.
+
+### Plan for Changes:
+1. **User Sends a Message**: When a user sends a message, the server will identify the corresponding `appId` and `channelId` from the message, then broadcast it to all clients in that channel.
+2. **Handler Interval**: The existing handlers will continue running at their configured intervals. However, the message sent by the user will be treated differently (no interval, only sent once).
+3. **No Interval for User Message**: We'll ensure that when a user sends a message, it gets broadcast to the channel immediately and only once, without adding it to the scheduled intervals.
+
+### Step 1: WebSocket Client Sends a Message to the Server
+This part will showcase how a client can send a message to the WebSocket server, which then gets broadcast to all clients of the same channel.
+
+**Client-Side Example (WebSocket Client Code)**:
+```javascript
+// Connect to WebSocket server
+const ws = new WebSocket('ws://localhost:8080');
+
+// Event listener when connection opens
+ws.onopen = () => {
+  console.log('Connected to WebSocket server');
+
+  // Send a message after 10 seconds (for example)
+  setTimeout(() => {
+    const message = {
+      appId: 118,        // Application ID
+      channelId: 'NZB',  // Channel ID
+      data: {            // Example data the user wants to broadcast
+        message: 'This is a message from client to broadcast to all channel clients.'
+      }
+    };
+    ws.send(JSON.stringify(message));
+  }, 10000); // Send message after 10 seconds
+};
+
+// Event listener for receiving messages from server
+ws.onmessage = (event) => {
+  console.log('Received from server:', event.data);
+};
+
+// Event listener for when connection is closed
+ws.onclose = () => {
+  console.log('WebSocket connection closed');
+};
+```
+
+In the above client code, the message contains the `appId`, `channelId`, and some `data`. After connecting, the client sends this message to the server after 10 seconds.
+
+### Step 2: Server Handles the Message and Broadcasts to All Clients
+Now we’ll modify the server code to broadcast the user’s message to all clients in the same channel.
+
+#### Updated `WebSocketServer` Code:
+We will modify the `handleMessage` method to check if the message from the client should be broadcast immediately (only once) instead of being handled by an interval-based handler.
+
+```javascript
+class WebSocketServer {
+  constructor(port, dbConfig) {
+    this.port = port;
+    this.dbConfig = dbConfig;
+    this.websocketArch = new Map(); // Map to hold connections
+    this.mainWebsocketConfig = this.loadWebsocketConfig(); // Load all websocket configurations
+    this.intervalHandlers = new Map(); // To store interval handlers for channels
+
+    this.wss = new WebSocket.Server({ port: this.port });
+    this.wss.on('connection', (ws) => this.handleConnection(ws));
+
+    console.log(`WebSocket server is running on ws://localhost:${this.port}`);
+  }
+
+  async loadWebsocketConfig() {
+    const handlersDir = path.resolve(__dirname, 'handlers');
+    const configObjects = new Map();  // Change from array to Map
+
+    const appDirs = fs.readdirSync(handlersDir).filter((dir) => dir.startsWith('app_'));
+
+    for (const appDir of appDirs) {
+      const configPath = path.join(handlersDir, appDir, 'ws_config.js');
+
+      if (fs.existsSync(configPath)) {
+        const { default: config } = await import(configPath);
+        configObjects.set(config.appId, config);  // Store each config object in the Map with appId as the key
+      } else {
+        console.warn(`No ws_config.js found in ${appDir}`);
+      }
+    }
+
+    return configObjects;
+  }
+
+  handleConnection(ws) {
+    console.log('New client connected');
+
+    ws.on('message', (message) => this.handleMessage(ws, message));
+    ws.on('close', () => this.handleClose(ws));
+  }
+
+  handleMessage(ws, message) {
+    try {
+      const parsedMessage = JSON.parse(message);
+      const { appId, channelId, data } = parsedMessage;
+
+      // Retrieve the appConfig from the Map using appId as the key
+      const appConfig = this.mainWebsocketConfig.get(appId);
+      if (!appConfig) {
+        ws.send(JSON.stringify({ error: `AppId ${appId} does not exist` }));
+        return;
+      }
+
+      // Retrieve the channelConfig from the appConfig
+      const channelConfig = appConfig.channels[channelId];
+      if (!channelConfig) {
+        ws.send(JSON.stringify({ error: `ChannelId ${channelId} does not exist for AppId ${appId}` }));
+        return;
+      }
+
+      if (!this.websocketArch.has(appId)) {
+        this.websocketArch.set(appId, new Map());
+      }
+
+      const appMap = this.websocketArch.get(appId);
+
+      if (!appMap.has('channels')) {
+        appMap.set('channels', new Map());
+      }
+
+      const channelsMap = appMap.get('channels');
+
+      if (!channelsMap.has(channelId)) {
+        channelsMap.set(channelId, new Set());
+      }
+
+      const channelSet = channelsMap.get(channelId);
+      channelSet.add(ws);
+
+      // Start the channel handlers only if it's the first client
+      if (channelSet.size === 1) {
+        this.setupChannelHandlers(appConfig, channelId, appId);
+      }
+
+      // New functionality: If data exists, broadcast it to all clients of the channel (only once)
+      if (data) {
+        this.broadcastToChannel(appId, channelId, data);  // Send the message to all clients once
+        console.log(`Message from client broadcast to all clients in channel ${channelId}`);
+      }
+
+    } catch (err) {
+      console.error('Error processing message:', err);
+      ws.send(JSON.stringify({ error: 'Failed to process message' }));
+    }
+  }
+
+  setupChannelHandlers(appConfig, channelId, appId) {
+    const channelConfig = appConfig.channels[channelId];
+
+    for (const handlerName in channelConfig.handlers) {
+      const handlerObj = channelConfig.handlers[handlerName];
+      const interval = handlerObj.interval || 120000; // Set default interval to 120 seconds if not specified
+
+      const intervalId = setInterval(async () => {
+        const appMap = this.websocketArch.get(appId);
+        const channelsMap = appMap ? appMap.get('channels') : null;
+        const channelSet = channelsMap ? channelsMap.get(channelId) : null;
+
+        if (channelSet && channelSet.size > 0) { // Check if any client is connected
+          try {
+            const data = await this.getDataForChannelHandler(handlerObj.handler, this.dbConfig);
+            this.broadcastToChannel(appId, channelId, data);
+          } catch (err) {
+            console.error(`Error fetching data for channel ${channelId} in app ${appId}:`, err);
+          }
+        } else {
+          // No clients connected, clear the interval
+          clearInterval(intervalId);
+          this.intervalHandlers.get(channelId).splice(this.intervalHandlers.get(channelId).indexOf(intervalId), 1);
+          if (this.intervalHandlers.get(channelId).length === 0) {
+            this.intervalHandlers.delete(channelId);
+          }
+        }
+      }, interval);
+
+      if (!this.intervalHandlers.has(channelId)) {
+        this.intervalHandlers.set(channelId, []);
+      }
+
+      this.intervalHandlers.get(channelId).push(intervalId);
+    }
+  }
+
+  broadcastToChannel(appId, channelId, message) {
+    const appMap = this.websocketArch.get(appId);
+    if (appMap) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        const channelSet = channelsMap.get(channelId);
+        if (channelSet) {
+          channelSet.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          });
+        }
+      }
+    }
+  }
+
+  handleClose(ws) {
+    console.log('Client disconnected');
+    for (const [appId, appMap] of this.websocketArch) {
+      const channelsMap = appMap.get('channels');
+      if (channelsMap) {
+        for (const [channelId, channelSet] of channelsMap) {
+          if (channelSet.has(ws)) {
+            channelSet.delete(ws);
+            if (channelSet.size === 0) {
+              channelsMap.delete(channelId);
+              this.clearChannelIntervals(channelId); // Clear intervals if no clients are connected
+            }
+            break;
+          }
+        }
+        if (channelsMap.size === 0) {
+          appMap.delete('channels');
+        }
+      }
+      if (appMap.size === 0) {
+        this.websocketArch.delete(appId);
+      }
+    }
+  }
+
+  clearChannelIntervals(channelId) {
+    const intervalIds = this.intervalHandlers.get(channelId);
+    if (intervalIds) {
+      intervalIds.forEach(clearInterval);
+      this.intervalHandlers.delete(channelId);
+    }
+  }
+}
+
+// Usage example
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'your_db_connect_string'
+};
+
+const wsServer = new WebSocketServer(8080, dbConfig);
+```
+
+### Explanation of Changes:
+
+
+
+1. **Client-Side**: The client sends a message after some time. This message contains the `appId`, `channelId`, and the data to be broadcast.
+   
+2. **Server-Side**: In the `handleMessage` method:
+   - If the message contains `data`, the server broadcasts this data to all clients connected to the same channel (`broadcastToChannel`).
+   - This message is broadcast only once, and not repeatedly as in interval-based handlers.
+
+3. **Handler Interval**: The scheduled channel handler continues to run at the specified intervals, fetching and broadcasting data as per the configuration.
+
+This setup ensures that the message sent by the user is broadcast immediately and only once, while the channel handlers continue to operate on their defined intervals.

@@ -1,0 +1,95 @@
+Here’s how you can send a message from a form on the client side using a button press. The code below shows how to set up an HTML form, handle the button click event in JavaScript, and send the form data via a WebSocket connection.
+
+### HTML Form and Client-Side Code
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Client</title>
+</head>
+<body>
+  <h1>Send a Message to WebSocket Server</h1>
+
+  <form id="messageForm">
+    <label for="message">Enter Message:</label>
+    <input type="text" id="message" name="message" required>
+    <input type="submit" value="Send Message">
+  </form>
+
+  <div id="response"></div>
+
+  <script>
+    // Create a WebSocket connection to the server
+    const ws = new WebSocket('ws://localhost:8080');
+
+    // Listen for the WebSocket connection opening
+    ws.onopen = () => {
+      console.log('Connected to WebSocket server');
+    };
+
+    // Handle form submission
+    const form = document.getElementById('messageForm');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault(); // Prevent form from reloading the page
+
+      // Get the message input value
+      const messageInput = document.getElementById('message').value;
+
+      // Create the message object to send to the WebSocket server
+      const message = {
+        appId: 118,        // Application ID (can be dynamic if needed)
+        channelId: 'NZB',  // Channel ID (can be dynamic if needed)
+        data: {            // The data to send
+          message: messageInput
+        }
+      };
+
+      // Send the message to the WebSocket server
+      ws.send(JSON.stringify(message));
+
+      // Clear the input field
+      document.getElementById('message').value = '';
+    });
+
+    // Listen for messages from the WebSocket server
+    ws.onmessage = (event) => {
+      const responseDiv = document.getElementById('response');
+      responseDiv.innerHTML = `<p>Received from server: ${event.data}</p>`;
+    };
+
+    // Listen for WebSocket connection close event
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
+  </script>
+</body>
+</html>
+```
+
+### Explanation:
+
+1. **HTML Form**:
+   - A simple form with an input field for the user to enter their message and a submit button (`<form>` with `id="messageForm"`).
+   - The form is submitted when the user clicks the "Send Message" button.
+
+2. **JavaScript (Client-Side)**:
+   - **WebSocket Connection**: A WebSocket connection is established with the server using `new WebSocket('ws://localhost:8080')`.
+   - **Form Submission**: An event listener is added to handle the form submission. When the form is submitted, it prevents the default behavior (page reload) and sends the message entered by the user to the WebSocket server.
+   - **Message Format**: The message is sent as a JSON object that includes the `appId`, `channelId`, and `data` containing the message entered by the user.
+   - **Receiving Messages**: The `ws.onmessage` event handler listens for any responses from the server and displays them in the `#response` div.
+   
+3. **WebSocket Events**:
+   - `onopen`: Logs when the WebSocket connection is successfully opened.
+   - `onmessage`: Handles incoming messages from the server and displays them in the response div.
+   - `onclose`: Logs when the WebSocket connection is closed.
+
+### Flow:
+1. The user enters a message into the form and clicks the "Send Message" button.
+2. The message is sent to the WebSocket server.
+3. The server processes the message (as implemented in your server-side WebSocket code).
+4. The server sends back responses, which are displayed in the `#response` div on the webpage.
+
+This code demonstrates how a user can interact with the WebSocket server by sending messages from an HTML form and receiving real-time updates from the server.

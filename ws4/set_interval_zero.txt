@@ -1,0 +1,80 @@
+To handle the scenario where the interval is set to `0` in the configuration and the message should only be sent once, you can modify the `setupChannelHandlers` method. Specifically, if the interval is `0`, the message will be fetched and sent to all clients only one time upon connection, without setting up a recurring `setInterval`.
+
+Here’s how you can achieve this:
+
+### Changes in the `setupChannelHandlers` Method:
+
+1. **Check if Interval is `0`**: If the interval is set to `0`, fetch and send the message once immediately when the first client connects.
+2. **For Intervals Greater Than `0`**: Continue the usual `setInterval` logic as already implemented.
+
+### Updated Code:
+
+```javascript
+setupChannelHandlers(appConfig, channelId, appId) {
+    const channelConfig = appConfig.channels[channelId];
+
+    if (this.intervalHandlers.has(channelId)) {
+        // Interval handler already exists for this channel, no need to start it again.
+        return;
+    }
+
+    for (const handlerName in channelConfig.handlers) {
+        const handlerObj = channelConfig.handlers[handlerName];
+        const interval = handlerObj.interval || 120000; // Set default interval to 120 seconds if not specified
+
+        if (interval === 0) {
+            // Send data only once when interval is set to 0
+            const appMap = this.websocketArch.get(appId);
+            const channelsMap = appMap ? appMap.get('channels') : null;
+            const channelSet = channelsMap ? channelsMap.get(channelId) : null;
+
+            if (channelSet && channelSet.size > 0) {
+                // Fetch data and send it once
+                this.getDataForChannelHandler(handlerObj.handler, this.dbConfig)
+                    .then((data) => {
+                        this.broadcastToChannel(appId, channelId, data);
+                    })
+                    .catch((err) => {
+                        console.error(`Error fetching one-time data for channel ${channelId} in app ${appId}:`, err);
+                    });
+            }
+            // No need to setup interval for this case, just send data once
+        } else {
+            // For intervals > 0, setup the recurring interval handler
+            const intervalId = setInterval(async () => {
+                const appMap = this.websocketArch.get(appId);
+                const channelsMap = appMap ? appMap.get('channels') : null;
+                const channelSet = channelsMap ? channelsMap.get(channelId) : null;
+
+                if (channelSet && channelSet.size > 0) { // Check if any client is connected
+                    try {
+                        const data = await this.getDataForChannelHandler(handlerObj.handler, this.dbConfig);
+                        this.broadcastToChannel(appId, channelId, data);
+                    } catch (err) {
+                        console.error(`Error fetching data for channel ${channelId} in app ${appId}:`, err);
+                    }
+                } else {
+                    // No clients connected, clear the interval
+                    clearInterval(intervalId);
+                    this.intervalHandlers.delete(channelId);
+                }
+            }, interval);
+
+            this.intervalHandlers.set(channelId, intervalId);
+        }
+    }
+}
+```
+
+### Explanation of Changes:
+
+1. **Handling Interval = 0**:
+   - If the interval in the configuration is `0`, the message is fetched and sent to the clients immediately upon connection. No `setInterval` is set in this case, ensuring the message is sent only once.
+
+2. **Handling Other Intervals**:
+   - For intervals greater than `0`, the regular `setInterval` logic continues as before, fetching and broadcasting data to clients at the specified intervals.
+
+3. **Error Handling**:
+   - Added error handling for both the one-time and recurring message broadcasting to ensure that the server logs any issues during data fetching or broadcasting.
+
+This setup ensures that if the interval is `0`, the data is sent once to the clients, and if the interval is greater than `0`, the data is sent at the defined intervals.

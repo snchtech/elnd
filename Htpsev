@@ -1,0 +1,100 @@
+Sure! Below is an example of a Node.js Express server using ES6 modules that can create both HTTP and HTTPS servers. The example uses classes to handle server creation and configuration, including options for specifying private and public keys for the HTTPS server.
+
+1. **Install Dependencies**
+
+   First, make sure you have the necessary packages installed:
+   ```bash
+   npm install express https fs
+   ```
+
+2. **Create the Server Class**
+
+   Create a file named `Server.js`:
+
+   ```javascript
+   // Server.js
+   import express from 'express';
+   import https from 'https';
+   import http from 'http';
+   import fs from 'fs';
+
+   export default class Server {
+     constructor({ httpPort = 3000, httpsPort = 3443, httpsOptions = {} }) {
+       this.app = express();
+       this.httpPort = httpPort;
+       this.httpsPort = httpsPort;
+       this.httpsOptions = httpsOptions;
+     }
+
+     // Method to configure middleware and routes
+     configure() {
+       this.app.get('/', (req, res) => {
+         res.send('Hello World!');
+       });
+     }
+
+     // Method to start the HTTP server
+     startHttpServer() {
+       const httpServer = http.createServer(this.app);
+       httpServer.listen(this.httpPort, () => {
+         console.log(`HTTP Server is running on port ${this.httpPort}`);
+       });
+     }
+
+     // Method to start the HTTPS server
+     startHttpsServer() {
+       if (!this.httpsOptions.key || !this.httpsOptions.cert) {
+         throw new Error('HTTPS key and cert are required for HTTPS server');
+       }
+
+       const httpsServer = https.createServer(this.httpsOptions, this.app);
+       httpsServer.listen(this.httpsPort, () => {
+         console.log(`HTTPS Server is running on port ${this.httpsPort}`);
+       });
+     }
+
+     // Method to start both servers
+     start() {
+       this.configure();
+       this.startHttpServer();
+       this.startHttpsServer();
+     }
+   }
+   ```
+
+3. **Create the Entry File**
+
+   Create a file named `index.js`:
+
+   ```javascript
+   // index.js
+   import Server from './Server.js';
+   import fs from 'fs';
+   import path from 'path';
+
+   // Define HTTPS options with your key and certificate
+   const httpsOptions = {
+     key: fs.readFileSync(path.resolve('path/to/your/privkey.pem')),
+     cert: fs.readFileSync(path.resolve('path/to/your/fullchain.pem'))
+   };
+
+   // Create an instance of the Server class
+   const server = new Server({
+     httpPort: 3000,
+     httpsPort: 3443,
+     httpsOptions
+   });
+
+   // Start both HTTP and HTTPS servers
+   server.start();
+   ```
+
+4. **Running the Server**
+
+   Ensure you have the correct paths for your HTTPS key and certificate files. Then, run the server using:
+
+   ```bash
+   node index.js
+   ```
+
+This example demonstrates a class-based approach to creating an HTTP and HTTPS server using Node.js and Express with ES6 module syntax. Make sure to replace `'path/to/your/privkey.pem'` and `'path/to/your/fullchain.pem'` with the actual paths to your key and certificate files.

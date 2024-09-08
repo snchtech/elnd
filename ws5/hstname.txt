@@ -1,0 +1,98 @@
+To add a hostname parameter to your server code, you can modify your `Server` class to accept and use a `hostname` option. You’ll need to:
+
+1. **Update the constructor** to accept a `hostname` parameter.
+2. **Modify the `listen` method** calls to use this `hostname` parameter.
+
+Here's an updated version of your `Server` class with a `hostname` option:
+
+```javascript
+// Server.js
+import express from 'express';
+import https from 'https';
+import http from 'http';
+import fs from 'fs';
+
+export default class Server {
+  constructor({ httpPort = 3000, httpsPort = 3443, httpsOptions = {}, hostname = 'localhost' }) {
+    this.app = express();
+    this.httpPort = httpPort;
+    this.httpsPort = httpsPort;
+    this.httpsOptions = httpsOptions;
+    this.hostname = hostname;
+  }
+
+  // Method to configure middleware and routes
+  configure() {
+    this.app.get('/', (req, res) => {
+      res.send('Hello World!');
+    });
+  }
+
+  // Method to start the HTTP server
+  startHttpServer() {
+    const httpServer = http.createServer(this.app);
+    httpServer.listen(this.httpPort, this.hostname, () => {
+      console.log(`HTTP Server is running on http://${this.hostname}:${this.httpPort}`);
+    });
+  }
+
+  // Method to start the HTTPS server
+  startHttpsServer() {
+    if (!this.httpsOptions.key || !this.httpsOptions.cert) {
+      throw new Error('HTTPS key and cert are required for HTTPS server');
+    }
+
+    const httpsServer = https.createServer(this.httpsOptions, this.app);
+    httpsServer.listen(this.httpsPort, this.hostname, () => {
+      console.log(`HTTPS Server is running on https://${this.hostname}:${this.httpsPort}`);
+    });
+  }
+
+  // Method to start both servers
+  start() {
+    this.configure();
+    this.startHttpServer();
+    this.startHttpsServer();
+  }
+}
+```
+
+### Config File Example
+
+Make sure your configuration file provides the `hostname` parameter:
+
+```json
+{
+  "httpPort": 3000,
+  "httpsPort": 3443,
+  "httpsOptions": {
+    "key": "path/to/your/key.pem",
+    "cert": "path/to/your/cert.pem"
+  },
+  "hostname": "example.com"
+}
+```
+
+### Usage
+
+When you create a new instance of the `Server` class, pass the configuration object including the hostname:
+
+```javascript
+import Server from './Server.js';
+import fs from 'fs';
+
+const config = {
+  httpPort: 3000,
+  httpsPort: 3443,
+  httpsOptions: {
+    key: fs.readFileSync('path/to/your/key.pem'),
+    cert: fs.readFileSync('path/to/your/cert.pem')
+  },
+  hostname: 'example.com'
+};
+
+const server = new Server(config);
+server.start();
+```
+
+This setup ensures that both your HTTP and HTTPS servers listen on the specified hostname and port.

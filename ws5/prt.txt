@@ -1,0 +1,64 @@
+To run both an HTTP server and a WebSocket server on the same port in Node.js, you need to integrate them. You can do this by using the same HTTP server instance for both HTTP and WebSocket connections.
+
+### Steps:
+
+1. **Create the HTTP Server**: Start the HTTP server as usual using Node.js's `http` module.
+2. **Integrate WebSocket**: Use the WebSocket server on the same HTTP server instance.
+
+Here’s how you can do it:
+
+### Example Code
+
+```javascript
+const http = require('http');
+const WebSocket = require('ws');
+const oracledb = require('oracledb');
+
+// Create an HTTP server instance
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Hello! This is the HTTP server.\n');
+});
+
+// Use the same HTTP server instance for WebSocket
+const wsServer = new WebSocket.Server({ server });
+
+// WebSocket Server logic
+wsServer.on('connection', (ws) => {
+  console.log('New WebSocket client connected');
+
+  ws.on('message', (message) => {
+    console.log('Received:', message);
+    ws.send(`Server received: ${message}`);
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+// Start the HTTP server and WebSocket on the same port (4000)
+server.listen(4000, () => {
+  console.log('HTTP and WebSocket server running on port 4000');
+});
+```
+
+### Explanation:
+
+1. **HTTP Server**:
+   - The HTTP server listens for HTTP requests and responds with a message (`"Hello! This is the HTTP server."`).
+   - You create the HTTP server using the `http.createServer` method.
+
+2. **WebSocket Server**:
+   - The WebSocket server is created using the `WebSocket.Server` constructor, but instead of passing a separate port, you pass the existing `server` instance created for the HTTP server.
+   - This allows both the HTTP and WebSocket servers to share the same port.
+
+3. **Server Listening**:
+   - Both the HTTP and WebSocket servers listen on port `4000` simultaneously. The `server.listen(4000)` call starts the HTTP server, and WebSocket connections are handled on the same server instance.
+
+### Handling Both HTTP and WebSocket Requests on the Same Port:
+
+- When a WebSocket connection is initiated (via the `ws://` protocol), the `wsServer.on('connection')` event handler is triggered, and WebSocket communication is handled there.
+- Regular HTTP requests are handled by the HTTP server, which responds to HTTP requests with a basic message.
+
+This way, both the HTTP server and WebSocket server run on the same port (`4000`), and they handle different types of requests appropriately.

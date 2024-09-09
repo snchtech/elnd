@@ -1,0 +1,154 @@
+Since your data is a complex JavaScript object with a potentially large and varying structure, Oracle APEX's built-in mechanisms (like URL parameters and page items) aren't well-suited for passing this type of data directly. However, you can still achieve this in a few ways, depending on how you intend to use the data in the modal dialog. Below are two main approaches:
+
+### Approach 1: Using `window.localStorage` or `window.sessionStorage`
+
+One of the easiest ways to handle large, complex JavaScript objects is to store the data in the browser’s `localStorage` or `sessionStorage`. These storage mechanisms allow you to store strings, and you can easily stringify and parse your JavaScript objects.
+
+#### Step-by-Step Implementation:
+
+1. **Store the JavaScript Object in `localStorage` or `sessionStorage`:**
+   
+   When the user clicks the button to open the modal dialog, store your complex object in `localStorage` or `sessionStorage`. For example:
+
+   ```javascript
+   var complexData = {
+       chartData: [1, 2, 3],
+       userDetails: {
+           name: "John Doe",
+           id: 123
+       },
+       moreData: { /* ... */ }
+   };
+
+   // Store the object in sessionStorage or localStorage
+   sessionStorage.setItem('complexData', JSON.stringify(complexData));
+   
+   // Open the modal dialog
+   apex.navigation.dialog(
+       'f?p=APP_ID:PAGE_ID:SESSION::NO:::',
+       {
+           title: "Modal Dialog",
+           height: "500",
+           width: "600"
+       }
+   );
+   ```
+
+2. **Retrieve the Data in the Modal Dialog:**
+
+   On the modal dialog page, use JavaScript to retrieve the data from `sessionStorage` or `localStorage` and process it as needed. For example:
+
+   ```javascript
+   document.addEventListener('DOMContentLoaded', function () {
+       // Retrieve the object from sessionStorage
+       var complexData = JSON.parse(sessionStorage.getItem('complexData'));
+
+       // Use the data to update the modal dialog or perform other actions
+       if (complexData) {
+           console.log(complexData);  // Example: Logging the data to the console
+           updateStatistics(complexData); // Example: Use the data to update your statistics
+       }
+   });
+
+   function updateStatistics(data) {
+       // Custom function to render data in the modal
+       // e.g., update charts, tables, etc.
+   }
+   ```
+
+   This approach works well because `sessionStorage` and `localStorage` persist the data even if you open the modal dialog in a new window. However, `sessionStorage` is specific to the current session and tab, while `localStorage` persists across tabs and sessions.
+
+### Approach 2: Passing Data Using JavaScript Between Windows (`window.opener`)
+
+If you are opening the modal dialog as a true new window or dialog, you can also use the `window.opener` property to pass complex data directly from the parent window to the modal dialog.
+
+#### Step-by-Step Implementation:
+
+1. **Open the Modal Dialog with JavaScript:**
+
+   Use the `apex.navigation.dialog` method to open the modal dialog, but also pass the JavaScript object using `window.opener`.
+
+   ```javascript
+   var complexData = {
+       chartData: [1, 2, 3],
+       userDetails: {
+           name: "John Doe",
+           id: 123
+       },
+       moreData: { /* ... */ }
+   };
+
+   // Open modal dialog
+   var dialogWindow = apex.navigation.dialog(
+       'f?p=APP_ID:PAGE_ID:SESSION::NO:::',
+       {
+           title: "Modal Dialog",
+           height: "500",
+           width: "600"
+       }
+   );
+
+   // Use window.opener to pass the complex data to the dialog window
+   dialogWindow.onload = function() {
+       dialogWindow.receiveDataFromParent(complexData);
+   };
+   ```
+
+2. **Receive the Data in the Modal Dialog:**
+
+   In the modal dialog, define a `receiveDataFromParent` function to process the data:
+
+   ```javascript
+   // Function to receive data from the parent window
+   function receiveDataFromParent(data) {
+       // Process the received data
+       console.log(data);  // Example: Log data
+       renderStatistics(data);  // Use data to update the UI, charts, etc.
+   }
+
+   function renderStatistics(data) {
+       // Custom logic to display statistics or data
+       console.log("Rendering statistics with: ", data);
+   }
+   ```
+
+3. **Use the Data in the Modal:**
+
+   Once the modal dialog page loads, the data will be passed from the parent window and can be used to render charts, update statistics, or perform other operations.
+
+### Approach 3: Using AJAX to Fetch Data Dynamically
+
+If you do not want to pass the entire object upfront but prefer to fetch it dynamically after the modal opens, you could use an AJAX callback in APEX:
+
+1. **Store Data in a JavaScript Object:**
+
+   Keep the data in your main page JavaScript.
+
+2. **Send Data Via AJAX:**
+
+   When the modal dialog is opened, use an AJAX call to send the data from the main page to the modal page.
+
+   ```javascript
+   apex.server.process('SAVE_COMPLEX_DATA', {
+       x01: JSON.stringify(complexData)
+   }, {
+       success: function() {
+           // Data is saved, now open modal dialog
+           apex.navigation.dialog('f?p=APP_ID:PAGE_ID:SESSION::NO:::');
+       }
+   });
+   ```
+
+3. **Retrieve Data in Modal Using Another AJAX Call:**
+
+   On the modal dialog page, use another AJAX call to retrieve the data that was passed.
+
+---
+
+### Summary of Approaches:
+
+1. **`sessionStorage` or `localStorage`:** Store the object locally in the browser and retrieve it when the modal opens.
+2. **`window.opener`:** Directly pass complex JavaScript objects between windows.
+3. **AJAX Callbacks:** Use AJAX processes to send and retrieve data between pages.
+
+Using `sessionStorage` or `window.opener` is a simple and efficient solution for your use case, allowing you to handle large and complex data structures easily in Oracle APEX without frequent database interactions.

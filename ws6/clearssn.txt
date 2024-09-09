@@ -1,0 +1,89 @@
+To ensure that the `localStorage` is cleared when a user logs out from your Oracle APEX application, you can add JavaScript to the "Logout" process or event handler. There are several ways to handle this, depending on how your logout functionality is implemented.
+
+Here are a few ways to clear `localStorage` when the user logs out:
+
+### 1. **Clear `localStorage` via Custom Logout URL**
+
+If your Oracle APEX application uses a custom URL for logging out (for example, a logout button), you can attach a JavaScript event listener to the button or the logout link to clear `localStorage` before the user is logged out.
+
+Here’s how to do it:
+
+#### Step 1: Add a Dynamic Action to Clear `localStorage`
+1. Go to your Oracle APEX page that contains the logout button or link.
+2. Create a **Dynamic Action** on the logout button/link:
+   - **Event**: Click
+   - **Action**: Execute JavaScript Code
+   - **Code**: Add the following code to clear `localStorage`:
+
+   ```javascript
+   localStorage.clear();
+   ```
+
+3. After the `localStorage.clear()` function runs, the browser will clear all data stored in `localStorage`.
+
+#### Example:
+
+```javascript
+// Clear localStorage before logout
+document.getElementById('logoutButton').addEventListener('click', function() {
+    localStorage.clear();
+});
+```
+
+This ensures that when the user clicks the logout button, the `localStorage` is cleared.
+
+### 2. **Add JavaScript in the Logout URL Process**
+
+If your application uses the standard APEX logout process (`f?p=APP_ID:LOGOUT`), you can include the JavaScript code to clear `localStorage` before logging out by adding JavaScript in your APEX page or template.
+
+#### Step 1: Modify the Logout URL
+
+Go to your **Shared Components** > **Templates** > **Navigation Bar** (or the template where the logout link is defined). Modify the logout URL to execute JavaScript first and then log the user out:
+
+```html
+<a href="javascript:clearStorageAndLogout()">Logout</a>
+```
+
+#### Step 2: Add JavaScript Function
+
+You need to add a JavaScript function to first clear `localStorage` and then redirect the user to the APEX logout URL:
+
+```javascript
+function clearStorageAndLogout() {
+    localStorage.clear();
+    window.location.href = 'f?p=&APP_ID.:LOGOUT:&SESSION.';
+}
+```
+
+This way, `localStorage` is cleared before the user is redirected to the APEX logout page.
+
+### 3. **Clear `localStorage` After Session Expiry**
+
+If you want to ensure that `localStorage` is cleared when the session expires (not just on logout), you can listen for the session timeout and trigger `localStorage.clear()` when the session ends.
+
+Here’s how you can achieve this:
+
+#### Step 1: Add JavaScript to Detect Session Timeout
+
+Oracle APEX doesn’t provide a built-in method to detect session timeouts, but you can add JavaScript to monitor session activity and clear `localStorage` when the session is about to expire.
+
+Here is a simple approach to run a script after a certain period (e.g., after session timeout):
+
+```javascript
+// Set session timeout duration (example: 30 minutes = 1800000 ms)
+var sessionTimeoutDuration = 1800000; 
+
+// Clear localStorage after the session timeout duration
+setTimeout(function() {
+    localStorage.clear();
+}, sessionTimeoutDuration);
+```
+
+This will automatically clear `localStorage` after the session duration has expired. You can adjust the `sessionTimeoutDuration` value based on your session settings in APEX.
+
+### Conclusion:
+
+- **For manual logout:** Use `localStorage.clear()` in a Dynamic Action or in a custom logout function.
+- **For session timeout:** You can use JavaScript to clear `localStorage` after the session expires or when a timeout is detected.
+
+Clearing `localStorage` after user logout ensures that no sensitive or unnecessary data is left in the browser after the session ends.

@@ -1,0 +1,136 @@
+To use `localStorage` to save a JavaScript object and then use its data when opening an Oracle APEX modal page, you can follow the steps below. The goal is to save the object in `localStorage` on the parent page, open the modal page, retrieve the object in the modal, and update a `<div>` element with the object's data.
+
+### Step-by-Step Implementation
+
+#### 1. Save a JavaScript Object in `localStorage` on the Parent Page
+
+Let's assume you have a complex object, and when a button is clicked, you save this object into `localStorage` and then open the APEX modal page.
+
+```javascript
+// Define a complex JavaScript object
+var complexData = {
+    chartData: [1, 2, 3, 4],
+    userDetails: {
+        name: "John Doe",
+        id: 1234
+    },
+    description: "Sample description for the modal"
+};
+
+// Function to save object and open modal
+function openModalWithStoredData() {
+    // Store the object in localStorage
+    localStorage.setItem('complexData', JSON.stringify(complexData));
+
+    // Open APEX modal dialog
+    apex.navigation.dialog(
+        'f?p=APP_ID:MODAL_PAGE_ID:SESSION', // Replace with actual values
+        {
+            title: "My Modal Dialog",
+            height: "500",
+            width: "600"
+        }
+    );
+}
+
+// Example of triggering the function on button click
+document.getElementById("openModalButton").addEventListener("click", openModalWithStoredData);
+```
+
+In this code:
+- Replace `APP_ID` and `MODAL_PAGE_ID` with your actual Oracle APEX Application ID and modal page ID.
+- The complex JavaScript object `complexData` is stored in `localStorage` when the user clicks the button, and then the modal page is opened.
+
+#### 2. Retrieve and Use the Data in the Modal Page
+
+On the modal page, you need to retrieve the object from `localStorage` and update a `<div>` element with its data.
+
+```javascript
+document.addEventListener('DOMContentLoaded', function() {
+    // Retrieve the object from localStorage
+    var storedData = JSON.parse(localStorage.getItem('complexData'));
+
+    // Check if the data is available
+    if (storedData) {
+        // Example: Set the inner text of a <div> with the description from the stored data
+        document.getElementById('descriptionDiv').innerText = storedData.description;
+
+        // You can also set other data, like name or chart data, if necessary
+        document.getElementById('userNameDiv').innerText = storedData.userDetails.name;
+    }
+});
+```
+
+In this code:
+- The `DOMContentLoaded` event ensures that the DOM is fully loaded before attempting to manipulate it.
+- We use `JSON.parse()` to convert the stored string back into a JavaScript object.
+- The inner text of the `<div>` with `id="descriptionDiv"` is updated with the `description` property from the stored object.
+- You can also update other elements like `userNameDiv` with the `userDetails.name` from the object.
+
+#### 3. Modal Page HTML Example
+
+In your Oracle APEX modal page, you need to have the HTML structure ready for the data to be inserted:
+
+```html
+<div id="descriptionDiv">Description will appear here</div>
+<div id="userNameDiv">User name will appear here</div>
+```
+
+### Complete Example
+
+Here is the complete setup:
+
+#### **Parent Page JavaScript**
+
+```javascript
+var complexData = {
+    chartData: [1, 2, 3, 4],
+    userDetails: {
+        name: "John Doe",
+        id: 1234
+    },
+    description: "Sample description for the modal"
+};
+
+function openModalWithStoredData() {
+    localStorage.setItem('complexData', JSON.stringify(complexData));
+
+    apex.navigation.dialog(
+        'f?p=100:20:&SESSION.', // Example: App ID 100, Modal Page 20
+        {
+            title: "My Modal Dialog",
+            height: "500",
+            width: "600"
+        }
+    );
+}
+
+document.getElementById("openModalButton").addEventListener("click", openModalWithStoredData);
+```
+
+#### **Modal Page JavaScript**
+
+```javascript
+document.addEventListener('DOMContentLoaded', function() {
+    var storedData = JSON.parse(localStorage.getItem('complexData'));
+
+    if (storedData) {
+        document.getElementById('descriptionDiv').innerText = storedData.description;
+        document.getElementById('userNameDiv').innerText = storedData.userDetails.name;
+    }
+});
+```
+
+#### **Modal Page HTML**
+
+```html
+<div id="descriptionDiv">Description will appear here</div>
+<div id="userNameDiv">User name will appear here</div>
+```
+
+### Key Points:
+- **`localStorage`:** Stores data as a string, so we use `JSON.stringify` to save and `JSON.parse` to retrieve the data.
+- **Modal Dialog:** Opened with `apex.navigation.dialog`, and you can manipulate the DOM within it using the retrieved data.
+- **Cross-Page Data Sharing:** `localStorage` allows you to share data between pages without constantly fetching it from the server.
+
+This approach avoids unnecessary database fetches and leverages the WebSocket data already available on the client side.

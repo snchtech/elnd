@@ -1,0 +1,114 @@
+You can implement this functionality on the client-side using JavaScript to listen for WebSocket messages, then update the specific HTML blocks based on the data received. Here's how you can structure the code:
+
+### HTML Structure:
+
+```html
+<div class="module-container">
+    <div id="tzb">
+        <div class="bl1"></div>
+        <div class="bl2"></div>
+        <div class="bl0"></div>
+    </div>
+    <div id="tm">
+        <div class="bl1"></div>
+        <div class="bl2"></div>
+        <div class="bl0"></div>
+    </div>
+</div>
+```
+
+### JavaScript for WebSocket and Dynamic HTML Update:
+
+```javascript
+// Open WebSocket connection
+const ws = new WebSocket('ws://your-websocket-url');
+
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data); // Parse the JSON data received from WebSocket
+
+    // Update the tzb block if tzb data exists
+    if (data.tzb) {
+        updateHTMLBlock('tzb', data.tzb);
+    }
+
+    // Update the tm block if tm data exists
+    if (data.tm) {
+        updateHTMLBlock('tm', data.tm);
+    }
+};
+
+// Function to update the HTML block dynamically
+function updateHTMLBlock(blockId, blockData) {
+    // Reference the specific block by id
+    const block = document.getElementById(blockId);
+    
+    if (block) {
+        // Update bl1 if exists in blockData
+        if (blockData.inProcess) {
+            const bl1 = block.querySelector('.bl1');
+            bl1.innerHTML = formatValues(blockData.inProcess); // Formatting values as needed
+        }
+
+        // Update bl2 if exists in blockData
+        if (blockData.inAction) {
+            const bl2 = block.querySelector('.bl2');
+            bl2.innerHTML = formatValues(blockData.inAction); // Formatting values as needed
+        }
+
+        // Update bl0 if exists in blockData
+        if (blockData.dateEnded) {
+            const bl0 = block.querySelector('.bl0');
+            bl0.innerHTML = formatValues(blockData.dateEnded); // Formatting values as needed
+        }
+    }
+}
+
+// Function to format the handler values (for example: "21/3" or "0/11/1")
+function formatValues(data) {
+    // Here we can format the handler data. 
+    // For this example, let's say we return "interval/handler"
+    return `${data.interval}/${data.handler}`;
+}
+```
+
+### Explanation:
+1. **WebSocket connection (`ws.onmessage`)**: When data is received from the WebSocket, we parse it using `JSON.parse` and check if `tzb` or `tm` data exists in the message.
+2. **HTML block update (`updateHTMLBlock`)**: This function takes the `blockId` (either `tzb` or `tm`) and the data received for that block. It selects the respective block and updates the HTML inside the specific elements (`bl1`, `bl2`, `bl0`) based on the data provided.
+3. **Value formatting (`formatValues`)**: A helper function formats the data received for each block. For example, you can format it as `interval/handler`, and this logic can be extended to handle other formats.
+4. **Dynamic updates**: Each part of the block (like `.bl1`, `.bl2`, etc.) is updated only if the corresponding data exists.
+
+### Example Use Case:
+- When the WebSocket sends data for `tzb`:
+  ```json
+  {
+    "tzb": {
+      "inProcess": {
+        "handler": "tzb",
+        "interval": 10000
+      },
+      "inAction": {
+        "handler": "tzb",
+        "interval": 12000
+      }
+    }
+  }
+  ```
+  The `tzb` block in the HTML will be updated like this:
+  - `.bl1` will display `10000/tzb`
+  - `.bl2` will display `12000/tzb`
+
+- When the WebSocket sends data for `tm`:
+  ```json
+  {
+    "tm": {
+      "inProcess": {
+        "handler": "tm",
+        "interval": 60000
+      }
+    }
+  }
+  ```
+  The `tm` block in the HTML will be updated:
+  - `.bl1` will display `60000/tm`
+
+You can customize the format in the `formatValues` function to suit your needs, for example, combining values with different delimiters or formatting them differently for `tzb` and `tm`.

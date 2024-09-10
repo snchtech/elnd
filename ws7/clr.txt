@@ -1,0 +1,102 @@
+You can modify the `updateHTMLBlock` function to check the values for both `inProcess` and `inAction`, and conditionally set the class for `.bl1` based on the logic you described.
+
+Here’s an updated version of the code that implements this functionality:
+
+```javascript
+// Function to update the HTML block dynamically
+function updateHTMLBlock(blockId, blockData) {
+    // Reference the specific block by id
+    const block = document.getElementById(blockId);
+    
+    if (block) {
+        // Update bl1 if inProcess and inAction data exist
+        if (blockData.inProcess || blockData.inAction) {
+            const bl1 = block.querySelector('.bl1');
+
+            // Create or update inProcess and inAction spans
+            let inProcSpan = bl1.querySelector('.inproc');
+            let inActSpan = bl1.querySelector('.inactive');
+
+            if (!inProcSpan) {
+                inProcSpan = document.createElement('span');
+                inProcSpan.classList.add('inproc');
+                bl1.appendChild(inProcSpan);
+            }
+
+            if (!inActSpan) {
+                inActSpan = document.createElement('span');
+                inActSpan.classList.add('inactive');
+                bl1.appendChild(inActSpan);
+            }
+
+            // Set the content for inProcess and inAction
+            inProcSpan.innerHTML = blockData.inProcess ? formatValues(blockData.inProcess) : '0';
+            inActSpan.innerHTML = blockData.inAction ? formatValues(blockData.inAction) : '0';
+
+            // Apply color classes based on the values
+            const inProcessValue = blockData.inProcess ? blockData.inProcess.interval : 0;
+            const inActionValue = blockData.inAction ? blockData.inAction.interval : 0;
+
+            if (inActionValue > 0) {
+                bl1.className = 'bl1 orange-color'; // Set to orange when inAction > 0
+            } else if (inProcessValue > 0) {
+                bl1.className = 'bl1 green-color'; // Set to green when inProcess > 0 but inAction is 0
+            } else {
+                bl1.className = 'bl1 default-color'; // Set to default when both are 0
+            }
+        }
+
+        // Update bl2 if exists in blockData (example, similar logic can be applied)
+        if (blockData.dateEnded) {
+            const bl2 = block.querySelector('.bl2');
+            bl2.innerHTML = formatValues(blockData.dateEnded); // Formatting values as needed
+        }
+    }
+}
+
+// Function to format the handler values (for example: "interval/handler")
+function formatValues(data) {
+    // Here we can format the handler data. 
+    // For this example, let's say we return "interval/handler"
+    return `${data.interval}/${data.handler}`;
+}
+```
+
+### Explanation of the Changes:
+
+1. **HTML Span Elements for `inProcess` and `inAction`**:
+   - For the `.bl1` div, two span elements are created (if they don’t already exist): one for `inProcess` and one for `inAction`. These are labeled as `.inproc` and `.inactive`, respectively.
+   - If the data for `inProcess` or `inAction` exists, the corresponding span gets updated with formatted content. If no data exists, it sets the content to `0`.
+
+2. **Conditional Color Classes**:
+   - The values of `inProcess` and `inAction` intervals are checked:
+     - If `inAction > 0`, the `.bl1` div is assigned the `orange-color` class.
+     - If `inAction == 0` but `inProcess > 0`, it assigns the `green-color` class.
+     - If both are `0`, it assigns the `default-color` class.
+   - This is achieved by dynamically updating the `className` property of the `.bl1` div.
+
+### CSS:
+
+You will need to define the color classes in your CSS to reflect the changes in the UI:
+
+```css
+.orange-color {
+    background-color: orange;
+}
+
+.green-color {
+    background-color: green;
+}
+
+.default-color {
+    background-color: gray; /* Or any default color */
+}
+```
+
+### Example Behavior:
+
+- If the WebSocket sends data where `inAction.interval > 0`, the `.bl1` block will turn orange.
+- If `inAction.interval == 0` but `inProcess.interval > 0`, the `.bl1` block will turn green.
+- If both intervals are `0`, the `.bl1` block will have the default color.
+
+This code dynamically updates the content and style of the `.bl1` block based on the conditions you've specified.

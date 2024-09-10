@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    
+<h1>Test</h1>
+    <script>
+
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+  
+  return data.filter(function(el) {
+    // Only include if the SOURCE_ID is not already in the set
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      return false;
+    }
+    uniqueSourceIDs.add(el.SOURCE_ID);
+    
+    let matches = true;
+
+    // Apply position filter if provided
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+    }
+    
+    // Apply department filter if provided
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+    }
+    
+    // Apply unit filter if provided
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+    }
+
+    return matches;
+  });
+}
+
+// Example usage:
+const dataTest = [
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1100, U_ID: 1 },
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1100, U_ID: 1 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2 },
+  { SOURCE_ID: 107, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 103, POSITION_ID: 818, DEPARTMENT_ID: null, U_ID: 0 },
+  { SOURCE_ID: 104, POSITION_ID: 843, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 105, POSITION_ID: null, DEPARTMENT_ID: 1200, U_ID: null },
+];
+
+// Call the function with the desired filters
+const filteredData = filterData(dataTest, null, 1100, null);
+
+// Output the result
+console.log(filteredData);
+console.log("Unique SOURCE_ID count:", filteredData.length);
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,46 @@
+To optimize your code, you can reduce redundancy by using loops or mapping over an array of keys instead of repeating the same code multiple times. Here's an example of how you can refactor it using an array to iterate over the conditions (`'1'`, `'2'`, and `'0'`) and another array to iterate over the data sets (`inProcess`, `startOnshift`, `endOnshift`).
+
+Here’s the optimized version:
+
+```javascript
+// Define the filter categories and conditions
+const categories = ['inProcess', 'startOnshift', 'endOnshift'];
+const shifts = ['1', '2', '0'];
+
+// Create an object to store the results
+const result = {};
+
+// Iterate through each category
+categories.forEach(category => {
+  result[category] = {};
+  
+  // Iterate through each shift
+  shifts.forEach(shift => {
+    // Filter and store the result for each category and shift
+    result[category][shift] = filterData(data[category], null, null, shift).length;
+  });
+});
+
+// Now you can access the values like this:
+let zrInProcess1 = result['inProcess']['1'];
+let zrInProcess2 = result['inProcess']['2'];
+let zrInProcess0 = result['inProcess']['0'];
+
+let zrStartOnShift1 = result['startOnshift']['1'];
+let zrStartOnShift2 = result['startOnshift']['2'];
+let zrStartOnShift0 = result['startOnshift']['0'];
+
+let zrEndOnShift1 = result['endOnshift']['1'];
+let zrEndOnShift2 = result['endOnshift']['2'];
+let zrEndOnShift0 = result['endOnshift']['0'];
+
+// You can also directly set this data to your HTML blocks
+```
+
+### How it works:
+1. We define the `categories` as an array of the dataset keys (`inProcess`, `startOnshift`, `endOnshift`).
+2. We define the `shifts` as the different shift values (`'1'`, `'2'`, `'0'`).
+3. We use `forEach` loops to iterate over each category and shift, applying the `filterData` function to each combination and storing the result in the `result` object.
+4. You can now access the filtered lengths via the `result` object.
+
+This reduces the need to manually write out the `filterData` function multiple times for each combination, keeping your code cleaner and easier to maintain.

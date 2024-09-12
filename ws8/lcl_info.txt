@@ -1,0 +1,99 @@
+Yes, you can use data from `localStorage` on the modal page if you plan to use it across multiple pages in your Oracle APEX application. Let me break down the answers to your two questions:
+
+### 1. Can I Use Data from `localStorage` on a Modal Page?
+
+Yes, you can use data from `localStorage` within a modal page, even if it is reused across different pages. `localStorage` is shared across all pages in the same domain, so the data you store on one page is accessible on other pages, including modal pages. 
+
+Here’s how you can use `localStorage` within your modal page:
+
+- On your modal page (which is loaded as a separate page), add JavaScript to retrieve and display the data from `localStorage`.
+
+Example:
+
+```javascript
+// Function to populate modal page with data from localStorage
+function populateStatisticsBlockFromLocalStorage() {
+  const statisticsData = JSON.parse(localStorage.getItem('statisticsData'));
+
+  if (statisticsData) {
+    document.getElementById('statisticElement1').innerText = statisticsData.value1;
+    document.getElementById('statisticElement2').innerText = statisticsData.value2;
+    // Add more elements as needed
+  } else {
+    console.error('No statistics data found in localStorage.');
+  }
+}
+
+// Call this function when the modal page is loaded
+document.addEventListener('DOMContentLoaded', populateStatisticsBlockFromLocalStorage);
+```
+
+When the modal page is opened, it will retrieve the statistics data stored in `localStorage` and display it within the modal's DOM elements.
+
+### 2. Where Should I Set Base Data for the Statistics Block?
+
+You have two options for setting the base data in `localStorage`:
+
+#### Option 1: Set Base Data on the Global "0" Page
+The "Global 0" page is ideal for initializing data that should be available across multiple pages. If the statistics data is needed globally throughout the app, you can load it once when the app first loads using the Global "0" page.
+
+- **Why this is a good option:**
+  - The statistics data is loaded only once when the user accesses the app for the first time.
+  - This ensures that `localStorage` is initialized with the necessary data before any pages or modals request it.
+
+In this case, you can place the following code in the "Global 0" page's JavaScript section to load and store the statistics data in `localStorage` when the application loads:
+
+```javascript
+function loadStatisticsData() {
+  if (!localStorage.getItem('statisticsData')) {
+    apex.server.process('FETCH_STATS', {
+      x01: 'init'
+    }, {
+      success: function(data) {
+        localStorage.setItem('statisticsData', JSON.stringify(data));
+      },
+      error: function(xhr, status, error) {
+        console.error('Error loading statistics: ', error);
+      }
+    });
+  }
+}
+
+// Run this when the Global 0 page loads
+document.addEventListener('DOMContentLoaded', loadStatisticsData);
+```
+
+#### Option 2: Set Base Data on Each Page the User Connects To
+Alternatively, you can initialize the data on each individual page that the user visits. This might be useful if different pages have different initial requirements or if you want to ensure that data is always refreshed when a user visits specific pages.
+
+- **Why this is a good option:**
+  - If the statistics data is only required on specific pages, this ensures that data is set just before it’s needed.
+  - It might make sense for pages that need their own variations of the statistics data.
+
+You would add similar code to each page’s JavaScript section, as in the Global "0" page case, but this would execute on each individual page:
+
+```javascript
+document.addEventListener('DOMContentLoaded', function() {
+  if (!localStorage.getItem('statisticsData')) {
+    apex.server.process('FETCH_STATS', {
+      x01: 'init'
+    }, {
+      success: function(data) {
+        localStorage.setItem('statisticsData', JSON.stringify(data));
+      },
+      error: function(xhr, status, error) {
+        console.error('Error loading statistics: ', error);
+      }
+    });
+  }
+});
+```
+
+### Which Option is Better?
+- **Global 0 Page Option:** This is the most efficient if you want to load the data once and share it across the entire application. It avoids unnecessary database requests as the statistics data is fetched only once on app load. It’s the recommended option for global data that doesn’t change frequently.
+  
+- **Per-Page Option:** Use this if the statistics data changes frequently or if different pages need different statistics data. However, it will introduce more requests to the database if not handled carefully.
+
+### Summary:
+- You **can use `localStorage`** to store data and access it on modal pages across different pages in Oracle APEX.
+- The **Global 0 Page** is ideal for setting up and storing the base statistics data in `localStorage` when the application loads. This is the most optimized approach if the statistics data is global and shared across pages.

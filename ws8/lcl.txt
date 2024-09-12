@@ -1,0 +1,170 @@
+You can optimize the solution by using `localStorage` instead of a global JavaScript variable, which will persist the data across page loads or even browser tabs. Additionally, for the modal block, you can either create the statistic block dynamically on the current page or use a separate modal page in Oracle APEX. Both methods can be optimized based on your needs.
+
+Here’s how you can update the code to use `localStorage` and create a statistic block in Oracle APEX.
+
+### 1. Use `localStorage` to Store and Retrieve Data
+
+```javascript
+// Function to load statistics data and store it in localStorage
+function loadStatisticsData() {
+  if (!localStorage.getItem('statisticsData')) {
+    // If statistics data isn't already stored, fetch from the server
+    apex.server.process('FETCH_STATS', {
+      x01: 'init'
+    }, {
+      success: function(data) {
+        localStorage.setItem('statisticsData', JSON.stringify(data));
+        // Optionally handle any post-fetch logic
+      },
+      error: function(xhr, status, error) {
+        console.error('Error loading statistics: ', error);
+      }
+    });
+  }
+}
+
+// Function to get statistics data from localStorage
+function getStatisticsData() {
+  return JSON.parse(localStorage.getItem('statisticsData'));
+}
+
+// Function to populate the statistics block
+function populateStatisticsBlock() {
+  const statisticsData = getStatisticsData();
+
+  if (statisticsData) {
+    document.getElementById('statisticElement1').innerText = statisticsData.value1;
+    document.getElementById('statisticElement2').innerText = statisticsData.value2;
+    // Continue updating other parts of your modal DOM
+  } else {
+    console.error('No statistics data found in localStorage.');
+  }
+}
+
+// On page load, load the data if not already in localStorage
+document.addEventListener('DOMContentLoaded', loadStatisticsData);
+
+// When modal is opened, populate the block with stored data
+$('#yourModal').on('shown.bs.modal', function() {
+  populateStatisticsBlock();
+});
+```
+
+### 2. WebSocket Updates Using `localStorage`
+
+To ensure the `localStorage` data is kept up-to-date with WebSocket updates, you can modify the WebSocket handler to store the updated data in `localStorage` and refresh the block if the modal is open.
+
+```javascript
+// Establish WebSocket connection
+let ws = new WebSocket('ws://your-websocket-server-url');
+
+ws.onmessage = function(event) {
+  let newStats = JSON.parse(event.data);
+
+  // Update localStorage with new stats
+  localStorage.setItem('statisticsData', JSON.stringify(newStats));
+
+  // If modal is open, refresh the data in real time
+  if ($('#yourModal').is(':visible')) {
+    populateStatisticsBlock();
+  }
+};
+
+ws.onerror = function(error) {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = function() {
+  console.log('WebSocket connection closed.');
+};
+```
+
+### 3. Creating a Statistic Block in Oracle APEX
+
+You have two main approaches to display the statistics block in Oracle APEX:
+
+#### Option 1: Using a Modal Page
+- You can create a dedicated **modal page** in APEX to hold the statistics block. The benefit is better organization and reusability across multiple pages.
+- Inside APEX, create a **new modal dialog page**.
+  - Add a region in the modal dialog for your statistics block.
+  - The modal dialog can be triggered by a button click using APEX’s `dynamic actions`.
+
+#### Option 2: Embedding the Statistic Block in the Same Page
+- You can create the statistic block on the same page as a hidden region.
+  - When the button is clicked, you can show the hidden block and populate it with the data stored in `localStorage`.
+  
+##### Example of Hidden Statistic Block:
+1. In APEX, create a **region** on the same page for the statistics.
+   - Initially, set the region to be hidden using CSS or dynamic actions.
+   
+2. Add JavaScript to show and populate this block when the button is clicked.
+
+```javascript
+function showStatisticsBlock() {
+  populateStatisticsBlock();
+  document.getElementById('statisticsBlockRegion').style.display = 'block'; // Show the hidden region
+}
+
+// Attach event listener to button
+document.getElementById('yourButtonId').addEventListener('click', showStatisticsBlock);
+```
+
+### Which Approach is More Optimized?
+
+- **Modal Page (Option 1):**
+  - Ideal if the statistic block is needed across multiple pages and you want to encapsulate the content in a reusable modal.
+  - Oracle APEX optimizes modal dialogs by loading them only when needed, so performance won’t degrade significantly.
+  
+- **Same Page Block (Option 2):**
+  - If you need the statistics only on a single page, embedding it in the same page as a hidden block is more optimized because it avoids the overhead of a modal dialog page.
+  - This approach also simplifies the architecture, as everything is on the same page.
+
+### 4. Optimized Dynamic Modal Block (Optional)
+
+If you want to avoid creating a new APEX modal page and still keep the modularity, you can dynamically create the modal using JavaScript:
+
+```javascript
+// Function to create and display a dynamic modal
+function createAndShowModal() {
+  let modal = document.createElement('div');
+  modal.classList.add('modal', 'fade');
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Statistics</h5>
+          <button type="button" class="close" data-dismiss="modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="statisticElement1"></div>
+          <div id="statisticElement2"></div>
+          <!-- Add more elements as needed -->
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+
+  // Show the modal
+  $(modal).modal('show');
+
+  // Populate the statistics data
+  populateStatisticsBlock();
+
+  // Remove modal from DOM when closed
+  $(modal).on('hidden.bs.modal', function () {
+    $(this).remove();
+  });
+}
+
+// Attach the event to the button click
+document.getElementById('yourButtonId').addEventListener('click', createAndShowModal);
+```
+
+### Conclusion:
+- Use `localStorage` to cache the statistics data and avoid repeated database requests.
+- Choose between a modal page (if you need reuse across multiple pages) or embedding the statistic block on the same page for simplicity and performance.
+- WebSocket can be used to update `localStorage` data in real time, ensuring that the statistics block is always up-to-date when the user opens it.
+
+This approach optimizes performance by caching data, reducing redundant database requests, and leveraging client-side JavaScript and WebSocket updates.

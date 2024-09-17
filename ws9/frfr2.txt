@@ -1,0 +1,86 @@
+To capture data from SQL regions in Oracle APEX and store it in `localStorage`, you need to first ensure that you can access the data from the SQL regions on the client side. One common approach is to use APEX's built-in functionality to fetch the data dynamically using `apex.server.process` or `apex.server.get`.
+
+Here’s an example JavaScript code that:
+
+1. Uses `apex.server.process` to fetch data from a SQL region in Oracle APEX.
+2. Stores the fetched data in `localStorage`.
+
+### Example Setup
+
+#### Step 1: Create SQL Regions
+In Oracle APEX, create SQL regions for your queries, for example:
+- SQL region 1: `inAction`
+- SQL region 2: `newRec`
+
+These regions can be invisible, as you don’t need to display them. Instead, you will capture their data dynamically via JavaScript.
+
+#### Step 2: JavaScript Code to Fetch Data and Store in `localStorage`
+
+Here’s a JavaScript function that you can place in the global page (or use a `Dynamic Action` on page load) to capture the data from the SQL regions and store it in `localStorage`.
+
+```javascript
+// Function to fetch data from a SQL region and store it in localStorage
+function fetchAndStoreData(processName, localStorageKey) {
+    // Use apex.server.process to call a PL/SQL process or SQL region
+    apex.server.process(processName, {
+        pageItems: null // Pass any required page items if necessary
+    }, {
+        success: function(data) {
+            // On success, store the received data in localStorage
+            if (data) {
+                localStorage.setItem(localStorageKey, JSON.stringify(data));
+                console.log(localStorageKey + " data stored in localStorage");
+            }
+        },
+        error: function(error) {
+            console.error("Error fetching data for " + localStorageKey, error);
+        }
+    });
+}
+
+// Fetch data from SQL regions and store them in localStorage
+fetchAndStoreData('fetchInActionData', 'inActionData'); // For inAction data
+fetchAndStoreData('fetchNewRecData', 'newRecData');     // For newRec data
+```
+
+#### Step 3: Set Up PL/SQL Processes or Ajax Callback Processes
+You will need to set up a process in Oracle APEX that returns the data in JSON format. This could either be a PL/SQL process or an Ajax Callback.
+
+1. **Create a PL/SQL Process (or Ajax Callback)**:
+    - Name: `fetchInActionData`
+    - Code Example:
+
+    ```sql
+    DECLARE
+        l_json CLOB;
+    BEGIN
+        -- Create JSON output from SQL query
+        SELECT JSON_ARRAYAGG(
+                 JSON_OBJECT(
+                   'id' VALUE id,
+                   'position' VALUE position,
+                   'department' VALUE department,
+                   'unit' VALUE unit
+                 )
+               )
+        INTO l_json
+        FROM your_table_name
+        WHERE your_conditions;
+
+        -- Send the JSON response to APEX
+        apex_json.open_object;
+        apex_json.write('data', l_json);
+        apex_json.close_object;
+    END;
+    ```
+
+    Similarly, you can create the `fetchNewRecData` process to fetch the `newRec` data.
+
+2. **Return the Data in JSON Format**:
+   The above PL/SQL block returns a JSON object, which can be used on the client side to populate the `localStorage`.
+
+#### Step 4: Bind the JavaScript to Your APEX Application
+You can include this JavaScript code in the **Execute when Page Loads** section of the Global Page or as part of a `Dynamic Action` triggered on page load.
+
+This method allows you to dynamically fetch and store SQL query data in `localStorage`, which you can later use to dynamically populate the Oracle APEX card region or other UI components.
+

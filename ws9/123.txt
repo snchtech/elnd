@@ -1,0 +1,74 @@
+To achieve your goal in Oracle APEX, here's a step-by-step approach:
+
+### 1. Fetch SQL Query Data and Store it in `localStorage`
+
+#### Step 1: Create SQL Queries
+Define your SQL queries in Oracle APEX to fetch the data. For example, create separate SQL regions for each of your queries like `inAction`, `newRec`, and `NeedEdit`.
+
+Each SQL query will return the columns `id`, `position`, `department`, and `unit`.
+
+#### Step 2: Add JavaScript to Store Data in `localStorage`
+On your Global Page, you can write a `Dynamic Action` that runs JavaScript code to capture the data from the SQL regions and store it in `localStorage`.
+
+Here’s an example of how to do this:
+
+```javascript
+// Example data from SQL Queries
+var inActionData = [
+  {id: 1, position: 'Manager', department: 'Sales', unit: 'North'},
+  {id: 2, position: 'Engineer', department: 'Tech', unit: 'South'}
+];
+
+var newRecData = [
+  {id: 3, position: 'Analyst', department: 'HR', unit: 'East'}
+];
+
+// Save the data into localStorage
+localStorage.setItem('inActionData', JSON.stringify(inActionData));
+localStorage.setItem('newRecData', JSON.stringify(newRecData));
+```
+
+You can write a `Dynamic Action` that triggers this JavaScript code on page load or after data is fetched from the server.
+
+### 2. Use `localStorage` Data to Create Oracle Cards Region
+
+#### Step 1: Create a Cards Region
+On the page where you want to display the data, create a static or dynamic cards region in Oracle APEX.
+
+#### Step 2: Use JavaScript to Populate the Cards
+Add JavaScript to your page or `Dynamic Action` to retrieve the data from `localStorage` and populate the cards dynamically. Here’s how you can achieve that:
+
+```javascript
+// Get data from localStorage
+var inActionData = JSON.parse(localStorage.getItem('inActionData'));
+var newRecData = JSON.parse(localStorage.getItem('newRecData'));
+
+// Function to generate cards dynamically
+function createCard(data) {
+  var cardHtml = '';
+  data.forEach(function(row) {
+    cardHtml += `<div class="t-CardWrap t-Cards">
+                   <div class="t-Card">
+                     <div class="t-Card-body">
+                       <h2>${row.position}</h2>
+                       <p>Department: ${row.department}</p>
+                       <p>Unit: ${row.unit}</p>
+                     </div>
+                   </div>
+                 </div>`;
+  });
+  return cardHtml;
+}
+
+// Insert cards into card region container
+document.getElementById('card-region-container').innerHTML = createCard(inActionData);
+```
+
+#### Step 3: Replace Static IDs with Dynamic Ones
+Make sure that your cards region in Oracle APEX has a container with a known ID (like `card-region-container`) so that the JavaScript can inject the HTML for the cards dynamically.
+
+### Notes:
+- The SQL regions that return data like `inAction`, `newRec`, and `NeedEdit` can be invisible and just serve as sources for the data.
+- This setup ensures that your cards are dynamically populated with data stored in `localStorage`.
+
+With this, you can efficiently manage and display SQL data in Oracle APEX using JavaScript and localStorage.

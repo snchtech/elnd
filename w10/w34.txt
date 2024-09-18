@@ -1,0 +1,108 @@
+You can achieve this functionality by using custom JavaScript to toggle the visibility of the hidden region on the global page and style it to behave like a modal popup. Here’s a step-by-step guide:
+
+### Step 1: Set up the Hidden Region on the Global Page
+On your Global Page, you already have a region with `display: none;`. You need to ensure this region has a unique `Static ID` so you can reference it with JavaScript.
+
+- **Static ID**: For example, set the `Static ID` of the region to `my_modal_region`.
+  
+Add this CSS to style the hidden region as a modal popup:
+
+```css
+#my_modal_region {
+    display: none; /* Initially hidden */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    padding: 20px;
+    background-color: white;
+    border: 1px solid #ccc;
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+}
+
+#my_modal_overlay {
+    display: none; /* Initially hidden */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.modal-close-btn {
+    float: right;
+    cursor: pointer;
+}
+```
+
+### Step 2: Add a Close Button to the Modal Region
+In the region’s content, include a close button like this:
+
+```html
+<div id="my_modal_content">
+    <span class="modal-close-btn" onclick="closeModal()">×</span>
+    <p>Your modal content goes here...</p>
+</div>
+```
+
+### Step 3: JavaScript to Open/Close the Modal
+Add the following JavaScript on your Global Page to handle opening and closing the modal:
+
+```javascript
+function openModal() {
+    document.getElementById('my_modal_region').style.display = 'block';
+    document.getElementById('my_modal_overlay').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('my_modal_region').style.display = 'none';
+    document.getElementById('my_modal_overlay').style.display = 'none';
+}
+```
+
+### Step 4: Add Overlay
+Include a simple overlay div on your Global Page:
+
+```html
+<div id="my_modal_overlay" onclick="closeModal()"></div>
+```
+
+### Step 5: Trigger the Modal from Another Page
+To trigger the modal from another page (via a Navbar item or any other component), you can use the following JavaScript on that page:
+
+- Add a `Link` attribute to the Navbar item and use this JavaScript in the link URL:
+
+```javascript
+javascript:parent.openModal();
+```
+
+This will trigger the `openModal()` function on the Global Page without refreshing the page.
+
+### Step 6: Optional: APEX Dialog without Refresh (Alternative)
+If you prefer to use APEX's native modal dialog functionality:
+
+1. **Create a Dynamic Action**:
+   - Create a dynamic action on the page with the Navbar item.
+   - Set the action to "Execute JavaScript" and use this:
+
+```javascript
+$('#my_modal_region').dialog({
+    modal: true,
+    title: 'My Modal Title',
+    closeOnEscape: true,
+    draggable: true,
+    buttons: {
+        Close: function() {
+            $(this).dialog('close');
+        }
+    }
+}).dialog('open');
+```
+
+This will open the hidden region as a native APEX dialog when triggered, still without refreshing the page.
+
+You now have two approaches—one with custom modal functionality and one using APEX's dialog feature.

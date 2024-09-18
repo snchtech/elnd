@@ -1,0 +1,28 @@
+To resolve the issue where your PL/SQL dynamic content block on the global page generates an error when the user is not logged in, you can check if the user is authenticated before running the SQL query. You can use the built-in Oracle APEX function `APEX_UTIL.IS_SESSION_VALID` to check if the session is valid, meaning the user is logged in.
+
+Here’s an example of how to modify your PL/SQL block to only run the query after the user is logged in:
+
+```plsql
+DECLARE
+    l_is_logged_in BOOLEAN;
+BEGIN
+    -- Check if the session is valid (i.e., the user is logged in)
+    l_is_logged_in := APEX_UTIL.IS_SESSION_VALID;
+
+    IF l_is_logged_in THEN
+        -- Your SQL query to retrieve data from the ACL roles table
+        SELECT column_name
+        INTO some_variable
+        FROM acl_roles
+        WHERE some_condition;
+        
+        -- Generate your dynamic content here
+        htp.p('<div>Your dynamic content here</div>');
+    ELSE
+        -- Do nothing or show a message if needed
+        htp.p('<div>Please log in to view this content.</div>');
+    END IF;
+END;
+```
+
+This block will only execute the query when the user is logged in, avoiding the error when the user isn't logged in. If the session is not valid, you can either show a custom message or simply do nothing.

@@ -1,0 +1,69 @@
+To open the region in a modal when clicking a navigation bar item in Oracle APEX, you need to follow these steps:
+
+### Steps:
+
+1. **Ensure the Region is Hidden**:
+   - As mentioned before, you should set `display: none` to the region with the static ID `blockStats` so it remains hidden but rendered in the DOM.
+   - Use inline CSS for this:
+   
+   ```css
+   #blockStats {
+       display: none;
+   }
+   ```
+
+2. **Set Up Dynamic Action for the Navigation Bar Item**:
+   - Go to your Oracle APEX application, and locate the navigation bar item that you want to use to trigger the modal.
+   - Select the item and click "Create Dynamic Action."
+
+3. **Dynamic Action Configuration**:
+   - In the **Dynamic Action** dialog, set it up as follows:
+   
+   - **Event**: Set the event to `Click` (or `Click on jQuery Selector` if you're targeting a specific item via a class or ID).
+   - **Selection Type**: Choose "Navigation Bar" (or if you're using a custom jQuery selector, select "jQuery Selector" and specify the selector for your navigation item, for example, `#navBarItemID`).
+   
+4. **Add JavaScript Code to Open Modal**:
+   - For the **True Action** of the Dynamic Action, select "Execute JavaScript Code" and add the following code:
+
+   ```javascript
+   // Show the hidden region and open it in a modal dialog
+   $('#blockStats').css('display', 'block'); // Ensure the region is displayed
+   $('#blockStats').dialog({
+       modal: true,
+       title: 'My Modal Title',
+       closeOnEscape: true,
+       draggable: true,
+       buttons: {
+           Close: function() {
+               $(this).dialog('close');
+           }
+       },
+       close: function() {
+           // Hide the region again after the modal is closed
+           $('#blockStats').css('display', 'none');
+       }
+   }).dialog('open');
+   ```
+
+### Full Process:
+1. The region with ID `blockStats` is hidden by default using `display: none`.
+2. When the navigation item is clicked, the dynamic action is triggered.
+3. The JavaScript code within the dynamic action shows the region and opens it in a modal using jQuery UI.
+4. When the modal is closed, the region is hidden again by setting `display: none`.
+
+### Example with jQuery Selector:
+If you're using a custom jQuery selector to target your navigation bar item, here’s an example of how to target it:
+
+1. In your navigation bar item, add a custom class or ID like `navItemModal`.
+   
+   ```html
+   <a href="#" id="navItemModal">Open Modal</a>
+   ```
+
+2. In the dynamic action, set the **Selection Type** to `jQuery Selector` and specify the selector:
+
+   ```javascript
+   #navItemModal
+   ```
+
+That will trigger the modal when clicking the item in the navigation bar.

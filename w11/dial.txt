@@ -1,0 +1,30 @@
+Here’s the modified code that hides the region again by setting `display: none` after the modal is closed:
+
+```javascript
+// Show the hidden region and open it in a modal dialog
+$('#blockStats').css('display', 'block'); // Ensure the region is displayed
+$('#blockStats').dialog({
+    modal: true,
+    title: 'My Modal Title',
+    closeOnEscape: true,
+    draggable: true,
+    buttons: {
+        Close: function() {
+            $(this).dialog('close');
+        }
+    },
+    close: function() {
+        // Hide the region again after the modal is closed
+        $('#blockStats').css('display', 'none');
+    }
+}).dialog('open');
+```
+
+### Explanation:
+- The key part is the `close` event in the dialog configuration:
+   ```javascript
+   close: function() {
+       $('#blockStats').css('display', 'none');
+   }
+   ```
+  This ensures that once the modal is closed, the region is hidden again by setting `display: none`.

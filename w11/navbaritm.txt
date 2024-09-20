@@ -1,0 +1,57 @@
+If you're working with a navigation bar menu list in Shared Components, and you can only use List Entries to trigger the modal, follow these steps to link the modal opening functionality to a list entry in Oracle APEX:
+
+### Steps:
+
+1. **Add a Custom Class or ID to the List Entry**:
+   - Navigate to **Shared Components** > **Navigation Menu** (or your specific menu list).
+   - Find the list entry you want to use as the trigger for opening the modal.
+   - In the "Target" section of the list entry, set the **Target Type** to "URL" and use `#` as the URL so it acts as a clickable item.
+   - In the "Attributes" section, add a custom class like `openModalTrigger` or an ID like `navOpenModal`.
+
+   Example:
+   ```html
+   # (URL)
+   class="openModalTrigger"
+   ```
+
+2. **Create a Dynamic Action** to Trigger the Modal:
+   - Go to the **Global Page** (Page 0) and create a new **Dynamic Action**.
+   - Set the **Event** to `Click`.
+   - Set the **Selection Type** to `jQuery Selector`.
+   - In the **jQuery Selector** field, enter the class or ID you assigned to the list entry. For example:
+     
+     ```javascript
+     .openModalTrigger
+     ```
+
+   - Add a **True Action** of type "Execute JavaScript Code."
+
+3. **Add the JavaScript to Open the Modal**:
+   - In the "Execute JavaScript Code" action, add the following code to open the hidden region in a modal:
+
+   ```javascript
+   // Show the hidden region and open it in a modal dialog
+   $('#blockStats').css('display', 'block'); // Ensure the region is displayed
+   $('#blockStats').dialog({
+       modal: true,
+       title: 'My Modal Title',
+       closeOnEscape: true,
+       draggable: true,
+       buttons: {
+           Close: function() {
+               $(this).dialog('close');
+           }
+       },
+       close: function() {
+           // Hide the region again after the modal is closed
+           $('#blockStats').css('display', 'none');
+       }
+   }).dialog('open');
+   ```
+
+### Summary:
+1. Assign a class (e.g., `openModalTrigger`) to the list entry in Shared Components.
+2. Create a Dynamic Action on the Global Page using a jQuery selector (`.openModalTrigger`).
+3. The Dynamic Action will trigger JavaScript to open the region as a modal when the list entry is clicked.
+
+This allows you to trigger the modal using a list entry from your navigation bar in Shared Components.

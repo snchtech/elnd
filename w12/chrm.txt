@@ -1,0 +1,48 @@
+To automatically change the default browser to Google Chrome for each user when they log on to a PC, you can create a script using a `.cmd` or `.bat` file that runs during logon. However, changing the default browser programmatically is not as straightforward due to security measures, especially on newer Windows versions. It generally involves modifying the Windows registry, which should be done with caution.
+
+Here’s an example of a `.cmd` file that attempts to set Google Chrome as the default browser using registry changes:
+
+### Example `SetDefaultBrowser.cmd`:
+
+```cmd
+@echo off
+REM Elevate script permissions
+if not "%1"=="ELEVATED" (
+  echo Running as administrator...
+  powershell -Command "Start-Process -FilePath '%0' -ArgumentList 'ELEVATED' -Verb RunAs"
+  exit /b
+)
+
+REM Set Google Chrome as the default browser in Windows 10/11
+REM Change the ProgId for .html files and HTTP/HTTPS protocols to ChromeHTML
+
+REM Modify registry for .html files
+REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+REM Modify registry for HTTP protocol
+REG ADD "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+REM Modify registry for HTTPS protocol
+REG ADD "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+echo Default browser set to Google Chrome for the current user.
+```
+
+### Steps to Use:
+
+1. **Create the Script**:
+   - Copy the above code into a text file and save it with a `.cmd` or `.bat` extension, e.g., `SetDefaultBrowser.cmd`.
+
+2. **Run the Script on Logon**:
+   - You can place this script in the **Startup** folder (`C:\Users\%USERNAME%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`) to make it run every time a user logs in.
+   - Alternatively, you can configure it to run using **Group Policy** or a **Logon Script** in Active Directory.
+
+3. **Ensure Chrome is Installed**:
+   - The script assumes that Google Chrome is installed and associated with `ChromeHTML`. You might need to modify the script if Chrome is installed in a non-standard location.
+
+### Important Considerations:
+
+- **Permissions**: The script needs administrator privileges to modify the registry. The `PowerShell` command in the script elevates the script to run as an administrator if needed.
+- **Windows Version**: The registry paths and methods might differ slightly between different versions of Windows (e.g., Windows 10 vs. 11).
+
+Let me know if you need further adjustments!

@@ -1,0 +1,67 @@
+To handle dynamic changes when you modify the `innerText` of the `div.card-item`, you can use a **MutationObserver** to listen for changes in the text content and enable/disable the link accordingly.
+
+Here’s how you can modify the code:
+
+### HTML:
+
+```html
+<a href="link1"><div class="card-item">0</div></a>
+<a href="link2"><div class="card-item">5</div></a>
+<a href="link3"><div class="card-item">1</div></a>
+<a href="link4"><div class="card-item">0</div></a>
+```
+
+### JavaScript:
+
+```javascript
+// Function to check and update link status based on card-item content
+function checkCardValue(link, cardItem) {
+    if (cardItem && (cardItem.innerText.trim() === '0' || cardItem.innerText.trim() === '')) {
+        // Disable the link by preventing the default behavior of the <a> tag
+        link.addEventListener('click', function(event) {
+            event.preventDefault();
+        });
+        // Set the cursor to default (unclickable)
+        link.style.cursor = 'default';
+    } else {
+        // Enable the link by removing the event listener
+        link.replaceWith(link.cloneNode(true)); // Removes previous click event
+        link.style.cursor = 'pointer'; // Set cursor back to pointer
+    }
+}
+
+// Initial check for card-item values
+document.querySelectorAll('a').forEach(function(link) {
+    const cardItem = link.querySelector('.card-item');
+    
+    checkCardValue(link, cardItem); // Initial check
+    
+    // Set up MutationObserver to detect changes in innerText
+    const observer = new MutationObserver(function(mutationsList) {
+        mutationsList.forEach(function(mutation) {
+            if (mutation.type === 'characterData' || mutation.type === 'childList') {
+                checkCardValue(link, cardItem); // Recheck when content changes
+            }
+        });
+    });
+
+    // Observe changes to the innerText of cardItem
+    observer.observe(cardItem, { characterData: true, childList: true, subtree: true });
+});
+```
+
+### Explanation:
+
+1. **checkCardValue Function**:
+   - This function enables or disables the link based on the content of the `.card-item`.
+   - If the content is `0` or empty, it prevents the link from being clicked and changes the cursor to `default`.
+   - If the content changes to something greater than `0`, the link is re-enabled, and the cursor is set back to `pointer`.
+
+2. **MutationObserver**:
+   - This observes changes in the content of the `.card-item` div.
+   - When the `innerText` of the `.card-item` changes (for example, when you dynamically set it via JavaScript), it re-checks the value and updates the link accordingly.
+
+3. **Event Listener Cleanup**:
+   - The event listener that disables the link is removed by replacing the link element with a clone (which removes any attached event listeners). This ensures that the link can be clicked again if the value changes to something greater than `0`.
+
+This way, whenever the `innerText` of the `.card-item` changes, the link's functionality will update immediately, making it clickable or unclickable as needed.

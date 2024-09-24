@@ -1,0 +1,59 @@
+To modify the default browser settings using only a `.cmd` or `.bat` file, without relying on PowerShell, you'll need to ensure that the script can be run with elevated permissions. Here's an example of how to write the script without PowerShell for Windows:
+
+### Example `SetDefaultBrowser.cmd` (without PowerShell):
+
+```cmd
+@echo off
+REM Check if running as administrator
+openfiles >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Please run this script as an administrator.
+    exit /b
+)
+
+REM Set Google Chrome as the default browser for .html, http, and https protocols
+
+REM Modify registry for .html files
+REG ADD "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+REM Modify registry for HTTP protocol
+REG ADD "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+REM Modify registry for HTTPS protocol
+REG ADD "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" /v ProgId /t REG_SZ /d ChromeHTML /f
+
+echo Default browser set to Google Chrome for the current user.
+```
+
+### Steps to Use:
+
+1. **Create the Script**:
+   - Copy the above code into a text file and save it with a `.cmd` or `.bat` extension, e.g., `SetDefaultBrowser.cmd`.
+
+2. **Run the Script as Administrator**:
+   - Right-click on the `.cmd` file and select **Run as Administrator** to ensure it has the necessary permissions to modify the registry.
+
+3. **Ensure Chrome is Installed**:
+   - This script assumes that Google Chrome is installed and its registry key is `ChromeHTML`. If Chrome is installed, this key should already exist.
+
+### Alternative: Setting the Script to Run at Logon
+
+If you want this script to run automatically for users when they log in, you can:
+
+1. **Add the Script to the Startup Folder**:
+   - Place the `.cmd` file in the user's **Startup** folder:
+     ```
+     C:\Users\%USERNAME%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+     ```
+   - This ensures the script will run every time the user logs in.
+
+2. **Using Group Policy** (for domain environments):
+   - You can configure the script to run at logon via **Group Policy** if you're in an Active Directory environment:
+     - Open `gpedit.msc` → **User Configuration** → **Windows Settings** → **Scripts (Logon/Logoff)**.
+     - Add the `.cmd` file to the **Logon** script section.
+
+### Important Notes:
+
+- **Administrator Permissions**: This script will need administrator permissions to modify registry settings. It won’t work if it’s not run with elevated privileges.
+- **Windows Version**: This approach works for Windows 10 and Windows 11, but older versions might require different registry paths or approaches.
+- **Security**: Modifying user-level settings automatically can be sensitive in some environments, so ensure you have permission to do so in your organization.

@@ -1,0 +1,49 @@
+You can achieve this functionality with a combination of JavaScript and CSS. Here's how you can implement it:
+
+1. **JavaScript** will check the value inside the `div.card-item` elements and modify the behavior of the `<a>` tags accordingly.
+2. **CSS** will adjust the cursor style when the `div` value is `0` or empty.
+
+Here's an example of how to implement this:
+
+### HTML:
+
+```html
+<a href="link1"><div class="card-item">0</div></a>
+<a href="link2"><div class="card-item">5</div></a>
+<a href="link3"><div class="card-item">1</div></a>
+<a href="link4"><div class="card-item">0</div></a>
+```
+
+### CSS:
+
+```css
+.disabled {
+    pointer-events: none;  /* Disables the link */
+    cursor: default;       /* Changes cursor to default */
+}
+```
+
+### JavaScript:
+
+```javascript
+// Function to check each card item and disable link if value is 0 or empty
+document.querySelectorAll('a').forEach(function(link) {
+    const cardItem = link.querySelector('.card-item');
+    
+    if (cardItem && (cardItem.textContent.trim() === '0' || cardItem.textContent.trim() === '')) {
+        link.classList.add('disabled');  // Add 'disabled' class to the link
+    }
+});
+```
+
+### Explanation:
+
+1. **CSS**: 
+   - The `.disabled` class disables the link interaction using `pointer-events: none` and changes the cursor to `default`.
+
+2. **JavaScript**:
+   - It loops through all `<a>` tags.
+   - For each `<a>`, it checks the `.card-item` div inside.
+   - If the value of the `.card-item` div is `0` or empty, it adds the `.disabled` class to the `<a>` tag, preventing the link from being clickable and setting the cursor to default.
+
+This way, links with a `div.card-item` value of `0` or empty will no longer be clickable, and the cursor will be set to the default style.

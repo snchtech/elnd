@@ -1,0 +1,43 @@
+It seems like the approach using `DISM` and an XML file for changing default apps works primarily for provisioning systems or during the initial setup of Windows, rather than for changing the default browser on an existing system.
+
+Windows 10 and later restrict programmatic changes to default browser settings, requiring user interaction to confirm such changes. This means that, unfortunately, it is not possible to reliably change the default browser purely using scripts or command-line tools due to Windows' security and user-control mechanisms.
+
+However, there is an alternative method using **Google Chrome's automation** via a special command-line switch that can prompt users to set Chrome as the default browser, which does require user interaction.
+
+### Alternative: Chrome's Built-in Automation Prompt
+
+Google Chrome itself provides a command-line option to trigger the "Set as Default Browser" prompt when launched. This won't set it automatically but will encourage the user to set it as the default browser.
+
+You can create a `.cmd` script that launches Chrome with the `--make-default-browser` switch, which will display the UI prompt for setting it as the default:
+
+### Example `SetChromePrompt.cmd` Script:
+
+```cmd
+@echo off
+REM Launch Google Chrome with the "set as default browser" prompt
+
+echo Launching Google Chrome to set it as the default browser...
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --make-default-browser
+
+echo Chrome has been launched with the default browser prompt.
+exit /b
+```
+
+### Steps to Automate:
+
+1. **Create the `.cmd` Script**:
+   - Save the above code into a `.cmd` file, such as `SetChromePrompt.cmd`.
+
+2. **Add the Script to Run on Logon**:
+   - To make this script run when users log in, you can place it in their **Startup** folder:
+     ```
+     C:\Users\%USERNAME%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+     ```
+
+When users log in, Chrome will launch and prompt them with a dialog box asking if they want to set it as their default browser. This process still requires user confirmation, as Windows doesn't allow fully programmatic changes to the default browser due to security measures.
+
+### Key Points:
+- **User Interaction Required**: Unfortunately, due to Windows security, the user must confirm changing the default browser, even if Chrome is launched with the `--make-default-browser` option.
+- **Automate the Prompt**: You can at least automate the process of reminding the user to set Chrome as the default, but the final action requires their confirmation.
+
+Let me know if you need further assistance or have additional questions!

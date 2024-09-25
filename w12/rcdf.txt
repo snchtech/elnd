@@ -1,0 +1,11 @@
+@echo off
+REM Set default application associations using DISM and the XML file
+
+echo Setting Google Chrome as the default browser...
+
+REM Apply the XML associations for the current user
+dism /online /import-defaultappassociations:E:\defaultassociations.xml
+
+echo Default associations set successfully.
+
+exit /b

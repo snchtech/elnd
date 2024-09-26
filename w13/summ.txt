@@ -1,0 +1,39 @@
+Here’s a JavaScript function that sums the values from `.block1` and `.block2` as per your algorithm and sets them to the respective `.top_panel` div elements:
+
+```javascript
+function sumBlocks() {
+    // Parse values from block1 and block2
+    const block1_st1 = parseInt(document.querySelector('.block1 .st1').textContent);
+    const block1_st2 = parseInt(document.querySelector('.block1 .st2').textContent);
+    const block1_st3 = parseInt(document.querySelector('.block1 .st3').textContent);
+    
+    const block2_st1 = parseInt(document.querySelector('.block2 .st1').textContent);
+    const block2_st2 = parseInt(document.querySelector('.block2 .st2').textContent);
+    const block2_st3 = parseInt(document.querySelector('.block2 .st3').textContent);
+    const block2_st4 = parseInt(document.querySelector('.block2 .st4').textContent);
+    const block2_st5 = parseInt(document.querySelector('.block2 .st5').textContent);
+
+    // Sum values according to the algorithm
+    const sum_st1 = block1_st1 + block2_st1;
+    const sum_st2 = block1_st2 + block2_st2;
+    const sum_st3 = block1_st3 + block2_st3;
+    const sum_st4 = block2_st4; // st4 is only in block2
+    const sum_st5 = block2_st5; // st5 is only in block2
+
+    // Set the summed values to the top panel
+    document.querySelector('.summ_st1').textContent = sum_st1;
+    document.querySelector('.summ_st2').textContent = sum_st2;
+    document.querySelector('.summ_st3').textContent = sum_st3;
+    document.querySelector('.summ_st4').textContent = sum_st4;
+    document.querySelector('.summ_st5').textContent = sum_st5;
+}
+
+// Call the function when needed
+sumBlocks();
+```
+
+This function follows the steps you outlined:
+- Adds the `.st1`, `.st2`, and `.st3` values from both `.block1` and `.block2`.
+- Assigns the `.st4` and `.st5` values directly from `.block2` to the corresponding `.top_panel` divs.
+
+Make sure that your HTML is loaded before this script runs, or you can call the function in a `window.onload` or similar event handler.

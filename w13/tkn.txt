@@ -1,0 +1,58 @@
+To achieve this, you can follow these steps to call the PL/SQL function `generate_token` from JavaScript in Oracle APEX and pass the token value to the `get_connect_ws(token)` function. Here's how to implement it:
+
+### 1. **Create a PL/SQL Dynamic Action or Ajax Callback**
+In Oracle APEX, use Ajax to call a PL/SQL function and retrieve its result. Here's how to define an Ajax callback that returns the token.
+
+1. **Define the Ajax callback in Oracle APEX**:
+   Go to **Shared Components** → **Ajax Callbacks**, and create a new process with the following PL/SQL code:
+
+   ```sql
+   DECLARE
+       l_token VARCHAR2(4000);
+   BEGIN
+       -- Call your generate_token function
+       l_token := auth_pkg.generate_token;
+
+       -- Return the token as JSON to the JavaScript function
+       apex_json.open_object;
+       apex_json.write('token', l_token);
+       apex_json.close_object;
+   END;
+   ```
+
+   This will return the token as a JSON response to the JavaScript function.
+
+### 2. **Create a JavaScript Function to Call the Ajax Callback**
+Now, in your Oracle APEX page, use the following JavaScript code to call the Ajax process and retrieve the token. This function should execute your `get_connect_ws(token)` function only after receiving the token.
+
+```javascript
+function fetchTokenAndConnect() {
+    // Make an asynchronous call to the Ajax process to get the token
+    apex.server.process("FETCH_TOKEN", {
+        x01: null // If you need to pass additional parameters, you can use x01-x10.
+    }, {
+        success: function (pData) {
+            // Parse the token from the JSON response
+            var token = pData.token;
+
+            // Now call the get_connect_ws function with the token
+            get_connect_ws(token);
+        },
+        error: function (jqXHR, textStatus, errorThrown) {
+            console.error("Error fetching token: ", textStatus, errorThrown);
+        }
+    });
+}
+
+// Call the function when needed, e.g., on page load or button click
+fetchTokenAndConnect();
+```
+
+### 3. **Explanation**:
+- **`apex.server.process`**: This function is used to make an Ajax call to the Oracle APEX backend. In this case, it will call the `FETCH_TOKEN` Ajax process (the name you gave in Shared Components) to get the token.
+- **Callback Function (`success`)**: The success callback will receive the token in JSON format. It extracts the token and passes it to `get_connect_ws(token)`.
+
+### 4. **Call the JavaScript on Page Load or Event Trigger**
+You can trigger this `fetchTokenAndConnect` function either on page load or when a specific event occurs (like clicking a button). You can add this call to a **Dynamic Action** or execute it in the **Page's JavaScript** section under **Page Attributes** → **Function and Global Variable Declaration** or **Execute when Page Loads**.
+
+This approach allows you to fetch the token from your `generate_token` PL/SQL function in Oracle APEX and ensure that `get_connect_ws(token)` is only called after successfully receiving the token.

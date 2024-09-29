@@ -1,0 +1,109 @@
+If you want to avoid using an AJAX process to fetch the new token from the server, you can achieve this by directly calling a PL/SQL process to set the token value and then retrieve it in JavaScript. 
+
+Here's how you can implement it:
+
+### 1. Use a Hidden Item to Store the Token
+You can store the token in a hidden item (e.g., `P0_TOKEN`) on the page and use **PL/SQL** to directly set the value when needed. Then, you can access the token directly using JavaScript without making an AJAX call.
+
+### 2. Use Dynamic Actions to Generate the Token
+Instead of an AJAX call, use a **PL/SQL dynamic action** that will execute the token generation and store the token in the hidden page item.
+
+### Step-by-Step Implementation:
+
+#### 1. Create a PL/SQL Dynamic Action to Set the Token
+
+- Go to **Page Designer** in Oracle APEX.
+- Create a new **Dynamic Action** on the global page or the page where you need the WebSocket connection.
+- Set the **Event** to something like "Page Load" (or any other event, e.g., a button click).
+- Under **True Actions**, add a **PL/SQL Code** action.
+
+In the PL/SQL Code action, write the logic to generate the token and set it to the hidden item `P0_TOKEN`:
+
+```plsql
+:P0_TOKEN := auth_pkg.generate_token;  -- Use your actual token generation logic
+```
+
+- Ensure the token is set in the hidden item `P0_TOKEN`.
+
+#### 2. JavaScript to Connect to WebSocket After Token is Set
+
+Once the token is generated via the PL/SQL process in the hidden item `P0_TOKEN`, you can use JavaScript to retrieve the token and connect to the WebSocket.
+
+You can set up another dynamic action that triggers after the token has been set. Here's the JavaScript code that you would place in the **Execute JavaScript Code** action:
+
+```javascript
+function connectWebSocket() {
+    // Get the token from the hidden item
+    var token = apex.item("P0_TOKEN").getValue();
+
+    // Now use the token to connect to WebSocket
+    if (token) {
+        get_connect_ws(token);
+    } else {
+        console.error("No token available");
+    }
+}
+
+// WebSocket connection function
+function get_connect_ws(token) {
+    const ws = new WebSocket('wss://your_websocket_server_url');
+
+    ws.onopen = function() {
+        // Send the token to authenticate the WebSocket connection
+        ws.send(JSON.stringify({ token: token }));
+    };
+
+    ws.onmessage = function(event) {
+        // Handle incoming messages
+        console.log("Message from server: ", event.data);
+    };
+
+    ws.onclose = function() {
+        console.log("WebSocket closed. Attempting to reconnect...");
+
+        // Optionally, generate a new token and reconnect
+        apex.item("P0_TOKEN").setValue("");  // Clear token before reconnect
+        setTimeout(function() {
+            connectWebSocket();  // Re-fetch token and reconnect
+        }, 5000);  // Wait 5 seconds before attempting to reconnect
+    };
+
+    ws.onerror = function(error) {
+        console.error("WebSocket error: ", error);
+    };
+}
+
+// Trigger the WebSocket connection after token is set
+connectWebSocket();
+```
+
+### Explanation:
+
+1. **PL/SQL Dynamic Action**: This action will run a server-side process that sets the token value directly into the hidden item (`P0_TOKEN`). You don't need to use an AJAX process for this.
+  
+2. **JavaScript to Fetch the Token**: In JavaScript, you retrieve the token from the hidden item using `apex.item("P0_TOKEN").getValue()` and pass it to the `get_connect_ws()` function to establish a WebSocket connection.
+
+3. **Reconnect Logic**: If the WebSocket connection closes or an error occurs, you can clear the token, generate a new one, and reconnect using the `connectWebSocket()` function.
+
+### 3. Trigger Token Generation When Reconnecting
+
+To handle reconnections, you can trigger the same token generation dynamic action (using a JavaScript call) whenever the WebSocket closes or encounters an error. Here's an example:
+
+```javascript
+ws.onclose = function() {
+    console.log("WebSocket closed. Reconnecting...");
+
+    // Clear token before reconnect
+    apex.item("P0_TOKEN").setValue("");  
+
+    // Trigger the dynamic action to generate a new token (optional)
+    // You can do this by simulating a button click or other event
+    apex.event.trigger($("#your_element_id"), "click");
+
+    setTimeout(function() {
+        connectWebSocket();  // Reconnect with the new token
+    }, 5000);
+};
+```
+
+This setup allows you to avoid using an AJAX process while still generating and retrieving a new token each time you need to connect or reconnect to the WebSocket server.

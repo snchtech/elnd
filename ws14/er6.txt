@@ -1,0 +1,93 @@
+To ensure that the WebSocket connection (or any other action) starts only after `apex.event.trigger($("#your_element_id"), "click");` has fully executed (i.e., the dynamic action or event handler tied to this trigger has completed), you can achieve this by handling the execution flow with a combination of **custom events** or **callbacks**.
+
+Unfortunately, `apex.event.trigger()` does not inherently provide a built-in mechanism to notify when the triggered event finishes. However, you can work around this limitation by:
+
+1. Using a **custom event** that will signal when the dynamic action has completed.
+2. Listening for that custom event and then starting your WebSocket connection logic.
+
+### Steps to Implement:
+
+1. **Trigger Custom Event at the End of the Dynamic Action**: In your dynamic action (the one triggered by the `click` event), you can add a final JavaScript action to fire a custom event, indicating that the dynamic action has completed.
+
+2. **Listen for the Custom Event**: In your JavaScript, listen for this custom event and then proceed with the WebSocket connection.
+
+### Example Implementation:
+
+#### Step 1: Modify the Dynamic Action to Fire a Custom Event
+
+At the end of your dynamic action (after the token has been generated via PL/SQL), add a **JavaScript** action that triggers a custom event. Here's an example of the JavaScript code that you can add:
+
+```javascript
+// Fire a custom event when the dynamic action has finished
+$(document).trigger("tokenGenerated");
+```
+
+#### Step 2: Listen for the Custom Event in Your JavaScript
+
+In your main JavaScript code where you want to connect to the WebSocket, listen for the custom event (`tokenGenerated`). Once this event is fired, proceed with the WebSocket connection logic.
+
+```javascript
+function connectWebSocket() {
+    // Listen for the custom event "tokenGenerated"
+    $(document).on("tokenGenerated", function() {
+        // Get the token from the hidden item
+        var token = apex.item("P0_TOKEN").getValue();
+
+        if (token) {
+            // Now use the token to connect to WebSocket
+            get_connect_ws(token);
+        } else {
+            console.error("No token available");
+        }
+    });
+
+    // Trigger the dynamic action to generate a new token
+    apex.event.trigger($("#your_element_id"), "click");
+}
+
+// WebSocket connection function
+function get_connect_ws(token) {
+    const ws = new WebSocket('wss://your_websocket_server_url');
+
+    ws.onopen = function() {
+        // Send the token to authenticate the WebSocket connection
+        ws.send(JSON.stringify({ token: token }));
+    };
+
+    ws.onmessage = function(event) {
+        // Handle incoming messages
+        console.log("Message from server: ", event.data);
+    };
+
+    ws.onclose = function() {
+        console.log("WebSocket closed. Attempting to reconnect...");
+
+        // Clear token before reconnect
+        apex.item("P0_TOKEN").setValue("");  
+
+        setTimeout(function() {
+            connectWebSocket();  // Reconnect after triggering token generation
+        }, 5000);  // Wait 5 seconds before attempting to reconnect
+    };
+
+    ws.onerror = function(error) {
+        console.error("WebSocket error: ", error);
+    };
+}
+```
+
+### Explanation:
+
+1. **Custom Event (`tokenGenerated`)**: This event is fired when the dynamic action that generates the token completes. The event is fired using `$(document).trigger("tokenGenerated")`.
+
+2. **Event Listener**: The code listens for the `tokenGenerated` event using `$(document).on("tokenGenerated", function() { ... })`. Once this event is captured, it retrieves the token from the hidden item (`P0_TOKEN`) and then proceeds to establish the WebSocket connection.
+
+3. **Dynamic Action Trigger**: The WebSocket connection process will only begin after the dynamic action tied to the click event (triggered via `apex.event.trigger($("#your_element_id"), "click");`) finishes execution.
+
+4. **Reconnect Logic**: If the WebSocket connection closes or an error occurs, it triggers the same process again, ensuring a new token is fetched before reconnecting.
+
+### Benefits:
+- This approach ensures that you wait until the token is generated before starting the WebSocket connection.
+- The `tokenGenerated` custom event allows you to maintain control over the flow and execution order. 
+
+This will guarantee that your WebSocket connection uses a fresh token every time, without initiating the connection until the token has been successfully generated.

@@ -1,0 +1,64 @@
+To add a `+` symbol in front of values greater than 0 and avoid adding it for values that are 0 or empty inside `div` elements with the class `card-item`, you can achieve this using JavaScript after the region refresh completes.
+
+Here's how you can implement this:
+
+### Steps:
+
+1. **Wait for the Region Refresh to Complete**: After the region is refreshed, use the `apexafterrefresh` event to trigger a custom JavaScript function.
+
+2. **Modify the `card-item` Values**: After the refresh, loop through each `div` with the class `card-item` and check the value inside it. If the value is greater than 0, prepend a `+` to the value. If the value is 0 or empty, leave it unchanged.
+
+### Example JavaScript Code:
+
+```javascript
+// Disable loading indicator for the region
+apex.region("regionStaticData").loadingIndicator.off();
+
+// Trigger the region refresh
+apex.region("regionStaticData").refresh();
+
+// When the region refresh completes
+apex.region("regionStaticData").on("apexafterrefresh", function() {
+    
+    // Re-enable the loading indicator for future use (optional)
+    apex.region("regionStaticData").loadingIndicator.on();
+    
+    // Get all divs with the class 'card-item'
+    document.querySelectorAll("#regionStaticData .card-item").forEach(function(cardItem) {
+        // Get the current value inside the div (trim any spaces)
+        let value = cardItem.textContent.trim();
+        
+        // Check if the value is a number and greater than 0
+        if (!isNaN(value) && parseFloat(value) > 0) {
+            // Add a '+' in front of the value if it's greater than 0
+            cardItem.textContent = "+" + value;
+        } else if (value == "0" || value === "") {
+            // If the value is 0 or empty, do nothing
+            cardItem.textContent = value;
+        }
+    });
+});
+```
+
+### How This Works:
+
+1. **Query for Elements with Class `card-item`**: After the region is refreshed, we use `document.querySelectorAll()` to select all the `div` elements with the class `card-item` within the refreshed region (`#regionStaticData`).
+
+2. **Loop Through Each `card-item`**: We loop through each `div` and retrieve the text content of each element using `cardItem.textContent`.
+
+3. **Check the Value**:
+   - If the value is a number and greater than 0, we prepend a `+` to the value.
+   - If the value is `0` or empty, we leave it unchanged.
+
+4. **Update the Text Content**: The `cardItem.textContent` is updated with the modified value.
+
+### When This Code Runs:
+
+- This code is triggered after the region refresh is completed via the `apexafterrefresh` event.
+- It modifies the values only for elements within the refreshed region and doesn't interfere with other elements on the page.
+
+### Where to Place This Code:
+
+- You can place this code in the **Execute JavaScript Code** section of a dynamic action or within the **Function and Global Variable Declaration** section on the global page if you want it to apply globally.
+
+This will dynamically add a `+` to all values greater than 0 after the region is refreshed, without affecting values that are 0 or empty.

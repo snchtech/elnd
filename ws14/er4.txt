@@ -1,0 +1,92 @@
+To implement the functionality of obtaining a new token every time you connect or reconnect to the WebSocket server (since the token is valid for only 60 seconds), you can follow this approach:
+
+### Steps:
+
+1. **Create a PL/SQL Process to Generate a Token**:
+   If you haven't already, create a process in Oracle APEX that generates a new token and stores it in the hidden page item.
+
+2. **Use JavaScript to Fetch the New Token**:
+   Each time you want to establish or re-establish a WebSocket connection, use an AJAX callback to fetch the new token from the server.
+
+3. **Pass the Token to the WebSocket Connection Function**:
+   After fetching the token, pass it to your JavaScript WebSocket connection function.
+
+### Step-by-Step Implementation:
+
+#### 1. PL/SQL Process to Generate Token
+Create a PL/SQL process that generates a new token. You can place this process in a **before header** or **on-demand** process in APEX. For example:
+
+```plsql
+BEGIN
+   -- Generate the token using your logic, e.g., auth_pkg.generate_token()
+   :P0_TOKEN := auth_pkg.generate_token;
+END;
+```
+
+This process should be linked to your hidden item `P0_TOKEN` (assuming the hidden item is named `P0_TOKEN`).
+
+#### 2. JavaScript to Fetch the New Token
+Set up an AJAX process to call the PL/SQL process and get the new token. Here's an example of the JavaScript code to fetch the token and connect to the WebSocket server.
+
+```javascript
+function getNewTokenAndConnect() {
+    // AJAX call to fetch the new token
+    apex.server.process("GET_NEW_TOKEN", {
+        pageItems: "#P0_TOKEN"
+    }, {
+        success: function(data) {
+            // On success, the token is now in P0_TOKEN
+            var token = apex.item("P0_TOKEN").getValue();
+            
+            // Call the WebSocket connection function and pass the token
+            get_connect_ws(token);
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.log("Error fetching token: " + textStatus);
+        }
+    });
+}
+
+// WebSocket connection function
+function get_connect_ws(token) {
+    // WebSocket connection logic with the token
+    const ws = new WebSocket('wss://your_websocket_server_url');
+
+    ws.onopen = function() {
+        // Send the token to authenticate the WebSocket connection
+        ws.send(JSON.stringify({ token: token }));
+    };
+
+    ws.onmessage = function(event) {
+        // Handle incoming messages
+        console.log("Message from server: ", event.data);
+    };
+
+    ws.onclose = function() {
+        console.log("WebSocket closed. Attempting to reconnect...");
+        
+        // Try reconnecting after a delay
+        setTimeout(function() {
+            getNewTokenAndConnect(); // Re-fetch token and reconnect
+        }, 5000); // Wait 5 seconds before attempting to reconnect
+    };
+
+    ws.onerror = function(error) {
+        console.error("WebSocket error: ", error);
+    };
+}
+```
+
+### Explanation:
+
+- **`apex.server.process()`**: This AJAX call sends a request to the PL/SQL process to generate a new token. The response is stored in the hidden item (`P0_TOKEN`), and you can retrieve the value using `apex.item("P0_TOKEN").getValue()`.
+- **`getNewTokenAndConnect()`**: This function fetches the new token and passes it to the `get_connect_ws()` function, which establishes the WebSocket connection.
+- **WebSocket Connection**: In the `get_connect_ws(token)` function, the token is sent to the WebSocket server for authentication. The connection can be re-established if it closes by calling `getNewTokenAndConnect()` again after a delay (e.g., 5 seconds).
+
+### How to Trigger the Token Fetch and WebSocket Connection
+
+- **Initial Connection**: Call `getNewTokenAndConnect()` on page load or when you need to establish the WebSocket connection for the first time.
+  
+- **Reconnect Logic**: If the WebSocket connection closes (e.g., due to the token expiring), the `onclose` event handler automatically tries to reconnect by calling `getNewTokenAndConnect()`.
+
+This setup ensures that you always get a fresh token before connecting or reconnecting to the WebSocket server, and it handles reconnections gracefully.

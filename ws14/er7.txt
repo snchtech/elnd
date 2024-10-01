@@ -1,0 +1,25 @@
+DECLARE
+  l_token VARCHAR2(4000);
+BEGIN
+  -- Logic to generate the token
+  l_token := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+
+  -- Manually create a JSON object and return it
+  htp.p('{"token": "' || l_token || '"}');
+END;
+
+
+
+apex.server.process('TOKEN_VALUE', {}, {
+  success: function(response) {
+    // Parse the response string as a JSON object
+    var parsedResponse = JSON.parse(response);
+    var token = parsedResponse.token;
+    console.log(token);  // This will log your token correctly
+    // Use the token in your WebSocket connection
+    //get_connect_ws(token);
+  },
+  error: function(jqXHR, textStatus, errorThrown) {
+    console.log('Error: ' + textStatus + ', ' + errorThrown);
+  }
+});

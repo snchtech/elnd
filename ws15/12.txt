@@ -1,0 +1,73 @@
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+  const result = [];
+
+  // Step 1: Loop through the data and collect items with matching filters
+  data.forEach(el => {
+    // Skip already processed SOURCE_IDs
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      return;
+    }
+
+    let matches = true;
+
+    // Apply position filter if provided
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+    }
+
+    // Apply department filter if provided
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+    }
+
+    // Apply unit filter if provided
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+    }
+
+    // If the current item matches, add only the matching items with the same SOURCE_ID
+    if (matches) {
+      data.forEach(item => {
+        // Apply the same filter logic for other items with the same SOURCE_ID
+        if (item.SOURCE_ID === el.SOURCE_ID) {
+          let itemMatches = true;
+
+          if (position !== null && position !== undefined) {
+            itemMatches = itemMatches && item.POSITION_ID === position;
+          }
+
+          if (department !== null && department !== undefined) {
+            itemMatches = itemMatches && item.DEPARTMENT_ID === department;
+          }
+
+          if (unit !== null && unit !== undefined) {
+            itemMatches = itemMatches && item.U_ID === unit;
+          }
+
+          if (itemMatches) {
+            result.push(item);
+          }
+        }
+      });
+      // Mark the SOURCE_ID as processed
+      uniqueSourceIDs.add(el.SOURCE_ID);
+    }
+  });
+
+  return result;
+}
+
+// Test the function
+const data = [
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: null, U_ID: 1 },
+  { SOURCE_ID: 681, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 2 },
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1200, U_ID: 1 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 1 },
+];
+
+// Example usage
+const filteredData = filterData(data, null, 1200, 1);
+console.log(filteredData);

@@ -1,0 +1,92 @@
+I see the issue. The problem arises because, once any item with a matching `SOURCE_ID` is found, all items with that `SOURCE_ID` are being added to the result, even if they don’t meet the filter criteria.
+
+To fix this, we need to ensure that only the matching items (and not all items with the same `SOURCE_ID`) are included. Here’s the corrected version of the function:
+
+```javascript
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+  const result = [];
+
+  // Step 1: Loop through the data and collect items with matching filters
+  data.forEach(el => {
+    // Skip already processed SOURCE_IDs
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      return;
+    }
+
+    let matches = true;
+
+    // Apply position filter if provided
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+    }
+
+    // Apply department filter if provided
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+    }
+
+    // Apply unit filter if provided
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+    }
+
+    // If the current item matches, add only the matching items with the same SOURCE_ID
+    if (matches) {
+      data.forEach(item => {
+        // Apply the same filter logic for other items with the same SOURCE_ID
+        if (item.SOURCE_ID === el.SOURCE_ID) {
+          let itemMatches = true;
+
+          if (position !== null && position !== undefined) {
+            itemMatches = itemMatches && item.POSITION_ID === position;
+          }
+
+          if (department !== null && department !== undefined) {
+            itemMatches = itemMatches && item.DEPARTMENT_ID === department;
+          }
+
+          if (unit !== null && unit !== undefined) {
+            itemMatches = itemMatches && item.U_ID === unit;
+          }
+
+          if (itemMatches) {
+            result.push(item);
+          }
+        }
+      });
+      // Mark the SOURCE_ID as processed
+      uniqueSourceIDs.add(el.SOURCE_ID);
+    }
+  });
+
+  return result;
+}
+
+// Test the function
+const data = [
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: null, U_ID: 1 },
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 681, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 2 },
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1100, U_ID: 1 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2 },
+];
+
+// Example usage
+const filteredData = filterData(data, null, 1100, null);
+console.log(filteredData);
+```
+
+### Explanation of changes:
+- **Reapply the filters**: After detecting that one item matches the filter criteria, the function applies the same filter logic to other items with the same `SOURCE_ID`. This ensures that only the matching items are added to the result.
+  
+### Expected output for `filterData(data, null, 1100, null)`:
+```javascript
+[
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 681, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 2 },
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1100, U_ID: 1 }
+]
+```
+
+Now, the entry `{ SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: null, U_ID: 1 }` is correctly excluded from the result because it doesn't meet the filter criteria (`DEPARTMENT_ID: 1100`).

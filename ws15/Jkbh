@@ -1,0 +1,86 @@
+To maintain the inner loop for checking all data items while ensuring that only one row per unique `SOURCE_ID` is included in the result, you can modify the logic slightly. The idea is to check all items but only push the first matching item with a unique `SOURCE_ID` to the result. Here's how you can do it:
+
+```javascript
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+  const result = [];
+
+  // Step 1: Loop through the data
+  data.forEach(el => {
+    // Skip if the SOURCE_ID is already processed
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      return;
+    }
+
+    // Apply the filters
+    let matches = true;
+
+    // Apply position filter if provided
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+    }
+
+    // Apply department filter if provided
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+    }
+
+    // Apply unit filter if provided
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+    }
+
+    // If the current item matches, check all items with the same SOURCE_ID
+    if (matches) {
+      // Check for other items with the same SOURCE_ID
+      const sameSourceIDItems = data.filter(item => item.SOURCE_ID === el.SOURCE_ID);
+
+      // Find the first matching item among the same SOURCE_ID items
+      for (const item of sameSourceIDItems) {
+        let itemMatches = true;
+
+        if (position !== null && position !== undefined) {
+          itemMatches = itemMatches && item.POSITION_ID === position;
+        }
+
+        if (department !== null && department !== undefined) {
+          itemMatches = itemMatches && item.DEPARTMENT_ID === department;
+        }
+
+        if (unit !== null && unit !== undefined) {
+          itemMatches = itemMatches && item.U_ID === unit;
+        }
+
+        // If a matching item is found, push it and mark SOURCE_ID as processed
+        if (itemMatches) {
+          result.push(item);
+          uniqueSourceIDs.add(item.SOURCE_ID);
+          break; // Stop after adding the first match
+        }
+      }
+    }
+  });
+
+  return result;
+}
+
+// Test the function
+const data = [
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null },
+  { SOURCE_ID: 681, POSITION_ID: null, DEPARTMENT_ID: null, U_ID: 1 },
+  { SOURCE_ID: 681, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 2 },
+  { SOURCE_ID: 100, POSITION_ID: 854, DEPARTMENT_ID: 1200, U_ID: 1 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2 },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 1 },
+];
+
+// Example usage
+const filteredData = filterData(data, null, 1200, 1);
+console.log(filteredData);
+```
+
+### Key Adjustments:
+1. **Inner Loop with Filter**: The inner logic now uses `filter` to gather all items with the same `SOURCE_ID`.
+2. **Break After First Match**: After finding and adding the first matching item to the result, it breaks out of the inner loop to ensure that only one item per unique `SOURCE_ID` is included.
+  
+This way, you can check all data items while ensuring that only one representative per `SOURCE_ID` is returned.

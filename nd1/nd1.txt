@@ -1,0 +1,58 @@
+To achieve this functionality in your Oracle APEX interactive report, you can use a computed column in SQL that dynamically calculates the "status" based on the current time (`SYSDATE`) and the shift intervals. Here's how you can approach it:
+
+1. **Define the Shift Time Intervals**:
+   You have three shifts:
+   - Shift 1: 07:00 - 15:00
+   - Shift 2: 15:00 - 23:00
+   - Shift 3: 23:00 - 07:00
+
+   Based on `SYSDATE`, you will check whether `start_done` or `end_done` is null and if the `start_date` or `end_date` falls within the current shift.
+
+2. **Create a CASE Statement**:
+   You can use a `CASE` statement in your SQL query to create a computed column for "status."
+
+Here's an example SQL query that you can integrate into your interactive report:
+
+```sql
+SELECT id, name, department, start_date, start_done, end_date, end_done,
+  CASE
+    WHEN start_done IS NULL 
+      AND TO_CHAR(start_date, 'HH24:MI') BETWEEN 
+          CASE 
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN '07:00'
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN '15:00'
+            ELSE '23:00'
+          END 
+          AND 
+          CASE 
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN '15:00'
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN '23:00'
+            ELSE '07:00'
+          END THEN 1
+    WHEN end_done IS NULL 
+      AND TO_CHAR(end_date, 'HH24:MI') BETWEEN 
+          CASE 
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN '07:00'
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN '15:00'
+            ELSE '23:00'
+          END 
+          AND 
+          CASE 
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN '15:00'
+            WHEN TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN '23:00'
+            ELSE '07:00'
+          END THEN 2
+    ELSE 0
+  END AS status
+FROM your_table;
+```
+
+### Explanation:
+- **Shift Identification**: Based on `SYSDATE`, the query identifies which shift the current time falls into. 
+- **Start and End Date Comparison**: The `TO_CHAR` function converts the times to 'HH24:MI' format, which allows for the comparison of the `start_date` and `end_date` with the current shift interval.
+- **Status Assignment**:
+  - If `start_done` is null and `start_date` falls within the current shift, `status` is set to `1`.
+  - If `end_done` is null and `end_date` falls within the current shift, `status` is set to `2`.
+  - Otherwise, `status` is set to `0`.
+
+You can now add this computed column to your Oracle APEX interactive report to reflect the shift-based statuses in real time.

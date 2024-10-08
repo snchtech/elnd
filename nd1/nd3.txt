@@ -1,0 +1,69 @@
+When you use JavaScript to apply row colors in Oracle APEX, there might be a slight flicker (blink effect) when the page loads, especially if the data is loaded asynchronously. This is because the JavaScript is applied after the page and data have been rendered, leading to a brief moment where the default styles are visible before the custom row colors are applied.
+
+To avoid or reduce this flickering, you can use CSS and APEX's native features to handle row styling without needing to rely on JavaScript for applying classes. Here’s an alternate approach using APEX's "Row Highlighting" feature directly in the Interactive Report or using inline CSS logic in the SQL query:
+
+### Method 1: Use APEX Interactive Report Row Highlighting (CSS-based approach)
+
+1. **Modify Your SQL Query**:
+   You can conditionally output CSS classes for each row directly within your SQL query. Add a "row_class" column to your query that determines the CSS class based on the `status`.
+
+   Example SQL Query:
+   ```sql
+   SELECT id, name, department, start_date, start_done, end_date, end_done,
+          CASE
+            WHEN start_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN 1
+            WHEN end_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN 2
+            ELSE 0
+          END AS status,
+          CASE
+            WHEN start_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN 'status-green'
+            WHEN end_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN 'status-red'
+            ELSE ''
+          END AS row_class
+   FROM your_table;
+   ```
+
+2. **Set the CSS Class Dynamically**:
+   In APEX, you can use the `row_class` column to assign a class to each row.
+
+   - Go to your Interactive Report’s **Attributes** section.
+   - Under **Appearance**, find the **Advanced** section.
+   - In the **HTML Expression** field for the row, use the following:
+
+     ```html
+     <tr class="#ROW_CLASS#">
+     ```
+
+   This will dynamically apply the CSS class based on the value of the `row_class` column.
+
+3. **Define the CSS Classes**:
+   Add the necessary CSS classes to style the rows.
+
+   - Go to **Page Designer**.
+   - Under the **CSS** section (or inline CSS), add the following:
+
+     ```css
+     .status-green {
+       background-color: lightgreen !important;
+     }
+
+     .status-red {
+       background-color: lightcoral !important;
+     }
+     ```
+
+### Method 2: Use APEX Interactive Report Row Template (Native)
+
+1. **Go to the Interactive Report**:
+   - In **Attributes**, navigate to **Highlight**.
+   - You can define highlight rules based on the value of the `status` column.
+
+2. **Define Highlight Rules**:
+   - Add new highlight rules where you can set the conditions to check the `status` values:
+     - If `status = 1`, set a rule to highlight the row with a green background.
+     - If `status = 2`, set a rule to highlight the row with a red background.
+
+3. **Save and Run**:
+   APEX will natively handle the row styling based on the conditions without needing JavaScript, which eliminates the risk of flickering.
+
+By using these methods, the row colors will be applied natively during page rendering, preventing any blink or flicker that may occur due to post-render JavaScript manipulations. This will create a smoother experience for the user.

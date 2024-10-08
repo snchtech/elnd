@@ -1,0 +1,73 @@
+In Oracle APEX, you can dynamically set row classes based on the value of a column (in your case, the `status` column) using the "Advanced" features of the Interactive Report.
+
+Here’s how you can set different row colors based on the `status` column in your interactive report:
+
+### Steps:
+
+1. **Modify the SQL Query**:
+   Ensure your `status` column is part of the query, as demonstrated in the previous step.
+
+   Example SQL Query:
+   ```sql
+   SELECT id, name, department, start_date, start_done, end_date, end_done,
+          CASE
+            WHEN start_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '07:00' AND '15:00' THEN 1
+            WHEN end_done IS NULL AND TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '15:00' AND '23:00' THEN 2
+            ELSE 0
+          END AS status
+   FROM your_table;
+   ```
+
+2. **Add a Static ID to the Interactive Report**:
+   - Navigate to your **Interactive Report** region settings.
+   - Under the **Advanced** section, find the **Static ID** field and give it a unique name, for example, `my_report`.
+
+3. **Add Dynamic Row Classes via JavaScript**:
+   - Go to **Page Designer** for your Interactive Report page.
+   - Under the **Page Attributes** section, find the **Function and Global Variable Declaration** or **Execute when Page Loads**.
+   - Add the following JavaScript code to dynamically apply a CSS class based on the `status` value:
+
+   ```javascript
+   $(document).ready(function() {
+     $('#my_report .a-IRR-table tbody tr').each(function() {
+       var status = $(this).find('td[headers="STATUS"]').text();
+       
+       // Apply class based on status value
+       if (status == '1') {
+         $(this).addClass('status-green');
+       } else if (status == '2') {
+         $(this).addClass('status-red');
+       }
+     });
+   });
+   ```
+
+   - Make sure the `headers="STATUS"` in the code matches the column header for the `status` column in your report.
+
+4. **Add Custom CSS for Row Colors**:
+   You can now define custom CSS classes for your row colors.
+   
+   - Go to **Page Designer**.
+   - Under the **CSS** section (or inline CSS), add the following styles:
+
+   ```css
+   .status-green {
+     background-color: lightgreen;
+   }
+   
+   .status-red {
+     background-color: lightcoral;
+   }
+   ```
+
+5. **Save and Run the Page**:
+   - Now, when you run your APEX page, the rows in your Interactive Report will be colored based on the `status` value:
+     - Rows with `status = 1` will have a green background.
+     - Rows with `status = 2` will have a red background.
+     - Rows with `status = 0` will remain with no special styling.
+
+### Notes:
+- Ensure the `Static ID` in the JavaScript matches the Static ID you set for the Interactive Report region.
+- You can adjust the background colors in the CSS to suit your needs.
+
+This method will dynamically change the row's background color based on the status column.

@@ -1,0 +1,15 @@
+SELECT *
+FROM stages s
+WHERE signedby IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM stages s2
+    WHERE s2.stages_id = s.stages_id
+      AND s2.signedby IS NOT NULL
+)
+AND (stages, stages_parent) = (
+    SELECT MIN(stages), MIN(stages_parent)
+    FROM stages s3
+    WHERE s3.stages_id = s.stages_id
+      AND s3.signedby IS NULL
+);

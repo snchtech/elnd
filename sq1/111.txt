@@ -1,0 +1,23 @@
+WITH RankedData AS (
+  SELECT
+    record_id,
+    position,
+    depart,
+    u_id,
+    stage,
+    parent_stage,
+    ROW_NUMBER() OVER (PARTITION BY record_id ORDER BY parent_stage, stage) AS rn
+  FROM
+    TEST_ROWNUM
+)
+SELECT
+  record_id,
+  position,
+  depart,
+  u_id,
+  stage,
+  parent_stage
+FROM
+  RankedData
+WHERE
+  rn = 1;

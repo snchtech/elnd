@@ -1,0 +1,54 @@
+You can achieve this using a combination of CSS and custom APEX attributes to apply the styling without JavaScript. Here's a step-by-step approach:
+
+1. **Identify the Column in the Report**: Ensure you know the column IDs or classes of the `status` and `class_color` columns in the interactive report.
+
+2. **Set Static IDs or Classes for Target Columns**: In the APEX Interactive Report, go to the `Attributes` section and assign static IDs or classes to your `status` column.
+
+3. **Add CSS Classes for Each Status Value**: Add CSS rules to your application's inline CSS or a custom CSS file. The CSS should target the specific classes based on your column values.
+
+### Step-by-Step Guide:
+
+1. **Set Column Attributes in APEX**:
+   - Assign a class or static ID to the `status` column using the "CSS Classes" property in the "Column" section of your Interactive Report. For example, set the class as `status-cell`.
+
+2. **Add CSS in APEX**:
+   Go to **Shared Components** → **Themes** → **CSS** → **Add Inline CSS** (or use a custom CSS file). Then, add the following CSS code:
+
+   ```css
+   /* Assuming you assigned a class 'status-cell' to the status column cells */
+
+   /* Color for status value 0 */
+   td.status-cell:contains("0") {
+       background-color: red;
+   }
+
+   /* Color for status value 3 */
+   td.status-cell:contains("3") {
+       background-color: green;
+   }
+
+   /* Color for status value 4 */
+   td.status-cell:contains("4") {
+       background-color: blue;
+   }
+   ```
+
+   This CSS targets the `td` elements of the cells in the `status` column and applies different background colors based on the cell's content.
+
+3. **Apply Conditional Formatting in SQL Query** *(Optional)*:
+   If you want to dynamically assign classes to your cells in SQL, you can add a case expression in your SQL query:
+
+   ```sql
+   SELECT class_color,
+          status,
+          CASE 
+            WHEN status = 0 THEN 'status-red'
+            WHEN status = 3 THEN 'status-green'
+            WHEN status = 4 THEN 'status-blue'
+          END AS status_class
+   FROM your_table;
+   ```
+
+   Then in your report attributes, assign the `#COLUMN_ALIAS#` class to the cells in the column.
+
+This method will apply the color styles automatically, and you avoid the delay or blindness issues associated with JavaScript rendering.

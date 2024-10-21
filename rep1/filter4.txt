@@ -1,0 +1,52 @@
+Yes, using the described technique for filtering, you can apply filters step-by-step, such that each filter builds on the previous one. This approach will allow you to filter progressively, like setting a unit first and then filtering the results further by date ranges.
+
+Here’s how it works step-by-step:
+
+### Step-by-Step Filtering Example:
+
+1. **Set Initial Filter by Unit**:
+   - Suppose you first set the `P1_UNIT` value to `1`. The Interactive Report query will filter the results based on this unit. The SQL query would include a filter condition like this:
+   
+   ```sql
+   SELECT * 
+   FROM YOUR_VIEW
+   WHERE (:P1_UNIT IS NULL OR unit_id = :P1_UNIT)
+     AND (:P1_PLANING_START IS NULL OR planing_start >= TO_DATE(:P1_PLANING_START, 'YYYY-MM-DD HH24:MI:SS'))
+     AND (:P1_PLANING_END IS NULL OR planing_end <= TO_DATE(:P1_PLANING_END, 'YYYY-MM-DD HH24:MI:SS'))
+     AND (:P1_FACT_START IS NULL OR fact_start >= TO_DATE(:P1_FACT_START, 'YYYY-MM-DD HH24:MI:SS'))
+     AND (:P1_FACT_END IS NULL OR fact_end <= TO_DATE(:P1_FACT_END, 'YYYY-MM-DD HH24:MI:SS'));
+   ```
+
+   In this query, if `P1_UNIT` is set to `1`, only records with `unit_id = 1` will be shown initially. 
+
+2. **Add Date Filters Step-by-Step**:
+   After setting the unit filter, you can proceed to set date filters using the date picker items (`P1_PLANING_START`, `P1_PLANING_END`, `P1_FACT_START`, and `P1_FACT_END`). As you set these date filters, the Interactive Report will update automatically due to the **Dynamic Actions** attached to these date picker items.
+
+   - For example, if you then set `P1_FACT_START` to a specific date, the report will filter for all records from `fact_start` greater than or equal to that date and still respect the previously set unit filter (`unit_id = 1`).
+
+### Benefits of Step-by-Step Filtering:
+
+1. **Interactive Refinement**: Users can progressively refine the report by applying filters one-by-one. For instance, they can first filter by unit, then by date range, and so on.
+2. **Dynamic Refresh**: By using Dynamic Actions on change events for each filter item, the Interactive Report updates automatically without needing to reload the entire page.
+3. **Compound Filtering**: Each additional filter condition narrows down the dataset further based on previously applied filters.
+
+### Recommendations for a Smooth Experience:
+
+- **Order the Filters Logically**: Arrange the filter items in the sidebar in a logical order that reflects how users are likely to filter data (e.g., start with unit and department filters, then add date filters).
+- **Use Conditional Display**: If needed, you can display date filters conditionally based on whether a unit is selected, improving the user experience.
+
+### Example of the Complete SQL Query:
+Your SQL query might look like this to accommodate all filters step-by-step:
+
+```sql
+SELECT * 
+FROM YOUR_VIEW
+WHERE (:P1_UNIT IS NULL OR unit_id = :P1_UNIT)
+  AND (:P1_DEPARTMENT IS NULL OR department_id = :P1_DEPARTMENT)
+  AND (:P1_PLANING_START IS NULL OR planing_start >= TO_DATE(:P1_PLANING_START, 'YYYY-MM-DD HH24:MI:SS'))
+  AND (:P1_PLANING_END IS NULL OR planing_end <= TO_DATE(:P1_PLANING_END, 'YYYY-MM-DD HH24:MI:SS'))
+  AND (:P1_FACT_START IS NULL OR fact_start >= TO_DATE(:P1_FACT_START, 'YYYY-MM-DD HH24:MI:SS'))
+  AND (:P1_FACT_END IS NULL OR fact_end <= TO_DATE(:P1_FACT_END, 'YYYY-MM-DD HH24:MI:SS'));
+```
+
+With this approach, filtering step-by-step becomes seamless and efficient, allowing users to gradually narrow down the results.

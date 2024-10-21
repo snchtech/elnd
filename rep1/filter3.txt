@@ -1,0 +1,59 @@
+You can achieve this filtering using Oracle APEX date pickers and dynamic SQL filtering in your Interactive Report. Here’s the step-by-step approach to implement it:
+
+### Step-by-Step Guide:
+
+1. **Create the Date Picker Items for Custom Filtering**:
+   - Go to your Oracle APEX page and add four **Date Picker** items:
+     - **P1_PLANING_START** (to filter records with `planing_start`).
+     - **P1_PLANING_END** (to filter records with `planing_end`).
+     - **P1_FACT_START** (to filter records with `fact_start`).
+     - **P1_FACT_END** (to filter records with `fact_end`).
+
+2. **Modify the SQL Query of the Interactive Report**:
+   Update your SQL query to filter based on these date pickers. Here’s an example SQL query that handles filtering with the date pickers:
+
+   ```sql
+   SELECT *
+   FROM YOUR_VIEW
+   WHERE 
+       (:P1_PLANING_START IS NULL OR planing_start >= TO_DATE(:P1_PLANING_START, 'YYYY-MM-DD HH24:MI:SS'))
+       AND (:P1_PLANING_END IS NULL OR planing_end <= TO_DATE(:P1_PLANING_END, 'YYYY-MM-DD HH24:MI:SS'))
+       AND (:P1_FACT_START IS NULL OR fact_start >= TO_DATE(:P1_FACT_START, 'YYYY-MM-DD HH24:MI:SS'))
+       AND (:P1_FACT_END IS NULL OR fact_end <= TO_DATE(:P1_FACT_END, 'YYYY-MM-DD HH24:MI:SS'));
+   ```
+
+   This SQL checks whether each date picker is set. If set, it filters the corresponding columns based on the date range specified.
+
+3. **Dynamic Actions for Date Pickers**:
+   Create a **Dynamic Action** for each Date Picker (`P1_PLANING_START`, `P1_PLANING_END`, `P1_FACT_START`, `P1_FACT_END`):
+   - **Event**: Change
+   - **Action**: Refresh
+   - **Selection Type**: Region
+   - **Region**: Your Interactive Report region
+
+   This will trigger the report to refresh whenever a date is selected or changed in any of the pickers.
+
+4. **User Experience and UI**:
+   Organize the Date Pickers in the sidebar region with appropriate labels to help users understand that they are filtering by planning or factual datetime ranges. You can group the `P1_PLANING_START` and `P1_PLANING_END` pickers together, and similarly group the `P1_FACT_START` and `P1_FACT_END` pickers.
+
+5. **Optional: Add a Clear Filter Button**:
+   If needed, add a button to clear all the date filters. Create a **Dynamic Action** on the button to clear the values and refresh the report:
+
+   - **Event**: Click
+   - **Action**: Execute JavaScript Code
+   - **Code**:
+     ```javascript
+     $s("P1_PLANING_START", "");
+     $s("P1_PLANING_END", "");
+     $s("P1_FACT_START", "");
+     $s("P1_FACT_END", "");
+     ```
+   - Add another action to **Refresh** the Interactive Report region.
+
+### Summary:
+- You created date picker items for filtering by `planing` and `fact` datetime columns.
+- You modified the SQL query of the Interactive Report to filter data dynamically based on the chosen datetime values.
+- You added dynamic actions to refresh the report whenever a date picker value changes.
+- Optionally, you added a button to clear all filters.
+
+This setup provides flexible and precise filtering based on your date range requirements for planning and factual datetime columns.

@@ -1,0 +1,64 @@
+To achieve this, you can use a combination of CSS and JavaScript to control the visibility of the right sidebar. Here's how you can implement it:
+
+### Step-by-Step Solution:
+
+1. **Set the Sidebar Region**:
+   In your Oracle APEX page, create a region using the **Right Sidebar** template. This will be your filtering block. Assign a **Static ID** to this sidebar region, e.g., `rightSidebar`.
+
+2. **Hide the Sidebar by Default**:
+   Add some CSS to your application’s inline CSS or a custom CSS file to ensure the sidebar remains hidden by default:
+
+   ```css
+   /* Hide the sidebar region by default */
+   #rightSidebar {
+       display: none;
+   }
+   ```
+
+3. **Add a Toggle Button**:
+   Place a button or icon on your page (outside the sidebar) that the user can click to show or hide the sidebar. For example, you can use an icon button with an arrow. Assign a **Static ID** to this button, e.g., `toggleSidebarButton`.
+
+4. **Add JavaScript to Toggle the Sidebar**:
+   Use a Dynamic Action or inline JavaScript to toggle the sidebar’s visibility when the button is clicked. Here’s an example JavaScript code to achieve this:
+
+   ```javascript
+   // Toggle sidebar visibility
+   document.getElementById('toggleSidebarButton').addEventListener('click', function() {
+       var sidebar = document.getElementById('rightSidebar');
+       if (sidebar.style.display === 'none' || sidebar.style.display === '') {
+           sidebar.style.display = 'block';
+       } else {
+           sidebar.style.display = 'none';
+       }
+   });
+   ```
+
+5. **Dynamic Action Setup (Optional)**:
+   If you prefer not to use inline JavaScript, you can set up a **Dynamic Action** on the `toggleSidebarButton`:
+   - **Event**: Click
+   - **Action**: Execute JavaScript Code
+   - **JavaScript Code**:
+     ```javascript
+     var sidebar = document.getElementById('rightSidebar');
+     if (sidebar.style.display === 'none' || sidebar.style.display === '') {
+         sidebar.style.display = 'block';
+     } else {
+         sidebar.style.display = 'none';
+     }
+     ```
+
+6. **Adjust Sidebar Transition (Optional)**:
+   If you want a smoother experience, you can add some CSS for transition effects:
+
+   ```css
+   #rightSidebar {
+       transition: all 0.3s ease-in-out;
+   }
+   ```
+
+### Summary:
+- The sidebar region is initially hidden using CSS.
+- A button or icon is used to toggle the sidebar’s visibility.
+- JavaScript (inline or via Dynamic Action) handles the click event to show or hide the sidebar.
+
+This solution ensures that the sidebar is not shown by default on page load and only appears when the user explicitly presses the button. This way, you maintain a clean interface while still providing accessible filtering options.

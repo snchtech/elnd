@@ -1,0 +1,73 @@
+To create a custom filter in the right sidebar for filtering an Interactive Report by unit and department, you can use Oracle APEX’s built-in dynamic filtering with page items and some custom actions. Here's a step-by-step approach:
+
+### Step-by-Step Solution:
+
+1. **Create the Sidebar Region**:
+   - In Oracle APEX, add a new region on the page (preferably in the sidebar or a column region).
+   - Choose the **Region Type** as **HTML** or **Form** depending on your layout preference.
+   - This region will house the filter items (for example, select lists for unit and department).
+
+2. **Add Select List Items for Filtering**:
+   - In your sidebar region, add two **Select List** page items:
+     - **P1_UNIT** (for filtering by unit)
+     - **P1_DEPARTMENT** (for filtering by department)
+
+   For each of these items, define **List of Values (LOV)** that pulls data dynamically from your database. For example:
+   ```sql
+   SELECT unit_name AS display_value, unit_id AS return_value 
+   FROM units_table
+   ORDER BY unit_name;
+   ```
+
+   Similarly, create an LOV for departments:
+   ```sql
+   SELECT department_name AS display_value, department_id AS return_value 
+   FROM departments_table
+   ORDER BY department_name;
+   ```
+
+3. **Modify the Interactive Report Query**:
+   In the query of your Interactive Report, use the page items (`P1_UNIT` and `P1_DEPARTMENT`) as bind variables to filter results dynamically. For example:
+
+   ```sql
+   SELECT * 
+   FROM your_table
+   WHERE (:P1_UNIT IS NULL OR unit_id = :P1_UNIT)
+     AND (:P1_DEPARTMENT IS NULL OR department_id = :P1_DEPARTMENT);
+   ```
+
+   This SQL condition checks if the page items are set to a specific value, and if not, it includes all results.
+
+4. **Add a Dynamic Action for Filters**:
+   Create a **Dynamic Action** on each of the Select List items (`P1_UNIT` and `P1_DEPARTMENT`):
+   - **Event**: Change
+   - **Action**: Refresh
+   - **Selection Type**: Region
+   - **Region**: Select your Interactive Report region
+
+   This ensures that when a user selects a value in the filter dropdowns, the Interactive Report automatically refreshes to reflect the filtered data.
+
+5. **Optional: Add a Clear Filter Button**:
+   You may also want to add a button to clear the filters. This button can clear the values of `P1_UNIT` and `P1_DEPARTMENT` and then refresh the report.
+
+   - Create a button in the sidebar region called **Clear Filters**.
+   - Add a **Dynamic Action** on the button:
+     - **Event**: Click
+     - **Action**: Execute JavaScript Code
+     - **Code**:
+       ```javascript
+       $s("P1_UNIT", "");
+       $s("P1_DEPARTMENT", "");
+       ```
+     - Add another **Action** in the same Dynamic Action to **Refresh** the Interactive Report region.
+
+6. **Style the Sidebar (Optional)**:
+   You can style the sidebar region using CSS to make it appear as a filter panel. You can use Oracle APEX’s built-in templates or add custom CSS.
+
+### Summary:
+- You create a sidebar region with Select List page items for filtering by unit and department.
+- These page items are used as bind variables in your Interactive Report SQL query to filter data dynamically.
+- Dynamic Actions are added to automatically refresh the report when filters change.
+- Optionally, you can add a clear filter button for ease of use.
+
+This setup provides a flexible and user-friendly filtering experience without requiring complex coding or JavaScript.

@@ -1,0 +1,53 @@
+Yes, you can get the `unit` and `department` values directly from the view that the Interactive Report is built on. This approach ensures that the filters reflect the actual values present in the dataset.
+
+Here’s how you can achieve this:
+
+### Step-by-Step Guide:
+
+1. **Create Select Lists Based on Interactive Report’s View**:
+   Assuming your Interactive Report is based on a view (let’s call it `YOUR_VIEW`), you can create dynamic **Select List** items to fetch distinct values of `unit` and `department` from this view.
+
+   - **P1_UNIT** (for filtering by unit):
+     - **List of Values (LOV) SQL**:
+       ```sql
+       SELECT DISTINCT unit_name AS display_value, unit_id AS return_value
+       FROM YOUR_VIEW
+       ORDER BY unit_name;
+       ```
+
+   - **P1_DEPARTMENT** (for filtering by department):
+     - **List of Values (LOV) SQL**:
+       ```sql
+       SELECT DISTINCT department_name AS display_value, department_id AS return_value
+       FROM YOUR_VIEW
+       ORDER BY department_name;
+       ```
+
+   These queries will dynamically pull the distinct values of units and departments based on the data available in the view used by your Interactive Report.
+
+2. **Modify the Interactive Report SQL Query**:
+   If you haven't already, ensure that the SQL query for your Interactive Report uses these page items as filters. The SQL should look something like this:
+
+   ```sql
+   SELECT * 
+   FROM YOUR_VIEW
+   WHERE (:P1_UNIT IS NULL OR unit_id = :P1_UNIT)
+     AND (:P1_DEPARTMENT IS NULL OR department_id = :P1_DEPARTMENT);
+   ```
+
+3. **Dynamic Actions for Filters**:
+   Add a **Dynamic Action** on the `P1_UNIT` and `P1_DEPARTMENT` Select List items:
+   - **Event**: Change
+   - **Action**: Refresh
+   - **Selection Type**: Region
+   - **Region**: Your Interactive Report region
+
+4. **Optional: Add a Clear Filter Button**:
+   If needed, add a button to clear the filters and reset the report. The Dynamic Action for this button would clear the values of `P1_UNIT` and `P1_DEPARTMENT`, and then refresh the Interactive Report.
+
+### Benefits of Using View Data for Filters:
+- **Consistency**: The filter options directly reflect the data in the report view, reducing inconsistencies.
+- **Ease of Maintenance**: If your view changes, the filter options will automatically adjust without requiring additional changes.
+- **No Extra Data Source**: You’re not relying on separate tables or queries, which simplifies your application logic.
+
+By using this approach, your filter lists will always show current and relevant options from the view the report is based on. This ensures that users are only presented with valid filtering choices.

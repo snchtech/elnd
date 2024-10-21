@@ -1,0 +1,53 @@
+If you want to exclude the `class_color` column from the query and still achieve the desired effect, you can solely rely on dynamically assigning classes based on the `status` column value without directly referencing `class_color`. Here’s how to modify the solution:
+
+### Step-by-Step Solution:
+
+1. **Modify Your SQL Query**:
+   Only include the `status` column and the dynamically assigned class column (`status_class`):
+
+   ```sql
+   SELECT status,
+          CASE 
+            WHEN status = 0 THEN 'status-red'
+            WHEN status = 3 THEN 'status-green'
+            WHEN status = 4 THEN 'status-blue'
+          END AS status_class
+   FROM your_table;
+   ```
+
+2. **Hide the `status` and `status_class` Columns**:
+   In the Interactive Report attributes, set both the `status` and `status_class` columns to be hidden.
+
+3. **Assign Dynamic Class Based on the `status_class`**:
+   In your Interactive Report attributes, find the column you want to color (which previously might have been the `class_color` column). For this column:
+
+   - In the "CSS Classes" field, enter: `#STATUS_CLASS#`
+
+   This binds the `status_class` value from the SQL query to the relevant cells in this column.
+
+4. **Add CSS Rules for Each Class**:
+   Add the following CSS to your application’s inline CSS or a custom CSS file:
+
+   ```css
+   /* Apply the color styling using the class added by the SQL query */
+   .status-red td {
+       background-color: red;
+   }
+
+   .status-green td {
+       background-color: green;
+   }
+
+   .status-blue td {
+       background-color: blue;
+   }
+   ```
+
+   **Note**: Adjust the CSS selectors if necessary to ensure they target only the cells in your chosen column.
+
+### Explanation:
+- The SQL query dynamically assigns a class to each row based on the `status` value.
+- The report automatically assigns this class to the cells in the specified column using the `#STATUS_CLASS#` substitution string.
+- CSS rules are then applied based on these classes, without needing to include the `class_color` column.
+
+This method avoids JavaScript and still achieves your goal of dynamic styling based on the `status` column.

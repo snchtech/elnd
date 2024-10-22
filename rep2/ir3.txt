@@ -1,0 +1,50 @@
+var lastSearchTerm = ""; // Global variable to store the search term
+
+function highlightSearchTerms() {
+    if (lastSearchTerm) {
+        // Escape special characters in search term for regex
+        var escapedSearchTerm = lastSearchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        
+        // Create a regular expression to find the search term
+        var regex = new RegExp(escapedSearchTerm, 'gi');
+        
+        // Find the body of the IR and replace matching text with highlight
+        apex.jQuery("#reportID").find("td").each(function() {
+            var text = apex.jQuery(this).text();
+            var newHtml = text.replace(regex, function(match) {
+                return '<span class="highlight">' + match + '</span>';
+            });
+            apex.jQuery(this).html(newHtml);
+        });
+    }
+}
+
+// Function to remove the highlight class
+function removeHighlight() {
+    apex.jQuery("#reportID").find("td").each(function() {
+        var highlightedText = apex.jQuery(this).html();
+        // Remove the <span> tag but keep the text content
+        var cleanText = highlightedText.replace(/<span class="highlight">(.*?)<\/span>/gi, '$1');
+        apex.jQuery(this).html(cleanText);
+    });
+}
+
+// Capture the search term when the search button is clicked
+apex.jQuery(document).on("click", ".a-IRR-controlsContainer .js-actionButton", function() {
+    lastSearchTerm = apex.jQuery("#apexir_SEARCH").val(); // Get the search input value before refresh
+});
+
+// Apply highlight after report refresh
+apex.jQuery(document).on("apexafterrefresh", "#reportID", function() {
+    if (lastSearchTerm) {
+        highlightSearchTerms();
+    } else {
+        removeHighlight(); // Remove highlights if the search is cleared
+    }
+});
+
+// Handle the clear search case
+apex.jQuery(document).on("click", ".a-IRR-controlsContainer .js-clear", function() {
+    lastSearchTerm = ""; // Clear the search term
+    removeHighlight(); // Remove all highlights when search is cleared
+});

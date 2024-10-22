@@ -1,0 +1,5 @@
+/* Hides the UNIT column and its header */
+th#t-IRR-column-UNIT, 
+td[headers="UNIT"] {
+    display: none;
+}

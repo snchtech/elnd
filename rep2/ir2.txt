@@ -1,0 +1,32 @@
+function highlightSearchTerms() {
+    var searchTerm = apex.jQuery("#apexir_SEARCH").val(); // Get the search input value
+    
+    if (searchTerm) {
+        // Escape special characters in search term for regex
+        var escapedSearchTerm = searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        
+        // Create a regular expression to find the search term
+        var regex = new RegExp(escapedSearchTerm, 'gi');
+        
+        // Find the body of the IR and replace matching text with highlight
+        apex.jQuery("#reportID").find("td").each(function() {
+            var text = apex.jQuery(this).text();
+            var newHtml = text.replace(regex, function(match) {
+                return '<span class="highlight">' + match + '</span>';
+            });
+            apex.jQuery(this).html(newHtml);
+        });
+    }
+}
+
+// Add an event listener to run the highlight function after the search button is clicked
+apex.jQuery(document).on("apexafterrefresh", "#reportID", function() {
+    highlightSearchTerms();
+});
+
+
+
+
+.highlight {
+    background-color: yellow;
+}

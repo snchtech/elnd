@@ -1,0 +1,4 @@
+SELECT 
+    TO_CHAR(your_date_column, 'DD.MM.YYYY') || CHR(10) || TO_CHAR(your_date_column, 'HH24:MI') AS formatted_date
+FROM 
+    your_table

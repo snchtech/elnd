@@ -1,0 +1,36 @@
+To pass the `department_id` from your Oracle APEX global item to your function in the `arm_rows` view, you can use the `v` function in Oracle APEX. The `v` function allows you to access APEX items directly within SQL queries and PL/SQL code.
+
+Here’s a step-by-step guide:
+
+1. **Create a Wrapper Function**:
+   Create a wrapper function in your database that takes `u_id` and `department_id` as parameters. In this wrapper function, fetch the `department_id` from the APEX global item directly.
+
+   ```sql
+   CREATE OR REPLACE FUNCTION my_function_with_apex_context(u_id IN NUMBER) RETURN RETURN_TYPE
+   IS
+      department_id NUMBER;
+   BEGIN
+      -- Access the APEX global item using the APEX session context
+      department_id := TO_NUMBER( NVL( apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0 ));
+
+      -- Now use the department_id and u_id in your logic
+      RETURN my_actual_function(department_id, u_id);
+   END;
+   ```
+
+   Here, replace `RETURN_TYPE` with the actual return type of your function, and `my_actual_function` is the function that expects `department_id` and `u_id`.
+
+2. **Update Your View**:
+   Modify your view (`arm_rows`) to use this wrapper function. Instead of directly calling the function with `department_id`, call it with `my_function_with_apex_context(u_id)`.
+
+   ```sql
+   CREATE OR REPLACE VIEW arm_rows AS
+   SELECT r_id, app_id, u_id, my_function_with_apex_context(u_id) AS function_result
+   FROM original_table;
+   ```
+
+3. **In APEX**:
+   - Set the `GLOBAL_DEPARTMENT_ID` item to the appropriate value at the session level. You can set this on page load or dynamically as required.
+   - Now, when your Cards region references `arm_rows`, it will call the function with the `department_id` from your APEX global item.
+
+This approach will ensure that the `department_id` is passed dynamically from the APEX global item without requiring you to have it directly in the view.

@@ -1,0 +1,54 @@
+To use `department_id` dynamically in your view based on the APEX global item, you can retrieve `department_id` from the APEX session state and reference it as needed in calculations, filters, or function calls. Here’s how you can integrate it into your view for various uses:
+
+1. **Retrieve `department_id` from APEX session state**: Use `apex_util.get_session_state('GLOBAL_DEPARTMENT_ID')` to fetch `department_id` directly in your `SELECT` clause or `WHERE` clause.
+
+2. **Integrate `department_id` in Calculations or Conditions**: Use the session-based `department_id` wherever needed in your view logic. Below are examples of how to apply this approach.
+
+### Example: Using `department_id` in a View
+
+```sql
+CREATE OR REPLACE VIEW arm_rows AS
+SELECT 
+    r_id, 
+    app_id, 
+    u_id, 
+    -- Fetch department_id from session state
+    TO_NUMBER(NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0)) AS department_id,
+    
+    -- Use department_id in a function call
+    my_existing_function(
+        TO_NUMBER(NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0)), 
+        u_id
+    ) AS function_result,
+
+    -- Example of using department_id in a conditional expression
+    CASE 
+        WHEN TO_NUMBER(NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0)) = 1 THEN 'Department A'
+        WHEN TO_NUMBER(NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0)) = 2 THEN 'Department B'
+        ELSE 'Other Department'
+    END AS department_label
+    
+FROM 
+    original_table
+WHERE 
+    -- Filter rows based on department_id, if required
+    app_id = TO_NUMBER(NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), 0)) 
+    OR app_id IS NULL;
+```
+
+### Explanation of Each Part
+
+- **Retrieve `department_id`**: The `department_id` is retrieved directly from the APEX session state with `apex_util.get_session_state('GLOBAL_DEPARTMENT_ID')`, which allows you to use the global item value across the entire view.
+
+- **Function Calls**: The `department_id` is passed to `my_existing_function`, allowing the function to work with the current department context without modifying its structure.
+
+- **Conditional Expressions**: You can add conditional logic (like `CASE` statements) based on `department_id` to handle department-specific labels or categorization.
+
+- **Filtering**: If you need to filter records based on `department_id`, include it in the `WHERE` clause, as shown. This allows the view to filter dynamically, depending on the `department_id` in the APEX session.
+
+### Additional Notes
+
+- **Default Value**: Use `NVL` with a default value if `department_id` might be `NULL`.
+- **Performance Considerations**: This approach will call `apex_util.get_session_state` each time the view is queried. For performance-sensitive cases, consider caching the department ID in an application item or using a parameterized approach if possible.
+
+This setup will dynamically adjust the view based on the `department_id` set in the APEX session, making it flexible for multi-department use cases without altering the underlying functions or database structure.

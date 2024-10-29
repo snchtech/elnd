@@ -1,0 +1,16 @@
+To manage the `ARM_STAT` parameter across pages 1 and 3 in your first application, using a global page item is a good approach. Here’s a method to ensure it behaves uniquely for each page load:
+
+1. **Set the Item on Each Page Load**: Use a `Before Header` process on pages 1 and 3 to check for the `ARM_STAT` URL parameter and assign its value to the global item. This way, each time a page is accessed with a different `ARM_STAT` parameter, it’s updated accordingly.
+
+2. **Clear the Global Item**: Before assigning the new `ARM_STAT` value, add a step to clear the item in the same `Before Header` process. For instance:
+   ```plsql
+   :GLOBAL_ARM_STAT := NULL; -- Clear the value first
+   :GLOBAL_ARM_STAT := NVL(:REQUESTED_ARM_STAT, :GLOBAL_ARM_STAT);
+   ```
+   Here, `GLOBAL_ARM_STAT` is the global item, and `REQUESTED_ARM_STAT` is a substitution for the URL parameter.
+
+3. **Page-Level Logic**: If you need to ensure the item behaves differently on each page, you could also create a conditional logic in the process based on the current page ID.
+
+4. **URL Parameter Management**: Ensure that each link to pages 1 and 3 in your second application includes the `ARM_STAT` parameter. This will allow `GLOBAL_ARM_STAT` to be reset correctly each time a page is accessed.
+
+This method helps control `ARM_STAT` on each page access, making it behave as a per-page item while still being defined globally.

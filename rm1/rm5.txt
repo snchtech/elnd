@@ -1,0 +1,72 @@
+To add `position_id` and `app_id` as optional parameters with default `NULL` values in the `call_with_department_id` function, you can define them as additional `IN` parameters in the function signature and modify the dynamic call accordingly.
+
+Here’s how the updated function would look:
+
+```sql
+CREATE OR REPLACE FUNCTION call_with_department_id(
+    func IN VARCHAR2,
+    u_id IN NUMBER,
+    position_id IN NUMBER DEFAULT NULL,
+    app_id IN NUMBER DEFAULT NULL
+) RETURN NUMBER
+IS
+    department_id NUMBER;
+    result NUMBER;
+BEGIN
+    -- Retrieve department_id from APEX session state
+    department_id := apex_util.get_session_state('GLOBAL_DEPARTMENT_ID');
+    
+    -- Dynamically call the specified function with department_id, u_id, position_id, and app_id
+    EXECUTE IMMEDIATE 'BEGIN :result := ' || func || '(:department_id, :u_id, :position_id, :app_id); END;'
+        USING OUT result, department_id, u_id, position_id, app_id;
+
+    RETURN result;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Handle any potential errors
+        RETURN NULL; -- Or any default value that makes sense for your case
+END;
+```
+
+### Explanation
+
+1. **New Parameters**:
+   - `position_id` and `app_id` are added as optional parameters with `NULL` as the default.
+   
+2. **Dynamic Function Call Update**:
+   - The dynamic PL/SQL block now includes `position_id` and `app_id` in the call to the specified function, allowing flexibility to pass these parameters as needed.
+   
+3. **Usage**:
+   - When calling `call_with_department_id`, you can specify values for `position_id` and `app_id` if required. If not provided, they will default to `NULL`.
+
+### Usage Example in a View
+
+With this setup, you can use the `call_with_department_id` function in your view and pass values as needed:
+
+```sql
+CREATE OR REPLACE VIEW arm_rows AS
+SELECT 
+    r_id, 
+    app_id, 
+    u_id,
+    call_with_department_id('my_custom_function', u_id, NULL, app_id) AS function_result
+FROM 
+    original_table;
+```
+
+### Calling with and without Optional Parameters
+
+You can now call this function with varying numbers of parameters:
+
+```sql
+-- Call without optional parameters (position_id and app_id default to NULL)
+SELECT call_with_department_id('my_custom_function', 123) FROM dual;
+
+-- Call with position_id but not app_id
+SELECT call_with_department_id('my_custom_function', 123, 456) FROM dual;
+
+-- Call with both position_id and app_id
+SELECT call_with_department_id('my_custom_function', 123, 456, 789) FROM dual;
+```
+
+This allows for maximum flexibility in your function calls, supporting different scenarios without requiring additional wrappers.

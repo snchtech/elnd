@@ -1,0 +1,54 @@
+In an Electron app, you can listen to specific events that get triggered when the app regains focus or is activated, which are useful for checking if the session has expired after being idle. Here’s how to do it:
+
+1. **Use the `focus` Event**: This event fires when the Electron window regains focus. You can check the session expiration when this event triggers.
+
+   ```javascript
+   const { BrowserWindow } = require('electron');
+   const mainWindow = new BrowserWindow(/* your window options */);
+
+   mainWindow.on('focus', () => {
+       checkSessionExpiration();
+   });
+   ```
+
+2. **Use the `on('show')` Event for Tray Activation**: If your app has a tray icon and you want to check when the app is shown from the tray, listen for the `show` event.
+
+   ```javascript
+   const { Tray } = require('electron');
+   const tray = new Tray('/path/to/icon');
+
+   tray.on('click', () => {
+       checkSessionExpiration();
+   });
+   tray.on('show', () => {
+       checkSessionExpiration();
+   });
+   ```
+
+3. **Define `checkSessionExpiration`**: This function checks if the session is still valid by comparing the stored login timestamp to the current time. If the session has expired, you can send a message to the renderer process to handle the redirect.
+
+   ```javascript
+   function checkSessionExpiration() {
+       const sessionLifetime = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+       const loginTimestamp = sessionStorage.getItem('loginTimestamp'); // Retrieve from sessionStorage in the renderer
+       
+       if (loginTimestamp) {
+           const elapsedTime = Date.now() - parseInt(loginTimestamp, 10);
+           if (elapsedTime >= sessionLifetime) {
+               mainWindow.webContents.send('session-expired'); // Notify renderer process
+           }
+       }
+   }
+   ```
+
+4. **Handle the Event in Renderer Process**: Listen for the `session-expired` message in the renderer process and redirect to the login page.
+
+   ```javascript
+   const { ipcRenderer } = require('electron');
+
+   ipcRenderer.on('session-expired', () => {
+       window.location.href = '/login'; // Redirect to the login page
+   });
+   ```
+
+These events will help you handle cases where the app has been left open and inactive, ensuring the session expiration check is run when the app is focused or reactivated.

@@ -1,0 +1,65 @@
+Certainly! You can create a generic wrapper function that takes as arguments both the function you want to call and the `u_id` parameter. This wrapper function will handle retrieving `department_id` from the APEX session state and then pass it to the specified function.
+
+Here’s how you can define such a generic wrapper:
+
+```sql
+CREATE OR REPLACE FUNCTION call_with_department_id(
+    func IN VARCHAR2,
+    u_id IN NUMBER
+) RETURN NUMBER
+IS
+    department_id NUMBER;
+    result NUMBER;
+BEGIN
+    -- Retrieve department_id from APEX session state
+    department_id := apex_util.get_session_state('GLOBAL_DEPARTMENT_ID');
+    
+    -- Dynamically call the specified function with department_id and u_id
+    EXECUTE IMMEDIATE 'BEGIN :result := ' || func || '(:department_id, :u_id); END;'
+        USING OUT result, department_id, u_id;
+
+    RETURN result;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Handle any potential errors (e.g., if department_id is NULL and function requires it)
+        RETURN NULL; -- Or any default value that makes sense for your case
+END;
+```
+
+### Explanation
+
+1. **Dynamic Function Call**: 
+   - `func` is the name of the function you want to call.
+   - The `EXECUTE IMMEDIATE` statement constructs a dynamic PL/SQL block that calls the function specified by `func` with `department_id` and `u_id` as parameters.
+
+2. **Return Value**:
+   - The wrapper function will return the result of the called function or `NULL` if there’s an error.
+
+3. **Error Handling**:
+   - You can modify the `EXCEPTION` block to handle errors as needed. Here, it simply returns `NULL` if any error occurs.
+
+### Usage in a View
+
+You can now use this wrapper function in your view to dynamically call any function that requires `department_id` and `u_id`:
+
+```sql
+CREATE OR REPLACE VIEW arm_rows AS
+SELECT 
+    r_id, 
+    app_id, 
+    u_id,
+    call_with_department_id('my_custom_function', u_id) AS function_result
+FROM 
+    original_table;
+```
+
+### Example Calls with Different Functions
+
+You can use `call_with_department_id` to wrap any function in your view, simply by passing the function name as a string. For instance:
+
+```sql
+SELECT call_with_department_id('my_custom_function', 123) FROM dual;
+SELECT call_with_department_id('another_function', 456) FROM dual;
+```
+
+This approach provides flexibility to call multiple functions that need `department_id` and `u_id` without creating multiple wrappers.

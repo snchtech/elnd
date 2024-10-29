@@ -1,0 +1,25 @@
+To clear the `ARM_STAT` item only when it is absent from the URL, you can set up a `Before Header` process on each relevant page (pages 1 and 3). Here’s how you can do it:
+
+1. **Check for the URL Parameter**: In the `Before Header` process, use a condition to check if the URL parameter `ARM_STAT` exists. In Oracle APEX, you can use the `APEX_UTIL.GET_URL_PARAM` function to retrieve URL parameters.
+
+2. **Clear the Item if Absent**:
+   - If `ARM_STAT` is missing from the URL, set the global item `ARM_STAT` to `NULL`.
+   - If it’s present, assign its value to the global item.
+
+Here’s the PL/SQL code to implement this:
+
+   ```plsql
+   DECLARE
+       v_param_value VARCHAR2(32767) := APEX_UTIL.GET_URL_PARAM('ARM_STAT');
+   BEGIN
+       IF v_param_value IS NULL THEN
+           :GLOBAL_ARM_STAT := NULL; -- Clear the item if ARM_STAT is not in the URL
+       ELSE
+           :GLOBAL_ARM_STAT := v_param_value; -- Set the value from URL
+       END IF;
+   END;
+   ```
+
+3. **Apply this Process to Pages 1 and 3**: Ensure this process runs on both page 1 and page 3 as a `Before Header` process so that each page load behaves independently based on the presence of `ARM_STAT` in the URL.
+
+This approach ensures that `ARM_STAT` only holds a value if it’s actively provided in the URL, effectively resetting it whenever the parameter is absent.

@@ -1,0 +1,34 @@
+Yes, you can use `apex_util.get_session_state` directly within your `my_custom_function` call, and it will work as intended. Here's how you can structure it in your view:
+
+```sql
+CREATE OR REPLACE VIEW arm_rows AS
+SELECT 
+    r_id, 
+    app_id, 
+    u_id,
+    -- Call my_custom_function with department_id from session state
+    my_custom_function(
+        NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), NULL), 
+        u_id
+    ) AS function_result
+FROM 
+    original_table;
+```
+
+### Explanation
+
+- **NVL with `NULL`**: Using `NVL(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), NULL)` is valid syntax. However, `NVL` with `NULL` is redundant since `apex_util.get_session_state` returns `NULL` when the item is not set. You can omit `NVL` if you don't need a specific default value.
+  
+- **Direct Session State Usage**: By calling `apex_util.get_session_state` within `my_custom_function`, you ensure that `department_id` from the APEX session state is passed directly to the function without additional processing or wrapper functions.
+
+- **Behavior When `department_id` is NULL**: If `GLOBAL_DEPARTMENT_ID` is not set, `apex_util.get_session_state` will pass `NULL` as the first parameter to `my_custom_function`, which should handle this `NULL` scenario as expected in your logic.
+
+### Example Without `NVL`
+
+If no specific default is needed, you can simplify it as:
+
+```sql
+my_custom_function(apex_util.get_session_state('GLOBAL_DEPARTMENT_ID'), u_id)
+```
+
+This setup dynamically uses the session state `department_id` in your function calls without requiring additional functions or view modifications, adapting based on the current session value of `GLOBAL_DEPARTMENT_ID`.

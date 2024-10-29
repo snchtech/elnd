@@ -1,0 +1,41 @@
+To implement session expiration with a 12-hour timeout and automatic redirection to the login page, you can use JavaScript to track the session duration. Here’s a strategy:
+
+1. **Store Login Timestamp**: When a user logs in, save the current time (in milliseconds) to `sessionStorage` along with any session information. This will be the reference point for the session lifetime.
+   
+   ```javascript
+   const sessionLifetime = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
+   const loginTimestamp = Date.now();
+   sessionStorage.setItem('loginTimestamp', loginTimestamp);
+   ```
+
+2. **Check Session Validity Periodically**: Set up a check (e.g., using `setInterval`) that runs every few minutes to see if the session has expired. If it has, redirect to the login page.
+
+   ```javascript
+   setInterval(() => {
+       const loginTimestamp = sessionStorage.getItem('loginTimestamp');
+       if (loginTimestamp) {
+           const elapsedTime = Date.now() - parseInt(loginTimestamp, 10);
+           if (elapsedTime >= sessionLifetime) {
+               // Session has expired, redirect to login page
+               window.location.href = '/login';
+           }
+       }
+   }, 60000); // check every 1 minute
+   ```
+
+3. **Alternative Trigger on Page Load**: To handle cases where the app might be inactive for a while, check the session expiration on each page load.
+
+   ```javascript
+   window.addEventListener('load', () => {
+       const loginTimestamp = sessionStorage.getItem('loginTimestamp');
+       if (loginTimestamp) {
+           const elapsedTime = Date.now() - parseInt(loginTimestamp, 10);
+           if (elapsedTime >= sessionLifetime) {
+               // Redirect to login if session expired
+               window.location.href = '/login';
+           }
+       }
+   });
+   ```
+
+This setup ensures that the app redirects users to the login page if their session has expired, whether the app is idle or actively used.

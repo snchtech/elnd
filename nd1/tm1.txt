@@ -1,0 +1,38 @@
+SELECT
+    id,
+    name,
+    datetime_start,
+    datetime_end,
+    CASE
+        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 7 AND 14
+             AND TO_CHAR(datetime_start, 'HH24:MI') BETWEEN '07:00' AND '14:59'
+             AND TRUNC(datetime_start) = TRUNC(SYSDATE)
+             THEN 'startrgo'
+        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 15 AND 22
+             AND TO_CHAR(datetime_start, 'HH24:MI') BETWEEN '15:00' AND '22:59'
+             AND TRUNC(datetime_start) = TRUNC(SYSDATE)
+             THEN 'startrgo'
+        WHEN (TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 23 AND 23 OR TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 0 AND 6)
+             AND (TO_CHAR(datetime_start, 'HH24:MI') BETWEEN '23:00' AND '23:59'
+                  OR TO_CHAR(datetime_start, 'HH24:MI') BETWEEN '00:00' AND '06:59')
+             AND TRUNC(datetime_start) = TRUNC(SYSDATE)
+             THEN 'startrgo'
+        ELSE NULL
+    END AS start_consist,
+    CASE
+        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 7 AND 14
+             AND TO_CHAR(datetime_end, 'HH24:MI') BETWEEN '07:00' AND '14:59'
+             AND TRUNC(datetime_end) = TRUNC(SYSDATE)
+             THEN 'endgo'
+        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 15 AND 22
+             AND TO_CHAR(datetime_end, 'HH24:MI') BETWEEN '15:00' AND '22:59'
+             AND TRUNC(datetime_end) = TRUNC(SYSDATE)
+             THEN 'endgo'
+        WHEN (TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 23 AND 23 OR TO_NUMBER(TO_CHAR(SYSDATE, 'HH24')) BETWEEN 0 AND 6)
+             AND (TO_CHAR(datetime_end, 'HH24:MI') BETWEEN '23:00' AND '23:59'
+                  OR TO_CHAR(datetime_end, 'HH24:MI') BETWEEN '00:00' AND '06:59')
+             AND TRUNC(datetime_end) = TRUNC(SYSDATE)
+             THEN 'endgo'
+        ELSE NULL
+    END AS end_consist
+FROM your_view_name;

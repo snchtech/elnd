@@ -1,0 +1,93 @@
+const { app } = require('electron');
+const fs = require('fs');
+const path = require("path");
+const AdmZip = require('adm-zip');
+const { spawn } = require('child_process');
+const fetch = require("node-fetch");
+
+function getRootPath() {
+    let ROOTPATH = app.getAppPath();
+    if (ROOTPATH.split(path.sep).pop().split(".").pop() === "asar") {
+        ROOTPATH = path.join(ROOTPATH, "../..");
+    }
+    return ROOTPATH;
+}
+
+const mainFolder = path.join(getRootPath(), '../../', 'Portal');
+const excludeFoldersNames = ['updator', 'loaded_app'];
+const excludeFilesNames = ["Uninstall Portal.exe"];
+
+const deleteFolderRecursive = (directoryPath, excludeFolders) => {
+    if (fs.existsSync(directoryPath)) {
+        fs.readdirSync(directoryPath)
+            .filter(file => !excludeFolders.includes(file))
+            .forEach((file) => {
+                const curPath = path.join(directoryPath, file);
+                if (fs.lstatSync(curPath).isDirectory()) {
+                    deleteFolderRecursive(curPath, excludeFolders);
+                    if (fs.readdirSync(curPath).length === 0) {
+                        fs.rmdirSync(curPath);
+                    }
+                } else {
+                    if (!excludeFilesNames.includes(file)) {
+                        fs.unlinkSync(curPath);
+                    }
+                }
+            });
+    }
+};
+
+const downloadFile = (url, destination) => {
+    return new Promise((resolve, reject) => {
+        fetch(url)
+            .then(response => {
+                const fileStream = fs.createWriteStream(destination);
+                response.body.pipe(fileStream);
+                fileStream.on('finish', resolve);
+                fileStream.on('error', reject);
+            })
+            .catch(reject);
+    });
+};
+
+const extractZip = (zipFilePath, extractTo) => {
+    return new Promise((resolve, reject) => {
+        try {
+            const zip = new AdmZip(zipFilePath);
+            zip.extractAllTo(extractTo, true);
+            fs.unlinkSync(zipFilePath);
+            resolve();
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+async function downloadAndExtractUpdate(updateUrl, key, updateFolder) {
+    const zipFilePath = path.join(updateFolder, 'update.zip');
+
+    try {
+        await downloadFile(updateUrl[key], zipFilePath);
+        await extractZip(zipFilePath, updateFolder);
+
+        const child = spawn(path.join(updateFolder, "Portal.exe"), [], { detached: true, stdio: 'ignore' });
+        child.unref();
+        app.quit();
+    } catch (error) {
+        console.error("Update process failed:", error);
+    }
+}
+
+function getUpdate() {
+    fetch(config.updateInfoURL)
+        .then((res) => res.json())
+        .then((json) => {
+            deleteFolderRecursive(mainFolder, excludeFoldersNames);
+            return downloadAndExtractUpdate(json, "linkApp", mainFolder);
+        })
+        .catch((error) => console.error("Failed to get update info:", error));
+}
+
+module.exports = {
+    getUpdate,
+};

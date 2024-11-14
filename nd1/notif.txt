@@ -1,0 +1,45 @@
+<script>
+    let ws;
+    const connectWebSocket = () => {
+        ws = new WebSocket('ws://localhost:8080');
+
+        ws.onopen = function() {
+            // Send a join message
+            const message = JSON.stringify({
+                appId: 'app1',
+                channelId: 'channel1',
+                type: 'join',
+                params: { /* any params */ }
+            });
+            ws.send(message);
+
+            // Show success notification for 5 seconds
+            apex.message.showPageSuccess("Connection successful!");
+            setTimeout(() => {
+                apex.message.clearPageSuccess();
+            }, 5000);
+        };
+
+        // Handle incoming messages
+        ws.onmessage = function(event) {
+            const message = JSON.parse(event.data);
+            console.log('Received:', message);
+        };
+
+        // Handle connection close
+        ws.onclose = function() {
+            console.log('Connection closed');
+            apex.message.showPageError("Connection lost. Reconnecting...");
+            // Attempt to reconnect every 5 seconds
+            setTimeout(connectWebSocket, 5000);
+        };
+
+        // Handle errors
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+    };
+
+    // Initialize WebSocket connection
+    connectWebSocket();
+</script>

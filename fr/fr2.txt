@@ -1,0 +1,80 @@
+To achieve your requirements in Oracle APEX with cards that use a grid layout and dynamically assign CSS classes based on the `unit` value, you can follow these steps:
+
+### Steps to Implement
+
+1. **Modify Your View**: Add a column in your view to calculate the CSS class dynamically.
+2. **Configure the Card Region**: Use the CSS class column as a dynamic class for the cards.
+3. **Add Custom JavaScript and CSS**: Use JavaScript to hide other cards when a specific unit's card is selected and CSS to style the full-row cards.
+
+### 1. Modify Your View
+
+Here’s an example of how you can modify your SQL view:
+
+```sql
+SELECT 
+    id,
+    name,
+    unit,
+    m_id,
+    CASE 
+        WHEN unit = 1 AND m_id = 1 THEN 'full_row'
+        ELSE 'normal'
+    END AS css_class
+FROM your_view;
+```
+
+### 2. Configure the Card Region in Oracle APEX
+
+- In the **Card Region**, use the `css_class` column from the view to dynamically assign classes:
+  - **Class** → Set this to `#CSS_CLASS#`.
+
+### 3. Add Custom JavaScript and CSS
+
+#### JavaScript
+Use JavaScript to apply behavior when a card with the `full_row` class is shown:
+
+1. Add a **Dynamic Action** triggered on the **Page Load** or **Card Click** to execute JavaScript.
+
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+    const cards = document.querySelectorAll(".a-Cards-region .t-Cards-item");
+
+    cards.forEach(card => {
+        const cssClass = card.classList.contains('full_row');
+        if (cssClass) {
+            // Set this card to span the full row
+            card.style.gridColumn = "1 / -1";
+
+            // Hide other cards
+            cards.forEach(otherCard => {
+                if (otherCard !== card) {
+                    otherCard.style.display = "none";
+                }
+            });
+        }
+    });
+});
+```
+
+#### CSS
+Add custom CSS in the **Page Inline CSS** section to style the full-row cards:
+
+```css
+/* Set full_row cards to span the full width of the grid */
+.full_row {
+    grid-column: 1 / -1;
+    background-color: #f0f8ff; /* Example styling */
+}
+
+/* Adjust styling for other card classes as needed */
+.normal {
+    grid-column: auto;
+}
+```
+
+### Workflow Summary
+1. When a card with the `full_row` class is displayed, it spans the entire row using `grid-column: 1 / -1`.
+2. Other cards are hidden using JavaScript.
+3. The `css_class` column in your view dynamically determines the class for each card.
+
+Let me know if you need further assistance or clarification!

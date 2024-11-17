@@ -1,0 +1,85 @@
+If you want to achieve this entirely with Oracle APEX's declarative features and CSS, you can configure the Card Region and add custom CSS for styling and hiding the other cards without JavaScript.
+
+### Steps Without JavaScript
+
+1. **Modify Your View**: Add a column to assign the CSS class dynamically.
+2. **Set Up the Card Region**: Assign the class dynamically in the "Class" attribute of the Card Region.
+3. **Write CSS for Full-Row and Hidden Cards**: Use CSS to control the grid behavior and visibility.
+
+---
+
+### 1. Modify Your View
+
+Add a calculated column in your view to assign the CSS class for each card dynamically:
+
+```sql
+SELECT 
+    id,
+    name,
+    unit,
+    m_id,
+    CASE 
+        WHEN unit = 1 AND m_id = 1 THEN 'full_row'
+        WHEN unit = 1 THEN 'unit_1'
+        WHEN unit = 2 THEN 'unit_2'
+        ELSE 'unit_0'
+    END AS css_class
+FROM your_view;
+```
+
+---
+
+### 2. Set Up the Card Region
+
+- In the Card Region settings, go to **Attributes** > **Class** and set it to `#CSS_CLASS#`.
+
+---
+
+### 3. Write CSS for Styling
+
+Use CSS to hide other cards when a card with the `full_row` class is displayed and style the `full_row` card to span the full width.
+
+Add the following CSS to the **Inline CSS** section of your page:
+
+```css
+/* Make the full_row card span the entire grid width */
+.full_row {
+    grid-column: 1 / -1; /* Full-row spanning */
+    background-color: #f0f8ff; /* Example background color */
+}
+
+/* Hide all other cards when a full_row card is displayed */
+.full_row ~ .t-Cards-item {
+    display: none; /* Hides other cards */
+}
+
+/* Optional: Customize styles for unit-specific cards */
+.unit_1 {
+    background-color: #e0ffe0; /* Example for unit 1 */
+}
+
+.unit_2 {
+    background-color: #ffe0e0; /* Example for unit 2 */
+}
+
+.unit_0 {
+    background-color: #e0e0ff; /* Example for unit 0 */
+}
+```
+
+---
+
+### How It Works
+
+1. **Dynamic Classes**: Each card gets its class from the `css_class` column in your view.
+2. **CSS Rules**:
+   - `.full_row`: Ensures the card spans the full row.
+   - `.full_row ~ .t-Cards-item`: Hides all other cards when the `full_row` card is present.
+
+---
+
+### Result
+
+- Cards with `full_row` class will span the entire grid width.
+- Other cards will be hidden without the need for JavaScript.
+- Unit-specific cards will still have their styling applied, and you can add more CSS for further customization.

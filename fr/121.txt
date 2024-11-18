@@ -1,0 +1,101 @@
+To achieve your requirements in an Oracle APEX application, you can follow these steps:
+
+### Steps:
+
+1. **Create a Query for Your Data:**
+   Retrieve the `id_app`, `order_app`, and `username` columns from your database using a SQL query. This query will be used to generate the data for the cards region or in a PL/SQL dynamic content region.
+
+2. **Fetch Data via JavaScript on Page Load:**
+   Use a **PL/SQL dynamic action** or a **JavaScript AJAX callback** to fetch the data from the database and process it.
+
+3. **Assign Data Attributes to `li` Tags:**
+   Iterate over the `li` elements in your cards region and assign a `data-order` attribute based on the `order_app` value for each `id_app`.
+
+4. **Sort the `li` Tags Based on the `data-order`:**
+   Use JavaScript to sort the `li` tags dynamically within the `ul` container.
+
+---
+
+### Implementation:
+
+#### **Step 1: Add a PL/SQL Process to Fetch Data**
+In APEX, create an **AJAX Callback** process that returns your data as JSON.
+
+```sql
+DECLARE
+    l_json CLOB;
+BEGIN
+    SELECT JSON_OBJECT(
+              'id_app' VALUE id_app,
+              'order_app' VALUE order_app
+           RETURNING CLOB) AS json_result
+    BULK COLLECT INTO l_json
+    FROM your_table
+    WHERE username = :APP_USER; -- Filter by logged-in user, if needed
+
+    HTP.prn(l_json);
+END;
+```
+
+#### **Step 2: JavaScript to Fetch Data and Update the DOM**
+Add the following JavaScript to your page's `Page Load` dynamic action or JavaScript section.
+
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+    // Fetch data using AJAX Callback
+    apex.server.process("GET_CARDS_DATA", {}, {
+        success: function(data) {
+            // Data contains the JSON object array from the PL/SQL process
+            data.forEach(item => {
+                const liElement = document.querySelector(`.app-id-${item.id_app}`);
+                if (liElement) {
+                    // Set data-order attribute
+                    liElement.setAttribute("data-order", item.order_app);
+                }
+            });
+
+            // Sort the cards region
+            const ulElement = document.querySelector(".your-cards-region-class ul");
+            if (ulElement) {
+                const sortedItems = Array.from(ulElement.children)
+                    .sort((a, b) => {
+                        // Compare data-order attribute values
+                        return (
+                            parseInt(a.getAttribute("data-order")) -
+                            parseInt(b.getAttribute("data-order"))
+                        );
+                    });
+
+                // Append sorted items back to the ul
+                sortedItems.forEach(item => ulElement.appendChild(item));
+            }
+        },
+        error: function(err) {
+            console.error("Error fetching data:", err);
+        }
+    });
+});
+```
+
+#### **Step 3: Ensure the `li` Tags Have Proper Classes**
+In your Oracle APEX Cards region, set the **HTML class** of the `li` tags dynamically using the SQL query. For example:
+
+```sql
+SELECT id_app,
+       order_app,
+       username,
+       'app-id-' || id_app AS class_attribute
+  FROM your_table
+ WHERE username = :APP_USER
+```
+
+Bind the `class_attribute` column to the `li` tags in your Cards region attributes.
+
+---
+
+### Summary:
+1. Use an AJAX Callback process to fetch database data as JSON.
+2. Use JavaScript to assign `data-order` attributes to `li` tags dynamically based on the data.
+3. Sort the `li` tags in the `ul` container dynamically using JavaScript.
+
+This approach ensures your data is fetched and processed dynamically without page refresh, and the cards are sorted based on the `order_app` column.

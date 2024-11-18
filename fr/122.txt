@@ -1,0 +1,77 @@
+The solution can work on Oracle 12.1 with minor adjustments. Oracle 12.1 has limited support for JSON features compared to later versions, so you need to adapt the PL/SQL code to handle JSON generation manually if native JSON functions are not available.
+
+Here’s how to modify the solution to be compatible with Oracle 12.1:
+
+---
+
+### Adjustments for Oracle 12.1
+
+#### 1. **Generate JSON Without Native JSON Functions:**
+Oracle 12.1 does not support `JSON_OBJECT`. You can build the JSON manually using concatenation in PL/SQL.
+
+```sql
+DECLARE
+    l_json CLOB;
+BEGIN
+    l_json := '['; -- Start JSON array
+
+    FOR r IN (
+        SELECT id_app, order_app
+          FROM your_table
+         WHERE username = :APP_USER
+    ) LOOP
+        -- Append JSON object
+        l_json := l_json || '{' ||
+                  '"id_app":' || r.id_app || ',' ||
+                  '"order_app":' || r.order_app ||
+                  '},';
+    END LOOP;
+
+    -- Remove the trailing comma and close the JSON array
+    IF l_json LIKE '%},' THEN
+        l_json := SUBSTR(l_json, 1, LENGTH(l_json) - 1);
+    END IF;
+    l_json := l_json || ']';
+
+    -- Output the JSON
+    HTP.prn(l_json);
+END;
+```
+
+This PL/SQL block generates JSON as a string, which is compatible with Oracle 12.1.
+
+---
+
+#### 2. **JavaScript Remains Unchanged:**
+The JavaScript provided in the original solution remains the same, as it fetches the JSON data from the AJAX callback and processes it.
+
+---
+
+#### 3. **Ensure `li` Tags Have Classes:**
+Make sure your Oracle APEX Cards region dynamically sets classes for `li` tags based on the `id_app`. You can use the following SQL:
+
+```sql
+SELECT id_app,
+       order_app,
+       username,
+       'app-id-' || id_app AS class_attribute
+  FROM your_table
+ WHERE username = :APP_USER
+```
+
+Bind the `class_attribute` column to the `li` tag's `class` attribute in the Cards region template.
+
+---
+
+#### 4. **Set Up the AJAX Callback in Oracle APEX:**
+- Create a new **AJAX Callback** process in the page where the Cards region is displayed.
+- Paste the modified PL/SQL code above into the process.
+
+---
+
+### Summary of Adjustments:
+1. Replace `JSON_OBJECT` with manual JSON string construction in PL/SQL.
+2. Ensure that Oracle APEX generates the required `class` attributes for your `li` tags.
+3. Keep the JavaScript logic unchanged.
+
+This approach ensures compatibility with Oracle 12.1 while maintaining the desired functionality.

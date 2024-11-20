@@ -1,0 +1,21 @@
+// JavaScript code to run in your Oracle APEX application
+document.addEventListener("DOMContentLoaded", function() {
+    // Select all li elements within the ul
+    const listItems = document.querySelectorAll('#myList li');
+
+    listItems.forEach(item => {
+        // Get the class list of the current list item
+        const classes = item.className.split(' ');
+        
+        // Find the class that starts with 'order-'
+        const orderClass = classes.find(cls => cls.startsWith('order-'));
+        
+        if (orderClass) {
+            // Extract the order number from the class
+            const orderNumber = orderClass.split('-')[1]; // Assumes class format is 'order-X'
+            
+            // Set the data-order attribute
+            item.setAttribute('data-order', orderNumber);
+        }
+    });
+});

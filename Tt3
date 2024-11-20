@@ -1,0 +1,28 @@
+<ul id="myList">
+    <li data-module-id="1" data-order="3">Item 1</li>
+    <li data-module-id="2" data-order="1">Item 2</li>
+    <li data-module-id="3" data-order="2">Item 3</li>
+</ul>
+
+<button id="sortButton">Sort Items</button>
+
+<script>
+document.getElementById('sortButton').addEventListener('click', function() {
+    const ul = document.getElementById('myList');
+    // Get all li elements as an array
+    const itemsArray = Array.from(ul.children);
+
+    // Sort the items based on the data-order attribute
+    itemsArray.sort((a, b) => {
+        return parseInt(a.getAttribute('data-order')) - parseInt(b.getAttribute('data-order'));
+    });
+
+    // Clear the existing UL and append sorted items
+    ul.innerHTML = '';
+    itemsArray.forEach(item => {
+        ul.appendChild(item); // Append each sorted item back to the UL
+    });
+
+    console.log('List sorted by data-order.');
+});
+</script>

@@ -1,0 +1,36 @@
+<ul id="firstList">
+    <li data-module-id="1" data-order="1">Item 1</li>
+    <li data-module-id="2" data-order="2">Item 2</li>
+    <li data-module-id="3" data-order="3">Item 3</li>
+</ul>
+
+<ul id="secondList">
+    <li data-module-id="1" data-order="1">Item A</li>
+    <li data-module-id="2" data-order="2">Item B</li>
+    <li data-module-id="3" data-order="3">Item C</li>
+</ul>
+
+<button id="saveButton">Save Changes</button>
+
+<script>
+document.getElementById('saveButton').addEventListener('click', function() {
+    // Get all items from the first UL
+    const firstListItems = document.querySelectorAll('#firstList li');
+
+    // Iterate over each li in the first list
+    firstListItems.forEach(item => {
+        const moduleId = item.getAttribute('data-module-id');
+        const newOrder = item.getAttribute('data-order');
+
+        // Find the corresponding item in the second UL with the same data-module-id
+        const secondListItem = document.querySelector(`#secondList li[data-module-id="${moduleId}"]`);
+
+        // If the corresponding item is found, update its data-order attribute
+        if (secondListItem) {
+            secondListItem.setAttribute('data-order', newOrder);
+        }
+    });
+
+    console.log('Data order changes saved.');
+});
+</script>

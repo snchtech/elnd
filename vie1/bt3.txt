@@ -1,0 +1,119 @@
+To display a button in `APP_ID 101` only when the user has the `editor` role in `APP_ID 105`, you can use one of the following approaches:
+
+---
+
+### **Approach 1: Use a Shared Authentication and Authorization Scheme**
+If both applications share the same authentication scheme, you can directly check the role in `APP_ID 101`.
+
+#### Steps:
+
+1. **Create an Authorization Scheme in `APP_ID 101`:**
+   - Navigate to **Shared Components** > **Authorization Schemes** in `APP_ID 101`.
+   - Create a new **PL/SQL Function Returning Boolean** authorization scheme with logic to check the user's role from the `APP_ID 105` user role table.
+     For example:
+     ```sql
+     RETURN EXISTS (
+         SELECT 1
+         FROM app105_user_roles r
+         WHERE r.user_id = :APP_USER
+           AND r.role_name = 'editor'
+     );
+     ```
+   - Replace `app105_user_roles` with the actual table or view in `APP_ID 105` that stores user roles.
+
+2. **Apply the Authorization Scheme to the Button:**
+   - Go to the button's **Authorization** settings in `APP_ID 101`.
+   - Set the `Authorization Scheme` to the one you just created.
+   - Now, the button will only appear if the user has the `editor` role.
+
+---
+
+### **Approach 2: Call a RESTful Web Service to Check Roles**
+If the `APP_ID 105` database is not directly accessible from `APP_ID 101`, you can use a RESTful Web Service to check roles.
+
+#### Steps:
+
+1. **Create a RESTful Web Service in `APP_ID 105`:**
+   - Navigate to **RESTful Services** in `APP_ID 105`.
+   - Create a new endpoint, e.g., `/check_role`.
+   - The endpoint logic should return a `TRUE` or `FALSE` value based on the user's role:
+     ```plsql
+     DECLARE
+         l_is_editor BOOLEAN;
+     BEGIN
+         SELECT CASE WHEN role_name = 'editor' THEN 'TRUE' ELSE 'FALSE' END
+         INTO l_is_editor
+         FROM app105_user_roles
+         WHERE user_id = :APP_USER;
+         
+         htp.p(l_is_editor);
+     END;
+     ```
+   - Ensure the REST endpoint is secure and only accessible by `APP_ID 101`.
+
+2. **Call the RESTful Web Service in `APP_ID 101`:**
+   - Use **Dynamic Actions** or **PL/SQL** logic to call the REST service when rendering the page in `APP_ID 101`.
+   - Example using PL/SQL:
+     ```plsql
+     DECLARE
+         l_response CLOB;
+     BEGIN
+         l_response := apex_web_service.make_rest_request(
+             p_url => 'https://<your-app-105-url>/ords/<workspace>/check_role',
+             p_http_method => 'GET',
+             p_username => :APP_USER,
+             p_password => '<password>'
+         );
+         
+         -- If the response is 'TRUE', show the button
+         IF l_response = 'TRUE' THEN
+             :P101_SHOW_BUTTON := 'Y';
+         ELSE
+             :P101_SHOW_BUTTON := 'N';
+         END IF;
+     END;
+     ```
+   - Create a page item, e.g., `P101_SHOW_BUTTON`, and set it to `'Y'` or `'N'` based on the REST call response.
+
+3. **Control Button Display Based on `P101_SHOW_BUTTON`:**
+   - Set the button's **Condition** property:
+     - **Type:** `Value of Item/Column = Expression`
+     - **Item:** `P101_SHOW_BUTTON`
+     - **Expression:** `Y`
+
+---
+
+### **Approach 3: Use a Database Link**
+If you can create a database link from the `APP_ID 101` schema to the `APP_ID 105` schema:
+
+1. **Create a Database Link in `APP_ID 101` Schema:**
+   ```sql
+   CREATE DATABASE LINK app105_link
+   CONNECT TO app105_user IDENTIFIED BY password
+   USING 'app105_db';
+   ```
+
+2. **Check User Role in the Authorization Scheme:**
+   - Create an authorization scheme in `APP_ID 101` as follows:
+     ```sql
+     RETURN EXISTS (
+         SELECT 1
+         FROM app105_user_roles@app105_link r
+         WHERE r.user_id = :APP_USER
+           AND r.role_name = 'editor'
+     );
+     ```
+
+3. **Apply the Authorization Scheme to the Button:**
+   - Assign the authorization scheme to the button.
+
+---
+
+### Security Notes:
+- Always validate and secure user role checks to prevent unauthorized access.
+- Use HTTPS for RESTful services and ensure minimal data exposure.
+- Limit database links to required permissions and access.
+
+---
+
+Let me know if you need additional details for any of the approaches!

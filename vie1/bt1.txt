@@ -1,0 +1,61 @@
+To achieve this functionality in Oracle APEX, you can use the following steps:
+
+### Steps:
+
+1. **Set Up Shared Cookies Between Applications:**
+   - Ensure that the two applications (with `APP_ID` 101 and 105) are using shared cookies. You’ve already mentioned this is set up, so no further action is needed here.
+
+2. **Create the Button in Application 101:**
+   - Add a button to your page in `APP_ID 101`. For example, create a button named `Open Modal`.
+
+3. **Construct the URL for Navigation:**
+   - Use the URL format to navigate to `APP_ID 105`, page 1, and trigger the modal page 3.
+
+   The URL should look like this:
+
+   ```
+   f?p=105:1:&APP_SESSION.::::P3_REQUEST_TYPE:CREATE
+   ```
+
+   Here:
+   - `105` is the target `APP_ID`.
+   - `1` is the target main page.
+   - `&APP_SESSION.` ensures the session is maintained.
+   - `P3_REQUEST_TYPE` is an example item in the modal page to pass a value like `CREATE` to trigger a modal for creation.
+
+4. **Configure the Modal Page in Application 105:**
+   - In `APP_ID 105`, configure **Page 3** (your modal page):
+     - **Source:** Check the value of `P3_REQUEST_TYPE` or similar item in the page.
+     - **Modal Dialog Settings:** Ensure the modal page has the correct settings to open as a dialog.
+
+5. **Add JavaScript to Automatically Open Modal:**
+   - On **Page 1** of `APP_ID 105`, add this JavaScript in the `Page Attributes` -> `Execute when Page Loads` section:
+
+     ```javascript
+     $(document).ready(function () {
+         var requestType = $v('P3_REQUEST_TYPE'); // Replace with your actual page item.
+         if (requestType === 'CREATE') {
+             apex.navigation.dialog('f?p=105:3:&APP_SESSION.', {
+                 title: "Create Record",
+                 modal: true
+             });
+         }
+     });
+     ```
+
+6. **Set Button Action in Application 101:**
+   - In your `APP_ID 101` application, set the button’s action as `Redirect to URL` and use the constructed URL:
+
+     ```
+     f?p=105:1:&APP_SESSION.::::P3_REQUEST_TYPE:CREATE
+     ```
+
+7. **Test the Setup:**
+   - Run your application in `APP_ID 101` and click the button. It should navigate to the main page of `APP_ID 105` and automatically open the modal window for page 3.
+
+### Notes:
+- Replace `P3_REQUEST_TYPE` with the actual page item that your modal page uses for determining the action (e.g., `CREATE`, `EDIT`).
+- Ensure both applications share the same authentication scheme to maintain the session.
+- If necessary, adjust security settings to allow navigation between apps.
+
+Let me know if you need additional clarifications or adjustments!

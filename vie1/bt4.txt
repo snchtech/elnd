@@ -1,0 +1,84 @@
+To implement a **checkbox group** for filtering an interactive report (IR) in Oracle APEX, follow these steps:
+
+---
+
+### **Step 1: Add a Checkbox Group Item**
+1. Go to the page containing your Interactive Report (IR).
+2. Add a new **Page Item**:
+   - Type: `Checkbox Group`
+   - Name: e.g., `PXX_STATUS_FILTER` (replace `XX` with your page number).
+   - Static Values:
+     ```
+     OPEN;Open
+     INPROCESS;In Process
+     CLOSED;Closed
+     ```
+   - Default Value: Set the default to `OPEN,INPROCESS` (separate values with commas) so that only "Open" and "In Process" rows are shown on page load.
+   - Display: Place this item above or next to your IR as a control.
+
+---
+
+### **Step 2: Modify the IR SQL Query**
+Update the Interactive Report query to use the checkbox group item as a filter.
+
+```sql
+SELECT *
+FROM your_table
+WHERE status IN (
+    SELECT REGEXP_SUBSTR(:PXX_STATUS_FILTER, '[^,]+', 1, LEVEL)
+    FROM DUAL
+    CONNECT BY REGEXP_SUBSTR(:PXX_STATUS_FILTER, '[^,]+', 1, LEVEL) IS NOT NULL
+)
+```
+
+- `:PXX_STATUS_FILTER` is the bind variable corresponding to the checkbox group item.
+- This query extracts selected values from the checkbox group and filters rows based on those values.
+
+---
+
+### **Step 3: Refresh the IR When Checkbox Group Changes**
+1. Create a **Dynamic Action** on the `PXX_STATUS_FILTER` checkbox group:
+   - **Event:** `Change`
+   - **True Action:** `Refresh`
+   - **Selection Type:** `Region`
+   - **Region:** Select your IR region.
+
+---
+
+### **Step 4: Ensure Default Behavior**
+1. On page load, the checkbox group should have `OPEN` and `INPROCESS` selected, and the IR should display only those rows.
+2. Confirm that the "Closed" checkbox is not selected by default.
+
+---
+
+### **Step 5: Optional Enhancements**
+#### 1. **Add a "Select All" Option**
+   - Add another static value:
+     ```
+     ALL;Select All
+     ```
+   - Update the SQL query:
+     ```sql
+     SELECT *
+     FROM your_table
+     WHERE :PXX_STATUS_FILTER = 'ALL'
+           OR status IN (
+               SELECT REGEXP_SUBSTR(:PXX_STATUS_FILTER, '[^,]+', 1, LEVEL)
+               FROM DUAL
+               CONNECT BY REGEXP_SUBSTR(:PXX_STATUS_FILTER, '[^,]+', 1, LEVEL) IS NOT NULL
+           )
+     ```
+
+#### 2. **Clear All Option**
+   - Create a "Clear All" button or link that clears the checkbox group and refreshes the IR:
+     - Action: Set `PXX_STATUS_FILTER` to `NULL`.
+     - Add a refresh dynamic action for the IR.
+
+---
+
+This setup ensures that:
+- The report shows only "Open" and "In Process" rows by default.
+- Users can dynamically filter by selecting one or more statuses via the checkbox group.
+- The report updates automatically when the selection changes. 
+
+Let me know if you need additional help implementing this!

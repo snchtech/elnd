@@ -1,0 +1,33 @@
+Yes, you can use the `APEX_UTIL.HAS_ROLE` function to check if the user has a specific role in another application (`APP_ID 105`) by setting the `p_app_id` parameter to `105`. This approach assumes that roles are shared across applications in the same workspace.
+
+### Example:
+
+1. **Using `APEX_UTIL.HAS_ROLE` in an Authorization Scheme**
+   - Create an **Authorization Scheme** in `APP_ID 101`:
+
+     ```sql
+     RETURN APEX_UTIL.HAS_ROLE(
+         p_username => :APP_USER,
+         p_role => 'editor',
+         p_app_id => 105
+     );
+     ```
+
+   - **Parameters:**
+     - `p_username`: Pass the current user (`:APP_USER`).
+     - `p_role`: Specify the role to check, e.g., `'editor'`.
+     - `p_app_id`: Specify the application ID of the target app, in this case, `105`.
+
+2. **Assign the Authorization Scheme to the Button**
+   - Navigate to the button in `APP_ID 101`.
+   - In the **Authorization** section of the button's settings, assign the authorization scheme you just created.
+
+   Now, the button will only be displayed if the user has the `editor` role in `APP_ID 105`.
+
+---
+
+### Notes:
+- The `APEX_UTIL.HAS_ROLE` function works only if the roles are properly defined and assigned in `APP_ID 105` using the APEX built-in roles management system.
+- If custom role management is implemented (e.g., roles stored in a table), you need to write your own PL/SQL logic to check the role.
+
+Let me know if you need help setting up roles in `APP_ID 105`!

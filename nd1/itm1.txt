@@ -1,0 +1,28 @@
+If you use a **Before Header Process** on Page 1, its purpose is to initialize the `P0_DEPARTMENT` item when the page is first loaded. Since `P0_DEPARTMENT` is a global page item, setting its value here ensures that the region on the global page is provided with a value before it attempts to render data.
+
+### Steps to Create a **Before Header Process**:
+1. Go to **Page Designer** for Page 1.
+2. In the **Processing** section, click **Add Process**.
+3. Configure the process:
+   - **Name**: Set `P0_DEPARTMENT Initialization`.
+   - **Point**: `Before Header`.
+   - **Type**: `PL/SQL Code`.
+   - **Code**:
+     ```sql
+     :P0_DEPARTMENT := 234; -- Replace 234 with the value you want to set
+     ```
+   - **Condition**: Use this if the process should only run under certain circumstances, for example:
+     - **Condition Type**: `Item is Null`.
+     - **Item**: `P0_DEPARTMENT`.
+
+4. Save and Run Page 1.
+
+### Why Use a Before Header Process?
+The **Before Header Process** runs before the page rendering begins. By setting `P0_DEPARTMENT` here:
+- It ensures the value is available for the Cards region on the global page before rendering.
+- The Cards region query can use `:P0_DEPARTMENT` without getting null data.
+
+### Ensuring Region Refresh:
+After setting `P0_DEPARTMENT` in the Before Header Process:
+- If `P0_DEPARTMENT` is used as a bind variable in the Cards region SQL query, the region will load with this value when the page is loaded.
+- If you dynamically update `P0_DEPARTMENT` later, use the dynamic action described earlier to refresh the region.

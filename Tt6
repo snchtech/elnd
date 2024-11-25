@@ -1,0 +1,21 @@
+document.addEventListener('DOMContentLoaded', function() {
+    // Assuming you are working with a single item for example po2
+    // Get value of the APEX item (e.g., po1, po2)
+    var orderNumber = parseInt(document.getElementById('your_item_id').value, 10);
+
+    // Clear existing order classes
+    for (let i = 1; i <= 3; i++) { // Adjust based on the number of your mods
+        var modDiv = document.querySelector(`.mod${i}`);
+        if (modDiv) {
+            modDiv.classList.remove('order-1'); // Remove order-1 class from all mods
+        }
+    }
+
+    // Add 'order-1' class to the appropriate div
+    if (orderNumber > 0) {
+        var targetDiv = document.querySelector(`.mod${orderNumber}`);
+        if (targetDiv) {
+            targetDiv.classList.add('order-1'); // Add order-1 class to the target mod
+        }
+    }
+});

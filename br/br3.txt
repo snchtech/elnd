@@ -1,0 +1,81 @@
+In Oracle APEX, you can create a **Confirmation Dialog** for the "Cancel Mark List" button using a built-in dynamic action feature. Here's how you can implement it:
+
+---
+
+### 1. **Create a Button**
+- Add a button to your page, for example, **Cancel Mark List**.
+- Set the button's **Type** to `Button`.
+
+---
+
+### 2. **Add a Dynamic Action for Confirmation**
+1. **Create a New Dynamic Action**:
+   - Go to the **Dynamic Actions** section of your page.
+   - Click **Create** and choose **Event** as `Click`.
+   - Select the button (e.g., `CANCEL_MARK_LIST`) as the triggering element.
+
+2. **Add a True Action for Confirmation**:
+   - Add a **Confirm** action to the dynamic action.
+   - Set the **Message** to something like:
+     ```
+     Are you sure you want to cancel and archive this mark list? This action cannot be undone.
+     ```
+   - Choose **Yes/No** buttons.
+
+3. **Add a PL/SQL Execution Action**:
+   - After the confirmation dialog, add a **True Action** for `Execute PL/SQL Code`.
+   - Use the PL/SQL code you wrote earlier to perform the cancellation operation.
+
+4. **Conditional Execution**:
+   - Set the **Condition** of the PL/SQL action to only execute if the user confirms the dialog.
+
+---
+
+### 3. **Order of Dynamic Actions**
+Your dynamic actions should be ordered as follows:
+1. **Confirm**:
+   - The confirmation dialog will show to the user.
+   - Action when "Yes" is clicked: Proceed to the next action.
+   - Action when "No" is clicked: Stop execution.
+
+2. **Execute PL/SQL Code**:
+   - Executes the cancellation logic only if the user confirms the action.
+
+---
+
+### 4. **Alternative: Custom JavaScript Confirmation**
+If you prefer more control over the dialog, you can use a **Custom JavaScript Confirmation Dialog**.
+
+1. **Dynamic Action - JavaScript Code**:
+   - Instead of the built-in **Confirm** action, use a **JavaScript Code** action with the following code:
+
+   ```javascript
+   apex.message.confirm("Are you sure you want to cancel and archive this mark list?", function (okPressed) {
+       if (okPressed) {
+           apex.server.process('CANCEL_MARK_LIST_PROCESS', {
+               pageItems: "#P1_MARK_LIST_REC_ID" // Replace with your page items
+           }, {
+               success: function (data) {
+                   apex.message.alert("Mark list successfully archived.");
+               },
+               error: function (xhr, status, error) {
+                   apex.message.alert("Error occurred: " + error);
+               }
+           });
+       }
+   });
+   ```
+
+2. **Server-Side Process**:
+   - Create a server-side process named `CANCEL_MARK_LIST_PROCESS` to handle the PL/SQL logic.
+
+---
+
+### 5. **Test the Confirmation**
+- Run the page.
+- Click the "Cancel Mark List" button.
+- Verify that the dialog appears and only executes the action if the user confirms.
+
+---
+
+This approach provides a user-friendly way to confirm critical actions and integrates seamlessly with APEX's framework.

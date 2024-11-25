@@ -1,0 +1,26 @@
+DECLARE
+    v_login        VARCHAR2(100) := :APP_USER; -- Current logged-in user
+    v_sysdate      DATE := SYSDATE;           -- Current system date
+BEGIN
+    -- Insert missing records into table2
+    INSERT INTO table2 (log_id, st_id_ref, status, login, date)
+    SELECT 
+        SEQ_LOG_ID.NEXTVAL, -- Assuming you have a sequence SEQ_LOG_ID for generating log_id
+        t1.st_id,
+        30, -- Status for "archived"
+        v_login,
+        v_sysdate
+    FROM 
+        table1 t1
+    LEFT JOIN 
+        table2 t2
+    ON 
+        t1.st_id = t2.st_id_ref
+    WHERE 
+        t1.rec_id = :P1_MARK_LIST_REC_ID -- Replace with the actual item containing the record ID
+        AND t2.st_id_ref IS NULL; -- Only include steps not already logged
+
+    -- Optional: Perform additional operations like setting flags in table1 if needed.
+    
+    COMMIT; -- Save changes
+END;

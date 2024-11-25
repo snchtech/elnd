@@ -1,0 +1,10 @@
+if (apex.item("P1_SHOW_MODAL").getValue() === "1") {
+    apex.navigation.dialog("f?p=APP_ID:MODAL_PAGE_ID:&APP_SESSION.", { dialog: true });
+}
+
+https://docs.oracle.com/cd/G13834_01/aexjs/apex.navigation.dialog.html
+
+
+apex.navigation.dialog.close(true)
+
+https://doyensys.com/blogs/redirecting-to-a-popup-screen-using-javascript-with-parameters/

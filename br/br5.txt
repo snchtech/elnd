@@ -1,0 +1,101 @@
+To implement a custom checkbox group filter for your Oracle APEX Interactive Report (IR) with the desired behavior, follow these steps:
+
+### 1. **Add a Custom Region for the Filter**
+- Create a new **Static Content** region on the same page as your Interactive Report.
+- Place it above or next to your IR for visibility.
+- In this region, add a Checkbox Group item.
+
+### 2. **Configure the Checkbox Group**
+- Create a page item, e.g., `PXX_STATUS_FILTER` (replace `XX` with your page number).
+- Set the **Type** to "Checkbox Group."
+- Set the **List of Values** as **Static Values** with the following entries:
+  ```
+  IN PROCESS:in_process
+  CONFIRMED:confirmed
+  CLOSED:closed
+  ```
+- Set the **Default Value** to:
+  ```
+  in_process,confirmed
+  ```
+  This ensures that "In Process" and "Confirmed" are checked by default when the page loads.
+
+### 3. **Modify the Interactive Report Query**
+Update the query of your Interactive Report to include a filter based on the selected status. Use a `PL/SQL Expression` with the `INSTR` function or similar logic. For example:
+```sql
+SELECT *
+FROM your_table
+WHERE INSTR(:PXX_STATUS_FILTER, LOWER(status)) > 0
+```
+This will filter rows based on the selected statuses in the `PXX_STATUS_FILTER` item.
+
+### 4. **Set up a Dynamic Action to Refresh the IR**
+- Add a **Dynamic Action** on the `PXX_STATUS_FILTER` item.
+- Set the **Event** to `Change`.
+- Under the **Action**, choose `Refresh`.
+- In the **Selection Type**, choose `Region` and select your Interactive Report region.
+
+### 5. **Ensure Closed Status is Initially Hidden**
+When the page loads, the `CLOSED` status will not appear because the default value of `PXX_STATUS_FILTER` does not include it. Users can check the "Closed" option in the filter to view rows with this status.
+
+### 6. **Optimize UI/UX**
+To improve the user experience:
+- Add a descriptive label or heading for the filter region, e.g., "Filter by Status."
+- Use a **Display Only** or visually distinct style for the "Closed" checkbox to indicate its unique behavior.
+
+### 7. **Test the Page**
+- Ensure that the Interactive Report refreshes as expected when the checkbox selection changes.
+- Verify that "Closed" rows only appear when explicitly selected in the filter.
+
+### Example Code for IR Query
+```sql
+SELECT id,
+       name,
+       status
+FROM your_table
+WHERE INSTR(:PXX_STATUS_FILTER, LOWER(status)) > 0
+```
+
+This approach provides an intuitive and dynamic filter for your Interactive Report, meeting all your requirements. Let me know if you encounter any issues or need further assistance!
+
+
+/*-------------------------------*/
+
+Yes, the code provided will work with multiple checkboxes checked in the group. The key lies in how Oracle APEX handles multi-selection page items like `Checkbox Group`.
+
+### How It Works:
+- When you check multiple checkboxes in the `Checkbox Group`, APEX stores the selected values as a comma-separated string (e.g., `in_process,confirmed,closed`).
+- The `INSTR` function checks if each status (`in_process`, `confirmed`, or `closed`) exists in the string stored in `:PXX_STATUS_FILTER`.
+
+### Example Behavior:
+1. **Initial State (Default)**
+   - Default value: `in_process,confirmed`.
+   - The IR query filters rows where the `status` is either `in_process` or `confirmed`.
+
+2. **When "Closed" is Checked**
+   - Checkbox group value becomes: `in_process,confirmed,closed`.
+   - The IR query includes rows where `status` is any of the three values.
+
+3. **When All Are Unchecked**
+   - Checkbox group value is empty: `''`.
+   - The query does not match any `status`, and no rows are displayed.
+
+### Adjusted SQL Query for Clarity
+To handle multiple statuses more explicitly, you can modify the query using the `LIKE` operator instead of `INSTR`:
+```sql
+SELECT *
+FROM your_table
+WHERE ',' || :PXX_STATUS_FILTER || ',' LIKE '%,' || LOWER(status) || ',%'
+```
+
+### Why This Works:
+- `',' || :PXX_STATUS_FILTER || ','` ensures that the filter string is wrapped in commas (e.g., `,in_process,confirmed,`).
+- `'%,' || LOWER(status) || ',%'` ensures that the `status` is matched as a whole word (not as a substring of another word).
+
+This query is especially useful if `status` values contain similar strings (e.g., `confirm` and `confirmed`) to avoid partial matches.
+
+### Key Points:
+- **Yes**, the code will work with multiple checkboxes checked because it treats the `:PXX_STATUS_FILTER` as a list of comma-separated values.
+- The adjusted query above provides a more robust solution to handle edge cases like partial matches.
+
+Let me know if you need further customization!

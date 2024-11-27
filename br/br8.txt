@@ -1,0 +1,97 @@
+Yes, you can use the "OK" button on the APEX date picker element to append `23:59:59` without relying on the `Change` event, thereby avoiding recursion altogether. Here's how to achieve it:
+
+---
+
+### Steps to Use the "OK" Button in Date Picker
+
+1. **Identify the Date Picker's "OK" Button**:
+   The "OK" button in APEX's date picker can be targeted using its DOM structure. You need to attach a custom event listener to this button.
+
+2. **Add JavaScript to Append `23:59:59`**:
+   When the "OK" button is clicked, capture the selected date, append `23:59:59`, and update the item value.
+
+---
+
+### JavaScript Code
+Place this code in a **Dynamic Action** (e.g., `Page Load` or `DOM Ready`):
+
+```javascript
+// Replace "P2_PLAN_END" with the actual ID of your date picker item
+var datePickerSelector = "#P2_PLAN_END";
+
+// Wait for the date picker dialog to open and attach a listener to the OK button
+$(document).on("dialogopen", ".ui-datepicker", function () {
+    // Find the "OK" button in the date picker dialog
+    $(".ui-datepicker-close").off("click").on("click", function () {
+        // Get the current value of the date picker
+        var dateItem = $v("P2_PLAN_END");
+
+        if (dateItem) {
+            // Always append 23:59:59 to the selected date
+            var dateWithTime = dateItem.split(' ')[0] + ' 23:59:59';
+
+            // Update the value of the date picker item
+            $s("P2_PLAN_END", dateWithTime);
+
+            // Send the updated value to the server for session state synchronization
+            apex.server.process(
+                "SAVE_TO_SESSION", // On-demand process name
+                {
+                    g01: dateWithTime // Send the updated value as g01 parameter
+                },
+                {
+                    success: function () {
+                        console.log("Session state updated with value:", dateWithTime);
+
+                        // Refresh the Interactive Report region
+                        apex.region("IR_REGION_STATIC_ID").refresh();
+                    },
+                    error: function (err) {
+                        console.error("Failed to update session state.", err);
+                    }
+                }
+            );
+        }
+    });
+});
+```
+
+---
+
+### Explanation of the Code
+
+1. **Attach Event to Date Picker Dialog**:
+   - The `dialogopen` event is triggered when the date picker dialog is opened. This ensures the code applies dynamically.
+
+2. **Target the "OK" Button**:
+   - The `$(".ui-datepicker-close")` selector targets the "OK" button in the date picker dialog.
+   - The `.off("click").on("click")` combination ensures the event is attached once and doesn't cause duplicates.
+
+3. **Append `23:59:59`**:
+   - When the "OK" button is clicked, the current value of the date picker is retrieved, and `23:59:59` is appended.
+
+4. **Update the Item Value**:
+   - The `$s("P2_PLAN_END", dateWithTime)` method updates the item value without triggering recursion.
+
+5. **Session State and Region Refresh**:
+   - The updated value is sent to the session state using `apex.server.process`.
+   - The region is refreshed to apply the new value.
+
+---
+
+### Key Benefits
+- **No Recursion**: The event is tied to the "OK" button, so no recursive triggers occur.
+- **User-Friendly**: The logic runs only after the user confirms their selection by clicking "OK".
+- **Dynamic Handling**: Works seamlessly with APEX's date picker structure.
+
+---
+
+### Testing
+1. Open the page and select a date using the date picker.
+2. Click the "OK" button.
+3. Verify:
+   - The time `23:59:59` is appended to the date.
+   - The session state is updated.
+   - The Interactive Report region is refreshed with the new value.
+
+This approach eliminates recursion and ensures smooth functionality.

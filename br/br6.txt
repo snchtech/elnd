@@ -1,0 +1,59 @@
+// var dateItem = $v("P1_DATE_TEST"); // Get the value of the date picker
+// if (dateItem) {
+//     // Append the default time 23:59:59 if a date is selected
+//     var dateWithTime = dateItem + ' 23:59:59';
+//     $s("P1_DATE_TEST", dateWithTime); // Set the updated value back to the item
+// }
+
+
+// var dateItem = $v("P1_DATE_TEST"); // Get the current value of the date picker
+// if (dateItem && !dateItem.includes("23:59:59")) {
+//     // Only append the time if it's not already set to 23:59:59
+//     var dateWithTime = dateItem + ' 23:59:59';
+//     $s("P1_DATE_TEST", dateWithTime); // Set the updated value back to the item
+// }
+
+var isProgrammaticUpdate = false;
+if (!isProgrammaticUpdate) {
+var dateItem = $v("P1_DATE_TEST"); // Get the current value of the date picker
+if (dateItem) {
+    // Split the value into date and time components
+    var parts = dateItem.split(' ');
+    if (parts.length === 2) {
+        //var time = parts[1]; // Get the time part
+        //if (time === "00:00:00") {
+            // Append 23:59:59 only if time is exactly 00:00:00
+            var dateWithTime = parts[0] + ' 23:59:59';
+            
+            // Set the global flag to true before updating the item
+            isProgrammaticUpdate = true;
+            $s("P1_DATE_TEST", dateWithTime); // Set the updated value back to the item
+
+            // Reset the global flag after updating
+            isProgrammaticUpdate = false;
+
+            console.log(apex.item('P1_DATE_TEST').getValue(), 'TTTTTTTTTTTTTTTTTTTT')
+
+            // Save the updated value to session state
+            apex.server.process(
+                "SAVE_TO_SESSION", // Optional process name
+                // { pageItems: apex.item('P1_DATE_TEST').getValue() }, // Item to synchronize
+                {
+                    x01: $('#P1_DATE_TEST').value//apex.item('P1_DATE_TEST').getValue()
+                },
+                {
+                    success: function () {
+                        console.log("Session state updated for P1_DATE_TEST.");
+
+                        // Refresh the region after session state update
+                        //apex.region("IR_REGION_STATIC_ID").refresh();
+                    },
+                    error: function (err) {
+                        console.error("Failed to update session state.", err);
+                    }
+                }
+            );
+        //}
+    }
+}
+}

@@ -1,0 +1,18 @@
+declare 
+l_date_value VARCHAR2(4000);
+BEGIN
+l_date_value := apex_application.g_x01;
+
+-- Save it to the session state or perform another operation
+        APEX_UTIL.SET_SESSION_STATE('P1_DATE_TEST', l_date_value);
+
+        apex_debug.info('id---: ' || l_date_value);
+
+        -- Optionally log for debugging
+        APEX_DEBUG.MESSAGE('Received value for P1_DATE_TEST: ' || l_date_value);
+
+-- 
+--     -- Save the value of P2_PLAN_END to the session state
+--     --APEX_UTIL.SET_SESSION_STATE('P1_DATE_TEST', :P1_DATE_TEST);
+--     :P1_DATE_TEST := :P1_DATE_TEST;
+END;

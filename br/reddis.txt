@@ -1,0 +1,36 @@
+const redis = require('redis');
+const redisClient = redis.createClient();
+
+redisClient.on('error', (err) => console.error('Redis error:', err));
+
+app.get('/download/:moduleId', async (req, res) => {
+    const moduleId = req.params.moduleId;
+
+    redisClient.get(moduleId, async (err, cachedFile) => {
+        if (err) {
+            console.error('Redis get error:', err);
+            return res.status(500).send('Error fetching file');
+        }
+
+        if (cachedFile) {
+            console.log('Serving file from cache.');
+            res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+            res.end(Buffer.from(cachedFile, 'base64'));
+            return;
+        }
+
+        console.log('Fetching file from database.');
+        const fileData = await getFileFromDB(moduleId);
+
+        if (!fileData) {
+            return res.status(404).send('File not found');
+        }
+
+        // Cache the file in Redis for 1 hour
+        redisClient.setex(moduleId, 3600, fileData.toString('base64'));
+
+        // Send the file
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+        res.end(fileData);
+    });
+});

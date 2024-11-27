@@ -1,0 +1,58 @@
+const express = require('express');
+const NodeCache = require('node-cache');
+const oracledb = require('oracledb');
+
+const app = express();
+const fileCache = new NodeCache({ stdTTL: 3600 }); // Cache with 1-hour TTL
+
+// Mock function to get file from Oracle DB
+async function getFileFromDB(moduleId) {
+    // Replace this with your Oracle DB query logic
+    const connection = await oracledb.getConnection({ /* your connection details */ });
+    const result = await connection.execute(
+        `SELECT file_data FROM module_files WHERE module_id = :id`,
+        [moduleId],
+        { outFormat: oracledb.OBJECT }
+    );
+    await connection.close();
+    return result.rows[0]?.FILE_DATA; // Assuming file_data column holds the file
+}
+
+// Endpoint to download a file by module_id
+app.get('/download/:moduleId', async (req, res) => {
+    const moduleId = req.params.moduleId;
+
+    try {
+        // Check if file is in cache
+        const cachedFile = fileCache.get(moduleId);
+
+        if (cachedFile) {
+            console.log('Serving file from cache.');
+            res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+            res.end(cachedFile); // Send cached file
+            return;
+        }
+
+        console.log('Fetching file from database.');
+        const fileData = await getFileFromDB(moduleId);
+
+        if (!fileData) {
+            return res.status(404).send('File not found');
+        }
+
+        // Cache the file data for 1 hour
+        fileCache.set(moduleId, fileData);
+
+        // Send the file
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+        res.end(fileData);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error fetching file');
+    }
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+});

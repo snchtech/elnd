@@ -1,0 +1,77 @@
+The memory capacity for caching files using **NodeCache** is limited by the available memory (RAM) on your server. NodeCache stores data directly in your server's RAM, which makes it extremely fast but also means it's limited by your system's memory.
+
+Here are key considerations:
+
+---
+
+### **1. Memory Size and Available RAM**
+- The maximum size of files you can cache depends on the total free memory of your server.
+- If you have, for example, 4 GB of free RAM, and your application and other processes use 2 GB, then about 2 GB could potentially be used for caching files.
+
+---
+
+### **2. NodeCache and Memory Management**
+NodeCache itself doesn’t impose a specific memory limit—it uses the server’s available memory. However, storing large files in NodeCache might cause:
+
+1. **Out of Memory Errors**: If the cache grows too large, it can exhaust the available RAM.
+2. **Performance Degradation**: As RAM usage approaches capacity, the server might start swapping memory to disk, slowing down performance.
+
+---
+
+### **3. File Size and Number of Files**
+- To estimate, calculate the total size of files you plan to cache. For example:
+  - If each file is **10 MB** and you want to cache 100 files:
+    - \( 10 \, \text{MB/file} \times 100 \, \text{files} = 1000 \, \text{MB (1 GB)} \)
+- If you cache multiple files and they exceed available memory, the server might crash or degrade.
+
+---
+
+### **4. Best Practices for Large Files**
+If you plan to cache large files or many files, here are some strategies to avoid overloading the system:
+
+1. **Set a Cache Limit**:
+   - Limit the total size or number of files cached using logic in your application.
+   - Example:
+     ```javascript
+     const cacheSizeLimit = 500 * 1024 * 1024; // 500 MB
+     let currentCacheSize = 0;
+
+     function addToCache(key, data) {
+         const dataSize = Buffer.byteLength(data);
+         if (currentCacheSize + dataSize > cacheSizeLimit) {
+             console.error('Cache size limit exceeded');
+             return false;
+         }
+         fileCache.set(key, data);
+         currentCacheSize += dataSize;
+         return true;
+     }
+     ```
+
+2. **Evict Old Entries**:
+   Use NodeCache’s `stdTTL` (standard time-to-live) or manual eviction policies to remove older or least recently used (LRU) entries:
+   ```javascript
+   const fileCache = new NodeCache({ stdTTL: 3600, checkperiod: 120 });
+   ```
+
+3. **Avoid Caching Very Large Files**:
+   - If files exceed 50–100 MB, consider caching metadata (e.g., file ID, location) instead of file content. Retrieve the actual file from disk or database on demand.
+
+4. **Consider Distributed Caching (e.g., Redis)**:
+   - Redis can handle large caches better as it provides more robust memory management and supports eviction policies like LRU or LFU.
+   - Redis can also offload memory usage to a separate server, freeing your application server.
+
+---
+
+### **5. Example Scenarios**
+- **Small Files** (1 MB each):
+  - If you have 1 GB of free memory, you can store around 1000 files of 1 MB each in NodeCache.
+- **Large Files** (50 MB each):
+  - With 1 GB of free memory, you can store only 20 files of 50 MB each.
+
+---
+
+### **Conclusion**
+- NodeCache is best for small-to-moderate-sized files (<10 MB each).
+- For larger files or high-volume caching, consider using **Redis** or another caching solution with better memory management capabilities.
+- Monitor your server's memory usage carefully to prevent overloading the system. Use tools like `top` or `htop` on Linux to keep an eye on RAM usage.

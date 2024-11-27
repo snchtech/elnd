@@ -1,0 +1,74 @@
+To achieve the functionality of updating an Oracle APEX item based on the checked checkboxes, you can use both PL/SQL and JavaScript depending on your requirement.
+
+### Option 1: Using PL/SQL (Server-side)
+
+You can implement PL/SQL in an APEX process that executes when the checkbox group is submitted. Here’s a simple example:
+
+1. **Create a Checkbox Group in your APEX page**: Name it something like `P1_CHECKBOX_GROUP`.
+2. **Create a Text Area or a Display Only item**: This will hold the ids of the checked boxes, e.g., `P1_SELECTED_IDS`.
+
+3. **Create a PL/SQL Process**:
+   - Go to the processing section of your page.
+   - Add a new process and write the following code:
+
+   ```plsql
+   DECLARE
+       v_selected_ids VARCHAR2(4000);
+   BEGIN
+       -- Fetching the selected values from the checkbox group
+       SELECT LISTAGG(CHECKBOX_VALUE, ',') WITHIN GROUP (ORDER BY CHECKBOX_VALUE)
+       INTO v_selected_ids
+       FROM APEX_APPLICATION.G_PRINT_CHECKBOX
+       WHERE CHECKBOX_VALUE IN (
+           SELECT COLUMN_VALUE 
+           FROM APEX_APPLICATION_GLOBAL.VIEW_VALUES 
+           WHERE name = 'P1_CHECKBOX_GROUP'
+       );
+
+       -- Assigning selected ids to the item
+       :P1_SELECTED_IDS := v_selected_ids;
+   EXCEPTION
+       WHEN NO_DATA_FOUND THEN
+           :P1_SELECTED_IDS := NULL; -- In case none are selected
+   END;
+   ```
+
+### Option 2: Using JavaScript (Client-side)
+
+If you prefer to handle this on the client-side for immediate feedback (without a page submit), you can achieve it through JavaScript. 
+
+1. **Assume you have a Checkbox Group**: `P1_CHECKBOX_GROUP` and a Display Only item `P1_SELECTED_IDS` on your APEX page.
+
+2. **Add a JavaScript Code**:
+   - Go to the JavaScript section of your page and add the following code inside the page's JavaScript initialization section.
+
+   ```javascript
+   // Assuming that your checkbox group has the static class 'checkbox-group'
+   var checkboxGroup = document.querySelectorAll('input[name="f01"]:checked'); 
+   
+   function updateSelectedIds() {
+       var selectedIds = [];
+       checkboxGroup.forEach(function(checkbox) {
+           if (checkbox.checked) {
+               selectedIds.push(checkbox.value); // Collecting the checked values
+           }
+       });
+       // Update the APEX item with the selected ids
+       apex.item('P1_SELECTED_IDS').setValue(selectedIds.join(','));
+   }
+
+   // Attach the update function on change event of checkbox group
+   document.querySelectorAll('input[name="f01"]').forEach(function(checkbox) {
+       checkbox.addEventListener('change', updateSelectedIds);
+   });
+   ```
+
+### Explanation
+
+- **PL/SQL Approach**: This leverages the APEX server-side logic to fetch the selected checkboxes when the form is submitted and updates a designated item with the corresponding IDs.
+
+- **JavaScript Approach**: This is a client-side solution where the selected checkboxes are immediately reflected in the target item as soon as the user interacts with the checkbox, without needing to submit the form.
+
+### Conclusion
+
+Both solutions are valuable depending on whether you want a real-time update via JavaScript or a processed update via PL/SQL after submitting the form. You can choose the method that best fits your application’s user experience requirements.

@@ -1,0 +1,24 @@
+.container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px; /* Відступи між колонками */
+  padding: 10px; /* Відступи всередині контейнера */
+}
+
+ul {
+  list-style: none; /* Забираємо стандартні маркери списку */
+  padding: 0;
+  margin: 0;
+  background-color: #f9f9f9; /* Фоновий колір для кращої видимості */
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+li {
+  padding: 5px 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+li:last-child {
+  border-bottom: none; /* Забираємо бордер у останнього елемента */
+}

@@ -1,0 +1,231 @@
+Ось як можна реалізувати **експорт JSON у файл** у вашому React-додатку.
+
+---
+
+### **Кроки для реалізації експорту JSON**
+
+#### **1. Додайте кнопку "Експортувати у файл"**
+Додамо функцію, яка створює файл з JSON-даними і автоматично пропонує користувачу його завантажити.
+
+#### **2. Оновіть компонент `Canvas.js`**
+
+Ось оновлений код:
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line, Text } from 'react-konva';
+import ToolPanel from './ToolPanel';
+
+const Canvas = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const handleAddElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      draggable: true,
+      fill: 'gray',
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Обробка переміщення елемента
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  // Збереження у JSON
+  const handleSave = () => {
+    const json = JSON.stringify(elements, null, 2);
+    console.log('Збережений стан:', json);
+
+    // Збереження у localStorage
+    localStorage.setItem('canvasState', json);
+    alert('Стан схеми збережено!');
+  };
+
+  // Завантаження стану з JSON
+  const handleLoad = () => {
+    const savedState = localStorage.getItem('canvasState');
+    if (savedState) {
+      setElements(JSON.parse(savedState));
+      alert('Стан схеми завантажено!');
+    } else {
+      alert('Стан схеми не знайдено.');
+    }
+  };
+
+  // Експорт JSON у файл
+  const handleExport = () => {
+    const json = JSON.stringify(elements, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // Створення посилання для завантаження
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'canvas-state.json'; // Назва файлу
+    a.click();
+
+    // Звільнення об'єкта URL
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel onAddElement={handleAddElement} />
+
+      {/* Сцена */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <div style={{ margin: '10px' }}>
+          <button onClick={handleSave}>Зберегти стан</button>
+          <button onClick={handleLoad}>Завантажити стан</button>
+          <button onClick={handleExport}>Експортувати у файл</button>
+        </div>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 100]}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Canvas;
+```
+
+---
+
+### **Робота функції експорту**
+
+1. **Створення JSON:**
+   Усі елементи на сцені збираються у масив і перетворюються у JSON.
+
+2. **Збереження JSON у файл:**
+   JSON конвертується у Blob (об’єкт із даними), а потім використовується об'єкт `URL.createObjectURL` для створення посилання на файл.
+
+3. **Завантаження файлу:**
+   Створюється приховане посилання (`<a>`), яке автоматично клікається для завантаження файлу.
+
+---
+
+### **Що ви отримаєте?**
+- **Файл `canvas-state.json`**:
+  ```json
+  [
+    {
+      "id": 1,
+      "type": "rect",
+      "x": 100,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "fill": "gray",
+      "draggable": true
+    },
+    {
+      "id": 2,
+      "type": "circle",
+      "x": 200,
+      "y": 200,
+      "radius": 50,
+      "fill": "gray",
+      "draggable": true
+    }
+  ]
+  ```
+
+---
+
+### **Розширення функціоналу**
+
+1. **Імпорт JSON із файлу:**
+   Реалізуйте функцію, яка дозволяє користувачам завантажити JSON-файл і відобразити його на сцені.
+
+2. **Валідація JSON:**
+   Перед імпортом перевіряйте, чи відповідає JSON очікуваній структурі.
+
+Якщо потрібно додати функцію імпорту, дайте знати!

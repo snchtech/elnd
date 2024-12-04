@@ -1,0 +1,210 @@
+Додамо панель з набором графічних компонентів, яку можна використовувати для перетягування елементів на сцену. Для цього використаємо **react-konva** і реалізуємо **drag and drop** та **resize**.
+
+---
+
+### **Етап 1: Структура додатку**
+- Панель інструментів з елементами: **лінія**, **текст**, **прямокутник**, **коло**, **трикутник**.
+- Сцена для перетягування та зміни розміру елементів.
+
+---
+
+### **1. Налаштування панелі інструментів**
+
+#### Створіть компонент `ToolPanel.js`:
+```javascript
+import React from 'react';
+
+const ToolPanel = ({ onAddElement }) => {
+  return (
+    <div style={{ width: '200px', padding: '10px', background: '#f4f4f4' }}>
+      <h3>Інструменти</h3>
+      <button onClick={() => onAddElement('line')}>Лінія</button>
+      <button onClick={() => onAddElement('text')}>Текст</button>
+      <button onClick={() => onAddElement('rect')}>Прямокутник</button>
+      <button onClick={() => onAddElement('circle')}>Коло</button>
+      <button onClick={() => onAddElement('triangle')}>Трикутник</button>
+    </div>
+  );
+};
+
+export default ToolPanel;
+```
+
+---
+
+### **2. Основний компонент Canvas із інтерактивністю**
+
+#### Створіть/оновіть файл `Canvas.js`:
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line, Text } from 'react-konva';
+import ToolPanel from './ToolPanel';
+
+const Canvas = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  const handleAddElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      draggable: true,
+      fill: 'gray',
+    };
+    setElements([...elements, newElement]);
+  };
+
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  const handleResize = (id, width, height) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, width, height } : el
+    );
+    setElements(updatedElements);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel onAddElement={handleAddElement} />
+
+      {/* Сцена */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                    onTransformEnd={(e) =>
+                      handleResize(
+                        el.id,
+                        e.target.width() * e.target.scaleX(),
+                        e.target.height() * e.target.scaleY()
+                      )
+                    }
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                    onTransformEnd={(e) =>
+                      handleResize(el.id, e.target.radius() * e.target.scaleX())
+                    }
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 100]}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Canvas;
+```
+
+---
+
+### **3. Оновіть `App.js`**
+```javascript
+import React from 'react';
+import Canvas from './components/Canvas';
+
+function App() {
+  return (
+    <div>
+      <Canvas />
+    </div>
+  );
+}
+
+export default App;
+```
+
+---
+
+### **Результат**
+1. Панель із кнопками для додавання елементів.
+2. Перетягування елементів на сцені.
+3. Зміна розмірів (для прямокутників, кіл, тексту).
+
+---
+
+### **Додаткові можливості**
+1. **Додавання кольорів:** Надайте користувачу можливість змінювати кольори елементів.
+2. **Збереження стану:** Зберігайте розташування і параметри елементів у JSON.
+3. **Масштабування сцени:** Додайте масштабування сцени для великих схем.
+
+Якщо потрібні інші функції або вдосконалення, дайте знати!

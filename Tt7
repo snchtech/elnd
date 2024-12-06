@@ -1,0 +1,40 @@
+function login() {
+    // Get the current date and time
+    const now = new Date();
+    // Add 12 hours to the current date
+    const expiryDate = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+    // Store the expiry date in local storage as an ISO string
+    localStorage.setItem('expiryDate', expiryDate.toISOString());
+
+    console.log('User logged in, session will expire in 12 hours.');
+}
+
+function checkSession() {
+    // Get the current date and time
+    const now = new Date();
+    // Retrieve the expiry date from local storage
+    const expiryDateString = localStorage.getItem('expiryDate');
+
+    if (expiryDateString) {
+        const expiryDate = new Date(expiryDateString);
+        
+        // Check if the current date and time is greater than the expiry date
+        if (now > expiryDate) {
+            console.log('Session expired, logging out...');
+            logout(); // Call the logout function
+        } else {
+            console.log('Session is still valid.');
+        }
+    } else {
+        console.log('No session found, please log in.');
+    }
+}
+
+function logout() {
+    // Clear the expiry date from local storage
+    localStorage.removeItem('expiryDate');
+    
+    // Perform any other logout operations here (e.g., redirecting to a login page)
+    console.log('User logged out.');
+}
+

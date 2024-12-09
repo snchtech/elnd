@@ -1,0 +1,238 @@
+Ось як реалізувати програму з панеллю інструментів і контейнером для малювання графічних елементів у **Next.js** з використанням **Konva.js**.
+
+---
+
+### **Структура проекту**
+- Панель інструментів: містить кнопки для додавання елементів (лінія, текст, прямокутник, коло, трикутник).
+- Контейнер для малювання: містить сцену Konva.js, де можна малювати, перетягувати та змінювати розмір елементів.
+
+---
+
+### **1. Створення сторінки з панеллю інструментів і контейнером**
+
+#### **Файл `pages/index.js`**
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **2. Реалізація панелі інструментів**
+
+#### **Файл `components/ToolPanel.js`**
+```javascript
+import React from 'react';
+
+const ToolPanel = ({ addElement }) => {
+  return (
+    <div style={{ width: '200px', padding: '10px', background: '#f4f4f4' }}>
+      <h3>Панель інструментів</h3>
+      <button onClick={() => addElement('rect')}>Прямокутник</button>
+      <button onClick={() => addElement('circle')}>Коло</button>
+      <button onClick={() => addElement('line')}>Лінія</button>
+      <button onClick={() => addElement('text')}>Текст</button>
+      <button onClick={() => addElement('triangle')}>Трикутник</button>
+    </div>
+  );
+};
+
+export default ToolPanel;
+```
+
+---
+
+### **3. Налаштування контейнера для малювання**
+
+Контейнер вже налаштований у `Stage` компоненті. Ви можете перетягувати елементи за допомогою `draggable` і додавати нові через панель інструментів.
+
+---
+
+### **4. Додатковий функціонал: Зміна розмірів**
+
+#### **Додайте обробку зміни розмірів для прямокутників**
+```javascript
+onTransformEnd={(e) => {
+  const node = e.target;
+  const updatedElements = elements.map((el) =>
+    el.id === id
+      ? {
+          ...el,
+          width: node.width() * node.scaleX(),
+          height: node.height() * node.scaleY(),
+        }
+      : el
+  );
+  setElements(updatedElements);
+}}
+```
+
+#### **Застосуйте до прямокутників**
+```javascript
+<Rect
+  key={el.id}
+  x={el.x}
+  y={el.y}
+  width={el.width}
+  height={el.height}
+  fill={el.fill}
+  draggable
+  onDragEnd={(e) => handleDragEnd(el.id, e)}
+  onTransformEnd={(e) => handleResize(el.id, e)}
+  ref={(node) => {
+    if (node) {
+      node.setAttrs({
+        draggable: true,
+        resizable: true,
+      });
+    }
+  }}
+/>
+```
+
+---
+
+### **5. Стилізація та оптимізація**
+
+- Додайте CSS для покращення вигляду панелі інструментів і сцени.
+- Використовуйте `React.memo` для оптимізації рендерингу елементів.
+
+---
+
+### **6. Запустіть проект**
+
+1. Запустіть сервер Next.js:
+   ```bash
+   npm run dev
+   ```
+2. Відкрийте в браузері: `http://localhost:3000`.
+
+---
+
+### **Результат**
+- Панель інструментів із кнопками для створення елементів.
+- Контейнер для малювання елементів із можливістю їх перетягування.
+- Базова підтримка зміни розмірів (можна розширити для інших типів елементів).
+
+Якщо потрібно більше функціоналу або оптимізацій, дайте знати! 😊

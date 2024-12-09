@@ -1,0 +1,244 @@
+Ось як реалізувати **імпорт JSON із файлу** в Next.js для вашого додатку. Ми додамо функцію, яка дозволяє користувачам завантажувати файл із JSON-даними та відображати їх на сцені.
+
+---
+
+### **Оновлений код з імпортом JSON**
+
+#### **Код:**
+Оновимо функціонал у `pages/index.js`, додавши кнопку для імпорту JSON.
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  // Експорт JSON у файл
+  const exportToJsonFile = () => {
+    const json = JSON.stringify(elements, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'canvas-state.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Імпорт JSON із файлу
+  const importFromJsonFile = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const importedElements = JSON.parse(e.target.result);
+          setElements(importedElements); // Оновлюємо стан елементів
+          alert('Сцена успішно імпортована!');
+        } catch (error) {
+          alert('Помилка імпорту. Перевірте формат JSON.');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <div style={{ margin: '10px' }}>
+          <button onClick={exportToJsonFile}>Експортувати у файл</button>
+          <input
+            type="file"
+            accept="application/json"
+            onChange={importFromJsonFile}
+            style={{ marginLeft: '10px' }}
+          />
+        </div>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **Що робить функція імпорту?**
+
+1. **Завантаження файлу:**
+   - Користувач вибирає файл `.json` через елемент `<input type="file" />`.
+
+2. **Читання JSON:**
+   - `FileReader` зчитує вміст файлу.
+   - JSON парситься у масив елементів.
+
+3. **Оновлення сцени:**
+   - Стан елементів (`elements`) оновлюється отриманими даними.
+   - Елементи відображаються на сцені.
+
+---
+
+### **Як виглядає імпортований JSON?**
+Імпортований JSON повинен відповідати формату:
+```json
+[
+  {
+    "id": 1,
+    "type": "rect",
+    "x": 100,
+    "y": 100,
+    "width": 100,
+    "height": 100,
+    "fill": "gray",
+    "draggable": true
+  },
+  {
+    "id": 2,
+    "type": "circle",
+    "x": 200,
+    "y": 200,
+    "radius": 50,
+    "fill": "blue",
+    "draggable": true
+  }
+]
+```
+
+---
+
+### **Що ще можна додати?**
+
+1. **Валідація JSON:**
+   - Перевіряйте, чи всі об’єкти у файлі мають потрібні поля (`id`, `type`, `x`, `y` тощо).
+   - Наприклад:
+     ```javascript
+     if (!Array.isArray(importedElements)) {
+       throw new Error('JSON повинен містити масив елементів.');
+     }
+     ```
+
+2. **Обробка помилок:**
+   - Виводьте детальні повідомлення про помилки, якщо формат файлу неправильний.
+
+---
+
+### **Як користуватися?**
+
+1. Натисніть кнопку **"Експортувати у файл"**, щоб завантажити JSON зі сценою.
+2. Натисніть на поле завантаження файлу, щоб вибрати JSON і імпортувати його на сцену.
+
+---
+
+Якщо потрібна додаткова допомога з функціоналом або валідацією JSON, дайте знати! 😊

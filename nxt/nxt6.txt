@@ -1,0 +1,251 @@
+Щоб зберігати стан на сервері, ми інтегруємо API-запити між клієнтом (**Next.js**) і сервером (**Express**). Це дозволить передавати стан сцени у форматі JSON на сервер і зберігати його там.
+
+---
+
+### **1. Оновлення сервера (Express)**
+
+#### **1.1. Додайте API для збереження стану**
+
+У файлі `server.js` створіть маршрути для збереження та отримання стану:
+```javascript
+const express = require('express');
+const next = require('next');
+
+const app = next({ dev: process.env.NODE_ENV !== 'production' });
+const handle = app.getRequestHandler();
+
+const PORT = 4000;
+
+app.prepare().then(() => {
+  const server = express();
+
+  server.use(express.json());
+
+  // Тимчасове сховище для станів
+  let sceneState = [];
+
+  // Отримання стану сцени
+  server.get('/api/state', (req, res) => {
+    res.json(sceneState);
+  });
+
+  // Збереження стану сцени
+  server.post('/api/state', (req, res) => {
+    sceneState = req.body; // Зберігаємо стан у пам'яті
+    res.status(200).json({ message: 'Стан збережено успішно!' });
+  });
+
+  // Інші маршрути обробляються Next.js
+  server.all('*', (req, res) => {
+    return handle(req, res);
+  });
+
+  server.listen(PORT, (err) => {
+    if (err) throw err;
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+});
+```
+
+- **GET `/api/state`:** Повертає стан сцени.
+- **POST `/api/state`:** Приймає JSON і зберігає стан сцени.
+
+Запустіть сервер:
+```bash
+npm run server
+```
+
+---
+
+### **2. Оновлення клієнта (Next.js)**
+
+#### **2.1. Додайте API-запити для збереження та завантаження стану**
+
+Оновіть `pages/index.js`:
+```javascript
+import React, { useRef, useState, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  // Збереження стану на сервері
+  const saveStateToServer = async () => {
+    try {
+      const response = await fetch('/api/state', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(elements),
+      });
+      const result = await response.json();
+      alert(result.message);
+    } catch (error) {
+      alert('Помилка збереження стану на сервері.');
+      console.error(error);
+    }
+  };
+
+  // Завантаження стану із сервера
+  const loadStateFromServer = async () => {
+    try {
+      const response = await fetch('/api/state');
+      const data = await response.json();
+      setElements(data);
+      alert('Стан сцени завантажено успішно!');
+    } catch (error) {
+      alert('Помилка завантаження стану із сервера.');
+      console.error(error);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <div style={{ margin: '10px' }}>
+          <button onClick={saveStateToServer}>Зберегти стан на сервері</button>
+          <button onClick={loadStateFromServer}>Завантажити стан із сервера</button>
+        </div>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **Робота функцій**
+
+1. **Збереження стану (`saveStateToServer`):**
+   - Надсилає `POST` запит із JSON даними на сервер.
+   - Сервер зберігає стан у пам'яті (або у майбутньому в базі даних).
+
+2. **Завантаження стану (`loadStateFromServer`):**
+   - Виконує `GET` запит, отримуючи стан зі сховища сервера.
+   - Відновлює стан сцени в клієнті.
+
+---
+
+### **Що далі?**
+
+1. **Підключення бази даних:**
+   - Використовуйте MongoDB, PostgreSQL або OracleDB для збереження стану.
+
+2. **Реалізація авторизації:**
+   - Прив'яжіть стан сцени до конкретного користувача.
+
+3. **Розширення API:**
+   - Додайте маршрути для збереження кількох станів (проектів).
+
+Якщо потрібно реалізувати базу даних чи покращити API, дайте знати! 😊

@@ -1,0 +1,276 @@
+Ось покрокова інструкція для створення **Next.js** додатку з **Konva.js** та HTTP-сервером.
+
+---
+
+### **1. Ініціалізація проекту**
+
+#### **1.1. Створіть Next.js проект**
+```bash
+npx create-next-app@latest konva-next-app
+cd konva-next-app
+```
+
+#### **1.2. Встановіть необхідні залежності**
+```bash
+npm install react-konva konva express
+```
+
+---
+
+### **2. Налаштування Next.js**
+
+#### **2.1. Налаштування сторінок**
+
+Створіть нову сторінку `pages/index.js`:
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [shapes, setShapes] = useState([
+    { id: 1, type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'blue' },
+    { id: 2, type: 'circle', x: 200, y: 200, radius: 50, fill: 'red' },
+  ]);
+
+  const handleDragEnd = (id, e) => {
+    const updatedShapes = shapes.map((shape) =>
+      shape.id === id ? { ...shape, x: e.target.x(), y: e.target.y() } : shape
+    );
+    setShapes(updatedShapes);
+  };
+
+  return (
+    <div>
+      <h1 style={{ textAlign: 'center' }}>Next.js + Konva.js</h1>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight - 50}
+        style={{ background: '#f4f4f4' }}
+      >
+        <Layer>
+          {shapes.map((shape) =>
+            shape.type === 'rect' ? (
+              <Rect
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                width={shape.width}
+                height={shape.height}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            ) : (
+              <Circle
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                radius={shape.radius}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            )
+          )}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+#### **2.2. Запустіть Next.js**
+```bash
+npm run dev
+```
+Відкрийте браузер на `http://localhost:3000` — ви побачите сцену Konva.js із прямокутником і колом, які можна перетягувати.
+
+---
+
+### **3. Додавання HTTP-сервера з Express**
+
+#### **3.1. Створіть сервер у файлі `server.js`**
+```javascript
+const express = require('express');
+const next = require('next');
+
+const app = next({ dev: process.env.NODE_ENV !== 'production' });
+const handle = app.getRequestHandler();
+
+const PORT = 4000;
+
+app.prepare().then(() => {
+  const server = express();
+
+  server.use(express.json());
+
+  // Тимчасове сховище для даних
+  let shapes = [
+    { id: 1, type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'blue' },
+    { id: 2, type: 'circle', x: 200, y: 200, radius: 50, fill: 'red' },
+  ];
+
+  // API: отримання фігур
+  server.get('/api/shapes', (req, res) => {
+    res.json(shapes);
+  });
+
+  // API: збереження нових фігур
+  server.post('/api/shapes', (req, res) => {
+    const { id, type, x, y, width, height, radius, fill } = req.body;
+    shapes.push({ id, type, x, y, width, height, radius, fill });
+    res.status(201).json({ message: 'Shape added successfully!' });
+  });
+
+  // Інші маршрути обробляються Next.js
+  server.all('*', (req, res) => {
+    return handle(req, res);
+  });
+
+  server.listen(PORT, (err) => {
+    if (err) throw err;
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+});
+```
+
+#### **3.2. Запуск сервера**
+Додайте скрипт у `package.json` для запуску сервера:
+```json
+"scripts": {
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "server": "node server.js"
+}
+```
+
+Запустіть сервер:
+```bash
+npm run server
+```
+
+---
+
+### **4. Зв’язок між фронтендом і сервером**
+
+#### **4.1. API-запити для отримання та збереження даних**
+
+Оновіть `pages/index.js`:
+```javascript
+import React, { useEffect, useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [shapes, setShapes] = useState([]);
+
+  // Завантаження фігур із сервера
+  useEffect(() => {
+    const fetchShapes = async () => {
+      const response = await fetch('/api/shapes');
+      const data = await response.json();
+      setShapes(data);
+    };
+
+    fetchShapes();
+  }, []);
+
+  const handleDragEnd = async (id, e) => {
+    const updatedShapes = shapes.map((shape) =>
+      shape.id === id ? { ...shape, x: e.target.x(), y: e.target.y() } : shape
+    );
+    setShapes(updatedShapes);
+
+    // Збереження на сервері
+    await fetch('/api/shapes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        type: updatedShapes.find((shape) => shape.id === id).type,
+        x: e.target.x(),
+        y: e.target.y(),
+        width: updatedShapes.find((shape) => shape.id === id).width || null,
+        height: updatedShapes.find((shape) => shape.id === id).height || null,
+        radius: updatedShapes.find((shape) => shape.id === id).radius || null,
+        fill: updatedShapes.find((shape) => shape.id === id).fill,
+      }),
+    });
+  };
+
+  return (
+    <div>
+      <h1 style={{ textAlign: 'center' }}>Next.js + Konva.js + Server</h1>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight - 50}
+        style={{ background: '#f4f4f4' }}
+      >
+        <Layer>
+          {shapes.map((shape) =>
+            shape.type === 'rect' ? (
+              <Rect
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                width={shape.width}
+                height={shape.height}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            ) : (
+              <Circle
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                radius={shape.radius}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            )
+          )}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **5. Перевірка роботи**
+
+1. **Запустіть сервер:**
+   ```bash
+   npm run server
+   ```
+
+2. **Відкрийте в браузері:**
+   - Фронтенд: `http://localhost:4000`
+   - API: `http://localhost:4000/api/shapes`
+
+---
+
+### **Результат**
+- Ви створили Next.js додаток із Konva.js.
+- Сцена завантажується із серверних даних.
+- Дані оновлюються на сервері при переміщенні елементів.
+
+---
+
+### **Що далі?**
+1. Додайте функції експорту та імпорту схем.
+2. Реалізуйте збереження у базі даних (наприклад, OracleDB або MongoDB).
+3. Додайте користувацьку панель для створення нових елементів.
+
+Якщо потрібно більше прикладів або додатковий функціонал, дайте знати! 😊

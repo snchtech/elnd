@@ -1,0 +1,205 @@
+Ось функція **експорту JSON у файл** для вашого Next.js проєкту. Вона дозволить користувачам завантажити стан сцени у форматі JSON як файл.
+
+---
+
+### **Оновлений код з експортом JSON у файл**
+
+Оновимо функціонал у `pages/index.js`, додавши кнопку для експорту JSON.
+
+#### **Код:**
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  // Експорт JSON у файл
+  const exportToJsonFile = () => {
+    const json = JSON.stringify(elements, null, 2); // Форматований JSON
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // Створення посилання для завантаження файлу
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'canvas-state.json'; // Ім'я файлу
+    a.click();
+
+    // Очищення об'єкта URL
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <div style={{ margin: '10px' }}>
+          <button onClick={exportToJsonFile}>Експортувати у файл</button>
+        </div>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **Що робить код?**
+
+1. **Функція `exportToJsonFile`:**
+   - Конвертує стан всіх елементів у JSON.
+   - Створює файл JSON і пропонує користувачу його завантажити.
+
+2. **Формат файлу:**
+   Завантажений файл буде виглядати так:
+   ```json
+   [
+     {
+       "id": 1,
+       "type": "rect",
+       "x": 100,
+       "y": 100,
+       "width": 100,
+       "height": 100,
+       "fill": "gray",
+       "draggable": true
+     },
+     {
+       "id": 2,
+       "type": "circle",
+       "x": 200,
+       "y": 200,
+       "radius": 50,
+       "fill": "gray",
+       "draggable": true
+     }
+   ]
+   ```
+
+3. **Збереження у файл:**
+   Файл автоматично отримує назву `canvas-state.json`, але ви можете змінити це у функції `download`.
+
+---
+
+### **Розширення функціоналу**
+
+1. **Імпорт JSON з файлу:**
+   Додайте функцію для завантаження JSON у сцену.
+
+2. **Збереження у `localStorage`:**
+   Можна додати збереження стану у локальне сховище браузера.
+
+---
+
+Якщо потрібна допомога з додатковими функціями, дайте знати! 😊

@@ -1,0 +1,213 @@
+У Next.js створення сторінок відбувається шляхом додавання файлів до папки `pages`. Нижче наведено, як додати сторінку для **списку схем** та **редагування схеми**.
+
+---
+
+### **Крок 1: Створіть сторінку "Список схем"**
+
+#### **1.1. Додайте файл `pages/schemes/index.js`**
+Ця сторінка відображатиме список усіх схем, доступних на сервері.
+
+```javascript
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+const SchemesList = () => {
+  const [schemes, setSchemes] = useState([]);
+
+  // Завантаження списку схем із сервера
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+        setSchemes(data);
+      } catch (error) {
+        console.error('Помилка завантаження списку схем:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  return (
+    <div>
+      <h1>Список схем</h1>
+      <ul>
+        {schemes.map((scheme) => (
+          <li key={scheme.id}>
+            <Link href={`/schemes/${scheme.id}`}>
+              <a>{scheme.name}</a>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default SchemesList;
+```
+
+#### **1.2. Додайте API-ендпоінт для списку схем**
+
+У вашому `server.js` додайте маршрут для списку схем:
+
+```javascript
+let schemes = [
+  { id: 1, name: 'Схема 1', data: [] },
+  { id: 2, name: 'Схема 2', data: [] },
+];
+
+server.get('/api/schemes', (req, res) => {
+  res.json(schemes);
+});
+```
+
+---
+
+### **Крок 2: Створіть сторінку "Редагування схеми"**
+
+#### **2.1. Додайте файл `pages/schemes/[id].js`**
+Ця сторінка дозволить редагувати вибрану схему за її `id`.
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+
+const EditScheme = () => {
+  const router = useRouter();
+  const { id } = router.query; // Отримання ID зі шляху
+  const [scheme, setScheme] = useState(null);
+
+  useEffect(() => {
+    if (id) {
+      const fetchScheme = async () => {
+        try {
+          const response = await fetch(`/api/schemes/${id}`);
+          const data = await response.json();
+          setScheme(data);
+        } catch (error) {
+          console.error('Помилка завантаження схеми:', error);
+        }
+      };
+
+      fetchScheme();
+    }
+  }, [id]);
+
+  const handleSave = async () => {
+    try {
+      await fetch(`/api/schemes/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scheme),
+      });
+      alert('Схема збережена успішно!');
+    } catch (error) {
+      console.error('Помилка збереження схеми:', error);
+    }
+  };
+
+  if (!scheme) {
+    return <div>Завантаження...</div>;
+  }
+
+  return (
+    <div>
+      <h1>Редагування схеми: {scheme.name}</h1>
+      <button onClick={handleSave}>Зберегти схему</button>
+      <Stage
+        width={window.innerWidth}
+        height={window.innerHeight - 100}
+        style={{ background: '#f0f0f0' }}
+      >
+        <Layer>
+          {scheme.data.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            }
+            return null;
+          })}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default EditScheme;
+```
+
+---
+
+#### **2.2. Додайте API-ендпоінти для схеми за ID**
+
+У вашому `server.js` додайте маршрути для отримання та збереження схеми за її `id`:
+
+```javascript
+// Отримання схеми за ID
+server.get('/api/schemes/:id', (req, res) => {
+  const scheme = schemes.find((s) => s.id === parseInt(req.params.id));
+  if (scheme) {
+    res.json(scheme);
+  } else {
+    res.status(404).json({ message: 'Схема не знайдена' });
+  }
+});
+
+// Оновлення схеми за ID
+server.put('/api/schemes/:id', (req, res) => {
+  const index = schemes.findIndex((s) => s.id === parseInt(req.params.id));
+  if (index !== -1) {
+    schemes[index] = { ...schemes[index], data: req.body };
+    res.json({ message: 'Схема оновлена успішно!' });
+  } else {
+    res.status(404).json({ message: 'Схема не знайдена' });
+  }
+});
+```
+
+---
+
+### **Результат**
+
+1. **Список схем:**
+   - Доступно за URL: `http://localhost:3000/schemes`.
+   - Відображає всі доступні схеми, кожна з яких має посилання на редагування.
+
+2. **Редагування схеми:**
+   - Доступно за URL: `http://localhost:3000/schemes/[id]`.
+   - Дозволяє редагувати елементи схеми та зберігати їх на сервері.
+
+---
+
+### **Що далі?**
+
+1. **Додати сторінку створення нової схеми.**
+2. **Підключити базу даних для постійного зберігання схем.**
+3. **Оптимізувати завантаження стану та додати повідомлення про помилки.**
+
+Якщо потрібна допомога з розширенням функціоналу, дайте знати! 😊

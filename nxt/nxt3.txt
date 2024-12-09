@@ -1,0 +1,200 @@
+Ось як додати функціонал **збереження стану у JSON** у ваш додаток, щоб можна було експортувати всі елементи на сцені у форматі JSON.
+
+---
+
+### **Оновлений код `pages/index.js`**
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  // Функція збереження стану у JSON
+  const saveToJson = () => {
+    const json = JSON.stringify(elements, null, 2); // Форматуємо JSON для зручного читання
+    console.log('Схема збережена:', json);
+
+    // Завантаження JSON у вигляді файлу
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'canvas-state.json'; // Назва файлу
+    a.click();
+    URL.revokeObjectURL(url); // Очищення URL
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <div style={{ margin: '10px' }}>
+          <button onClick={saveToJson}>Зберегти стан</button>
+        </div>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **Що робить код?**
+
+1. **Функція `saveToJson`:**
+   - Генерує JSON з поточного стану всіх елементів на сцені.
+   - Конвертує JSON у файл і пропонує користувачу завантажити його.
+
+2. **Результат:**
+   - Файл `canvas-state.json` виглядатиме так:
+     ```json
+     [
+       {
+         "id": 1,
+         "type": "rect",
+         "x": 100,
+         "y": 100,
+         "width": 100,
+         "height": 100,
+         "fill": "gray",
+         "draggable": true
+       },
+       {
+         "id": 2,
+         "type": "circle",
+         "x": 200,
+         "y": 200,
+         "radius": 50,
+         "fill": "gray",
+         "draggable": true
+       }
+     ]
+     ```
+
+---
+
+### **Покращення**
+
+1. **Додати Імпорт JSON:**
+   - Реалізуйте функцію для завантаження JSON-файлу назад у програму.
+
+2. **Оптимізація:**
+   - Додайте можливість зберігати стан у `localStorage` або на сервері.
+
+3. **Додаткові кнопки:**
+   - Додайте кнопку для очищення сцени.
+
+---
+
+Якщо потрібно додати функцію імпорту JSON чи покращити функціонал, дайте знати! 😊

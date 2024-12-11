@@ -1,0 +1,58 @@
+In Oracle JET (`oj-input-date-time`), there is no direct `ojPopupClosed` event specifically for the date picker. Instead, you can use the `on-close` or `on-datetime-picker-close` event for `oj-input-date-time`. This event triggers when the date/time picker popup closes.
+
+Here's how you can detect when the date picker closes:
+
+### Solution: Use `on-datetime-picker-close`
+The `on-datetime-picker-close` event is triggered when the date picker popup closes. You can attach a listener for this event to implement your logic.
+
+### Updated JavaScript Code
+Here is how you can handle the popup close event for `oj-input-date-time`:
+
+```javascript
+$(document).ready(function () {
+    var datePickerOpened = false; // Flag to track if the date picker is open
+
+    // Set default time on focus
+    $("#P1_DATE_END").on("focus", function () {
+        if (!$(this).val()) { // Check if the field is empty
+            var now = new Date();
+            now.setHours(23, 59, 59, 0); // Set time to 23:59:59
+            var formattedDate = apex.locale.formatDate("DD-MON-YYYY HH24:MI:SS", now); // Adjust format as needed
+            $(this).val(formattedDate);
+        }
+        datePickerOpened = true; // Set the flag when focus occurs
+    });
+
+    // Handle the on-datetime-picker-close event
+    $("#P1_DATE_END").on("ojDatetimePickerClose", function () {
+        var value = $(this).val();
+        if (!value && datePickerOpened) {
+            // Clear the field if no date was selected
+            $(this).val("");
+        }
+        datePickerOpened = false; // Reset the flag
+    });
+
+    // Optionally, reset the flag on blur if needed
+    $("#P1_DATE_END").on("blur", function () {
+        datePickerOpened = false;
+    });
+});
+```
+
+### Explanation of the Code
+1. **Focus Event:**
+   - Sets the default time (`23:59:59`) if the field is empty.
+
+2. **ojDatetimePickerClose Event:**
+   - Checks if the field is empty and clears it if no date is chosen.
+   - Resets the `datePickerOpened` flag to ensure proper behavior.
+
+3. **Blur Event:**
+   - Resets the flag as an additional safeguard.
+
+### Key Notes
+- Replace `#P1_DATE_END` with the correct selector for your `oj-input-date-time` item.
+- `ojDatetimePickerClose` ensures the event is triggered specifically when the popup closes.
+
+This method ensures the field behaves correctly when the date picker closes, even if the user doesn't choose a date.

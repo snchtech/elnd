@@ -1,0 +1,47 @@
+Yes, if a user selects a date in the `oj-input-date-time` date picker, the selected date will persist as the value of the field and will remain visible when the date picker is opened again. This is the default behavior of the `oj-input-date-time` component in Oracle JET.
+
+### Key Points to Ensure This Behavior:
+1. **Field Value Binding:**
+   - The `oj-input-date-time` component automatically updates its value when a user selects a date and clicks the "Apply" button (if such a button is part of the date picker UI). This value remains associated with the component until explicitly cleared.
+
+2. **Check for Null/Empty Values:**
+   - If your custom logic resets the value to `null` or a default value, make sure this only happens when the field is empty (or meets specific conditions). This avoids overwriting a valid user selection.
+
+3. **Custom Event Logic:**
+   - Your `focus`, `blur`, and `ojDatetimePickerClose` event handlers should not overwrite the existing value unless the field is empty. For example:
+
+   ```javascript
+   $("#P1_DATE_END").on("focus", function () {
+       if (!$(this).val()) { // Only set the default time if the field is empty
+           var now = new Date();
+           now.setHours(23, 59, 59, 0); // Set time to 23:59:59
+           var formattedDate = apex.locale.formatDate("DD-MON-YYYY HH24:MI:SS", now); // Adjust format as needed
+           $(this).val(formattedDate);
+       }
+   });
+
+   $("#P1_DATE_END").on("ojDatetimePickerClose", function () {
+       // Do not reset value if it already has a user-selected date
+       var value = $(this).val();
+       if (!value) {
+           $(this).val(""); // Clear field only if no value is present
+       }
+   });
+   ```
+
+4. **Verify the Date Selection:**
+   - Use the `value` property of the `oj-input-date-time` to verify that the user-selected date persists:
+
+   ```javascript
+   var selectedDate = $("#P1_DATE_END").val();
+   console.log("Selected date:", selectedDate); // Should show the user-selected date
+   ```
+
+### What Happens When the Date Picker Reopens?
+- When the date picker popup reopens, it initializes with the current value in the input field.
+- If the user has previously selected a date, that date will appear pre-filled in the picker.
+
+### Custom Logic Considerations
+If your custom logic sets a default value (e.g., `sysdate` with `23:59:59`) when the field is focused, ensure this logic is conditional on the field being empty. Otherwise, it might overwrite the user-selected value unintentionally.
+
+With proper event handling and conditional checks, the user-selected date will persist as expected.

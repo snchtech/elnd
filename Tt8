@@ -1,0 +1,18 @@
+<script>
+    $(document).ready(function() {
+        // Assuming your DateTime picker has an ID of 'myDateTimePicker'
+        $('#myDateTimePicker').on('blur', function(e) {
+            // Here 'myPageArea' is the ID of another area you are clicking
+            if (!$(this).val()) {
+                $(this).val(''); // Clear the DateTime input
+            }
+        });
+
+        // Also, handle clicks on Apply button in the DateTime picker
+        $('#oj-datepicker-popup').on('valueChanged', function(event, ui) {
+            // When Apply button is clicked, set the new value
+            var selectedDate = $(this).val();
+            $("#myDateTimePicker").val(selectedDate); // Assign new value to the input
+        });
+    });
+</script>

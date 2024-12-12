@@ -1,0 +1,128 @@
+To disable Server-Side Rendering (SSR) for the Konva components in your Next.js application, you can use the `dynamic` function provided by Next.js. Here's how you can modify your code:
+
+---
+
+### Steps to Disable SSR for Konva
+
+1. **Import `dynamic` from Next.js:**
+
+```javascript
+import dynamic from 'next/dynamic';
+```
+
+2. **Wrap the `Stage` Component in `dynamic`:**
+
+Wrap the `Stage` component using `dynamic` and set `ssr: false`. This ensures that the `Stage` and its child components are only rendered on the client side.
+
+```javascript
+const NoSSRStage = dynamic(() => import('react-konva').then((mod) => mod.Stage), {
+  ssr: false,
+});
+
+const NoSSRLayer = dynamic(() => import('react-konva').then((mod) => mod.Layer), {
+  ssr: false,
+});
+
+const NoSSRRect = dynamic(() => import('react-konva').then((mod) => mod.Rect), {
+  ssr: false,
+});
+
+const NoSSRCircle = dynamic(() => import('react-konva').then((mod) => mod.Circle), {
+  ssr: false,
+});
+```
+
+3. **Update Your `Home` Component:**
+
+Replace the imported Konva components (`Stage`, `Layer`, `Rect`, `Circle`) with their `NoSSR` counterparts.
+
+```javascript
+const Home = () => {
+  const stageRef = useRef();
+  const [shapes, setShapes] = useState([]);
+
+  useEffect(() => {
+    const fetchShapes = async () => {
+      const response = await fetch('/api/shapes');
+      const data = await response.json();
+      setShapes(data);
+    };
+
+    fetchShapes();
+  }, []);
+
+  const handleDragEnd = async (id, e) => {
+    const updatedShapes = shapes.map((shape) =>
+      shape.id === id ? { ...shape, x: e.target.x(), y: e.target.y() } : shape
+    );
+    setShapes(updatedShapes);
+
+    await fetch('/api/shapes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        type: updatedShapes.find((shape) => shape.id === id).type,
+        x: e.target.x(),
+        y: e.target.y(),
+        width: updatedShapes.find((shape) => shape.id === id).width || null,
+        height: updatedShapes.find((shape) => shape.id === id).height || null,
+        radius: updatedShapes.find((shape) => shape.id === id).radius || null,
+        fill: updatedShapes.find((shape) => shape.id === id).fill,
+      }),
+    });
+  };
+
+  return (
+    <div>
+      <h1 style={{ textAlign: 'center' }}>Next.js + Konva.js + Server</h1>
+      <NoSSRStage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight - 50}
+        style={{ background: '#f4f4f4' }}
+      >
+        <NoSSRLayer>
+          {shapes.map((shape) =>
+            shape.type === 'rect' ? (
+              <NoSSRRect
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                width={shape.width}
+                height={shape.height}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            ) : (
+              <NoSSRCircle
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                radius={shape.radius}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            )
+          )}
+        </NoSSRLayer>
+      </NoSSRStage>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### Explanation
+
+- `dynamic`: Ensures that the `Stage`, `Layer`, `Rect`, and `Circle` components are only rendered on the client side.
+- `ssr: false`: Prevents the Konva components from being rendered on the server, which is necessary since `react-konva` depends on the browser's rendering context.
+
+---
+
+This approach will resolve issues related to SSR with `react-konva`, such as flashing or hydration mismatches. Let me know if you have further questions!

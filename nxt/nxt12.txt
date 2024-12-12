@@ -1,0 +1,157 @@
+The duplication of elements is likely happening because you are both fetching shapes from the server and then appending new shapes during `POST` requests without clearing or properly managing the state. This can cause redundant shapes to appear on the `Stage` when you refresh the page or re-render the component.
+
+Here’s a detailed breakdown and how to fix it:
+
+---
+
+### **Why Duplication Occurs**
+1. **Fetching Shapes in `useEffect`:**
+   - You fetch shapes from the server when the component mounts and populate the state.
+   - If new shapes are added via `POST`, they might already exist in the backend, causing duplication when the page refreshes.
+
+2. **Improper State Management:**
+   - When a shape is dragged and updated, you append the new data without checking if it's already in the `shapes` array.
+
+---
+
+### **Solution**
+#### 1. **Avoid Duplicating Shapes During Fetch**
+   Ensure the `shapes` state is cleared before updating it with data from the server.
+
+```javascript
+useEffect(() => {
+  const fetchShapes = async () => {
+    const response = await fetch('/api/shapes');
+    const data = await response.json();
+    setShapes(data); // Replace the current state with fetched data
+  };
+
+  fetchShapes();
+}, []);
+```
+
+---
+
+#### 2. **Prevent Duplication in `POST` Request**
+   Update only the shape that was modified, and ensure the server synchronizes the entire shape collection, not duplicates.
+
+```javascript
+const handleDragEnd = async (id, e) => {
+  const updatedShape = {
+    id,
+    type: shapes.find((shape) => shape.id === id).type,
+    x: e.target.x(),
+    y: e.target.y(),
+    width: shapes.find((shape) => shape.id === id).width || null,
+    height: shapes.find((shape) => shape.id === id).height || null,
+    radius: shapes.find((shape) => shape.id === id).radius || null,
+    fill: shapes.find((shape) => shape.id === id).fill,
+  };
+
+  // Update shape in the state
+  setShapes((prevShapes) =>
+    prevShapes.map((shape) =>
+      shape.id === id ? { ...shape, ...updatedShape } : shape
+    )
+  );
+
+  // Save updated shape to the server
+  await fetch('/api/shapes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedShape),
+  });
+};
+```
+
+---
+
+#### 3. **Fix Backend API Logic**
+If your `POST` endpoint appends shapes to the database or memory without checking if the shape already exists, modify the logic to update existing shapes.
+
+```javascript
+server.post('/api/shapes', (req, res) => {
+  const { id, type, x, y, width, height, radius, fill } = req.body;
+
+  // Check if shape already exists
+  const existingShapeIndex = shapes.findIndex((shape) => shape.id === id);
+  if (existingShapeIndex !== -1) {
+    // Update existing shape
+    shapes[existingShapeIndex] = { id, type, x, y, width, height, radius, fill };
+  } else {
+    // Add new shape
+    shapes.push({ id, type, x, y, width, height, radius, fill });
+  }
+
+  res.status(201).json({ message: 'Shape saved successfully!' });
+});
+```
+
+---
+
+#### 4. **Add Unique Identifiers**
+Ensure each shape has a unique `id`. If you're generating `id` values dynamically, avoid reusing them.
+
+```javascript
+const generateUniqueId = () => `shape-${Math.random().toString(36).substr(2, 9)}`;
+```
+
+Assign the ID when creating a new shape on the client or server.
+
+---
+
+#### 5. **Debugging Tips**
+- Log `shapes` state in the frontend to verify its contents after each operation.
+- Add logging to the backend to ensure shapes are being updated or added correctly.
+- Test the `/api/shapes` endpoint with tools like Postman to verify behavior.
+
+---
+
+### **Final Updated Code**
+Here’s the updated `handleDragEnd` method and `useEffect`:
+
+```javascript
+useEffect(() => {
+  const fetchShapes = async () => {
+    const response = await fetch('/api/shapes');
+    const data = await response.json();
+    setShapes(data); // Clear state and set shapes from server
+  };
+
+  fetchShapes();
+}, []);
+
+const handleDragEnd = async (id, e) => {
+  const updatedShape = {
+    id,
+    type: shapes.find((shape) => shape.id === id).type,
+    x: e.target.x(),
+    y: e.target.y(),
+    width: shapes.find((shape) => shape.id === id).width || null,
+    height: shapes.find((shape) => shape.id === id).height || null,
+    radius: shapes.find((shape) => shape.id === id).radius || null,
+    fill: shapes.find((shape) => shape.id === id).fill,
+  };
+
+  // Update local state
+  setShapes((prevShapes) =>
+    prevShapes.map((shape) => (shape.id === id ? updatedShape : shape))
+  );
+
+  // Save to server
+  await fetch('/api/shapes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedShape),
+  });
+};
+```
+
+---
+
+### **Expected Behavior**
+1. No duplication of shapes when fetching data from the server.
+2. Shapes are updated correctly when dragged and saved to the server.
+3. The backend properly handles updates and avoids adding duplicates.
+
+By implementing these fixes, your duplication issue will be resolved. Let me know if you encounter further challenges!

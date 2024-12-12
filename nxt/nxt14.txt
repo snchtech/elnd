@@ -1,0 +1,108 @@
+The error `Cannot read properties of undefined (reading "type")` occurs because the `handleDragEnd` function attempts to access the `type` property of an `element` that may not exist in the `elements` array. This can happen if the `id` passed to `handleDragEnd` does not match any existing element's `id`.
+
+To fix this issue:
+
+---
+
+### **Steps to Resolve**
+
+1. **Add a Check for the Element's Existence**
+   Before accessing properties like `type`, ensure the element with the given `id` exists.
+
+   ```javascript
+   const handleDragEnd = (id, e) => {
+     const element = elements.find((el) => el.id === id);
+
+     if (!element) {
+       console.error(`Element with id ${id} not found`);
+       return;
+     }
+
+     const updatedElements = elements.map((el) =>
+       el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+     );
+     setElements(updatedElements);
+   };
+   ```
+
+---
+
+2. **Check the `id` Parameter**
+   Ensure the `id` being passed to `handleDragEnd` is correct and matches the element's `id` in the `elements` array.
+
+---
+
+3. **Debugging with Logs**
+   Add debugging logs to inspect the `elements` array and `id` being passed.
+
+   ```javascript
+   console.log('Elements:', elements);
+   console.log('Dragging ID:', id);
+   ```
+
+   This will help identify if there’s a mismatch in `id`.
+
+---
+
+4. **Fix `addElement` Logic (if Needed)**
+   Ensure `id` generation is consistent and unique. For example, using `uuid` as shown earlier will prevent duplicate or missing `id` values.
+
+---
+
+### Updated Code Example
+
+Here’s the corrected `handleDragEnd` function:
+
+```javascript
+const handleDragEnd = (id, e) => {
+  const element = elements.find((el) => el.id === id);
+
+  if (!element) {
+    console.error(`Element with id ${id} not found`);
+    return;
+  }
+
+  const updatedElements = elements.map((el) =>
+    el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+  );
+  setElements(updatedElements);
+};
+```
+
+---
+
+### **Why This Fix Works**
+
+1. **Element Existence Check:**
+   The function verifies that the element exists before trying to access its properties, avoiding the error.
+
+2. **Debugging Logs:**
+   Debug logs help you identify why the `id` may not match any element in the array.
+
+3. **Consistent `id` Management:**
+   Using unique IDs (e.g., `uuid`) ensures that `id` values are not duplicated or missing.
+
+---
+
+### **Additional Debugging Tips**
+
+1. **Validate the `elements` Array**
+   Before rendering or handling drag events, ensure the `elements` array contains valid data:
+
+   ```javascript
+   useEffect(() => {
+     console.log('Current elements:', elements);
+   }, [elements]);
+   ```
+
+2. **Inspect Event Data**
+   Confirm that the `id` passed to `handleDragEnd` corresponds to an element in `elements`.
+
+   ```javascript
+   const handleDragEnd = (id, e) => {
+     console.log(`Dragging element ID: ${id}`);
+     console.log('Event data:', e);
+   };
+   ```
+
+With these fixes, the error should no longer occur, and drag events will work as expected. Let me know if you need further assistance!

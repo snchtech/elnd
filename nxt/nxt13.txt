@@ -1,0 +1,214 @@
+The error occurs because `id` is generated using `elements.length + 1`, which is not guaranteed to be unique. When elements are added and removed, this method can lead to duplicate `id` values.
+
+### **Solution**
+To ensure that each element has a unique key, use a unique identifier, such as:
+
+1. **Use `uuid` for Unique IDs**
+   Install the `uuid` package:
+
+   ```bash
+   npm install uuid
+   ```
+
+   Update your `addElement` function to use `uuid`:
+
+   ```javascript
+   import { v4 as uuidv4 } from 'uuid';
+
+   const addElement = (type) => {
+     const newElement = {
+       id: uuidv4(), // Generate a unique ID
+       type,
+       x: 100,
+       y: 100,
+       width: 100,
+       height: 100,
+       radius: 50,
+       text: 'Текст',
+       points: [0, 0, 100, 100],
+       fill: 'gray',
+       draggable: true,
+     };
+     setElements([...elements, newElement]);
+   };
+   ```
+
+---
+
+2. **Generate Unique IDs Using `Date.now`**
+   You can also use `Date.now()` combined with `Math.random()` for uniqueness:
+
+   ```javascript
+   const addElement = (type) => {
+     const newElement = {
+       id: `${Date.now()}-${Math.random()}`, // Unique ID
+       type,
+       x: 100,
+       y: 100,
+       width: 100,
+       height: 100,
+       radius: 50,
+       text: 'Текст',
+       points: [0, 0, 100, 100],
+       fill: 'gray',
+       draggable: true,
+     };
+     setElements([...elements, newElement]);
+   };
+   ```
+
+---
+
+3. **Debugging Duplicate Keys**
+   To debug if duplicate keys are still generated, log the `id` for each element:
+
+   ```javascript
+   console.log(elements.map((el) => el.id));
+   ```
+
+---
+
+### Updated Code Example
+
+Here’s your component with the `uuid` solution:
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import { v4 as uuidv4 } from 'uuid';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [elements, setElements] = useState([]);
+
+  // Додавання нового елемента
+  const addElement = (type) => {
+    const newElement = {
+      id: uuidv4(), // Unique ID
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Текст',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+    };
+    setElements([...elements, newElement]);
+  };
+
+  // Переміщення елементів
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Панель інструментів */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Контейнер для малювання */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'triangle') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={[0, 0, 100, 0, 50, 100]}
+                    closed
+                    fill={el.fill}
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### Key Points
+1. **Use Unique IDs:**
+   Ensure `id` is unique by generating it with `uuid` or a timestamp-based method.
+
+2. **Avoid Manual ID Management:**
+   Rely on a library or function to generate unique IDs, especially for dynamic elements.
+
+3. **Debug Key Collisions:**
+   Log the `id` values in `elements` to ensure they are unique.
+
+This will prevent the "duplicate key" error and maintain stable updates for React components. Let me know if you need more clarification!

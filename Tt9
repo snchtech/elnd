@@ -1,0 +1,22 @@
+import { useEffect, useState } from 'react';
+import { Stage } from 'konva';
+
+const StageComponent = () => {
+  const [width, setWidth] = useState(window.innerWidth); // initialize with default value
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWidth(window.innerWidth);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []); // run once when component mounts
+
+  return (
+    <Stage width={width} height={window.innerHeight}>
+      {/* your Konva content here */}
+    </Stage>
+  );
+};

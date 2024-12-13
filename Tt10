@@ -1,4 +1,25 @@
-// App.js (or any page/component file)
+// MyLayer.js
+import React from 'react';
+import { Layer, Rect } from 'react-konva';
+
+const MyLayer = ({ shapes }) => {
+  return (
+    <Layer>
+      {shapes.map((shape, index) => (
+        <Rect
+          key={index}
+          x={shape.x}
+          y={shape.y}
+          width={shape.width}
+          height={shape.height}
+          fill={shape.fill}
+        />
+      ))}
+    </Layer>
+  );
+};
+
+export default MyLayer;// App.js (or any page/component file)
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Stage } from 'react-konva';

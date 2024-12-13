@@ -1,0 +1,143 @@
+Yes, in a Next.js application, the page will re-render whenever the component state or props are updated. However, re-renders shouldn't inherently cause a "flashing" effect in the canvas area unless the canvas itself is being unmounted and remounted or reinitialized, which can happen if:
+
+1. **The `Stage` Component Is Recreated:**
+   If the `Stage` or `Layer` components are being re-created during each render, this can cause the flashing effect because the DOM elements (the canvas) are effectively replaced.
+
+2. **State Updates Are Inefficient:**
+   If you are updating the state in a way that causes unnecessary re-renders of the entire `Stage`, this can lead to performance issues.
+
+---
+
+### **Why Flashing Happens in Your Code**
+In your current code, each time you call `setShapes` in `handleDragEnd`, the entire `Stage` and its children (`Layer`, `Rect`, etc.) are being re-rendered because React processes state updates and re-renders components accordingly.
+
+---
+
+### **How to Fix Flashing**
+#### **1. Prevent Re-Creation of `Stage` or `Layer`**
+Ensure that `Stage` and `Layer` are not re-created on every render by using `React.memo` to memoize these components.
+
+For example:
+
+```javascript
+import React, { memo } from 'react';
+
+// Memoize Layer and its children
+const MemoizedLayer = memo(({ shapes, handleDragEnd }) => (
+  <Layer>
+    {shapes.map((shape) =>
+      shape.type === 'rect' ? (
+        <Rect
+          key={shape.id}
+          x={shape.x}
+          y={shape.y}
+          width={shape.width}
+          height={shape.height}
+          fill={shape.fill}
+          draggable
+          onDragEnd={(e) => handleDragEnd(shape.id, e)}
+        />
+      ) : (
+        <Circle
+          key={shape.id}
+          x={shape.x}
+          y={shape.y}
+          radius={shape.radius}
+          fill={shape.fill}
+          draggable
+          onDragEnd={(e) => handleDragEnd(shape.id, e)}
+        />
+      )
+    )}
+  </Layer>
+));
+```
+
+Use this `MemoizedLayer` instead of directly rendering a `Layer` in your `Stage`.
+
+---
+
+#### **2. Avoid Re-Rendering the Entire Canvas**
+Only update the specific shape that was dragged. This minimizes updates to the canvas.
+
+```javascript
+const handleDragEnd = (id, e) => {
+  setShapes((prevShapes) =>
+    prevShapes.map((shape) =>
+      shape.id === id ? { ...shape, x: e.target.x(), y: e.target.y() } : shape
+    )
+  );
+};
+```
+
+This way, only the shape that was dragged is updated in the state, and React will re-render only that shape.
+
+---
+
+#### **3. Use Stable Props**
+Ensure props passed to `Stage`, `Layer`, and `Rect`/`Circle` are stable by memoizing them with `useMemo`.
+
+```javascript
+import React, { useMemo } from 'react';
+
+const Home = () => {
+  const stableShapes = useMemo(() => shapes, [shapes]);
+
+  return (
+    <Stage ref={stageRef} width={window.innerWidth} height={window.innerHeight}>
+      <Layer>
+        {stableShapes.map((shape) => {
+          if (shape.type === 'rect') {
+            return (
+              <Rect
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                width={shape.width}
+                height={shape.height}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            );
+          } else if (shape.type === 'circle') {
+            return (
+              <Circle
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                radius={shape.radius}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            );
+          }
+          return null;
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+```
+
+---
+
+#### **4. Disable SSR for Konva**
+You've already disabled SSR for `react-konva`, which is correct because `Konva` relies on the DOM. Ensure that `dynamic` imports are working correctly to prevent unnecessary reinitialization.
+
+---
+
+### **Debugging Tips**
+- Add logging in the `handleDragEnd` function and React DevTools to confirm whether the entire canvas is being re-rendered.
+- Use the React Profiler to identify which components are re-rendering unnecessarily.
+
+---
+
+### **Expected Outcome**
+With these optimizations:
+1. The `Stage` and `Layer` components will remain stable and won't be recreated.
+2. Only the specific shape being dragged will update, minimizing re-renders.
+3. The canvas flashing issue should disappear, and performance should improve.
+
+Let me know if you need further clarification or assistance!

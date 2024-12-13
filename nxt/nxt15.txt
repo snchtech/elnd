@@ -1,0 +1,141 @@
+The error `cannot use 'in' operator to search for 'default' in Layer` indicates an issue with the dynamic import of `react-konva` components in your Next.js app. This is often caused by how `dynamic` and `import` handle ES module and CommonJS module interoperability.
+
+Here’s how to fix the issue:
+
+---
+
+### **Fix 1: Adjust Dynamic Imports**
+Modify your dynamic imports to handle named exports from `react-konva` properly. Add an explicit default export for the desired component using `mod.[ComponentName]`.
+
+```javascript
+const NoSSRStage = dynamic(() => import('react-konva').then((mod) => ({ default: mod.Stage })), {
+  ssr: false,
+});
+
+const NoSSRLayer = dynamic(() => import('react-konva').then((mod) => ({ default: mod.Layer })), {
+  ssr: false,
+});
+
+const NoSSRRect = dynamic(() => import('react-konva').then((mod) => ({ default: mod.Rect })), {
+  ssr: false,
+});
+
+const NoSSRCircle = dynamic(() => import('react-konva').then((mod) => ({ default: mod.Circle })), {
+  ssr: false,
+});
+```
+
+---
+
+### **Why This Works**
+The `react-konva` library uses named exports, so you must explicitly specify which export should be treated as the default in the dynamic import. The `dynamic` function expects a default export, and this transformation ensures compatibility.
+
+---
+
+### **Fix 2: Use Conditional Rendering for Client-Side Components**
+If you find the above solution too cumbersome or still encounter issues, you can dynamically render the `Stage` and its components only on the client side using React's conditional rendering:
+
+```javascript
+'use client';
+import React, { useState, useEffect, useRef } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const Home = () => {
+  const stageRef = useRef();
+  const [shapes, setShapes] = useState([]);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true); // Ensures components render only on the client
+    const fetchShapes = async () => {
+      const response = await fetch('/api/shapes');
+      const data = await response.json();
+      setShapes(data);
+    };
+
+    fetchShapes();
+  }, []);
+
+  const handleDragEnd = async (id, e) => {
+    const updatedShapes = shapes.map((shape) =>
+      shape.id === id ? { ...shape, x: e.target.x(), y: e.target.y() } : shape
+    );
+    setShapes(updatedShapes);
+
+    await fetch('/api/shapes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        type: updatedShapes.find((shape) => shape.id === id).type,
+        x: e.target.x(),
+        y: e.target.y(),
+        width: updatedShapes.find((shape) => shape.id === id).width || null,
+        height: updatedShapes.find((shape) => shape.id === id).height || null,
+        radius: updatedShapes.find((shape) => shape.id === id).radius || null,
+        fill: updatedShapes.find((shape) => shape.id === id).fill,
+      }),
+    });
+  };
+
+  if (!isClient) return null; // Prevent server-side rendering of Konva components
+
+  return (
+    <div>
+      <h1 style={{ textAlign: 'center' }}>Next.js + Konva.js + Server</h1>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight - 50}
+        style={{ background: '#f4f4f4' }}
+      >
+        <Layer>
+          {shapes.map((shape) =>
+            shape.type === 'rect' ? (
+              <Rect
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                width={shape.width}
+                height={shape.height}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            ) : (
+              <Circle
+                key={shape.id}
+                x={shape.x}
+                y={shape.y}
+                radius={shape.radius}
+                fill={shape.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(shape.id, e)}
+              />
+            )
+          )}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default Home;
+```
+
+---
+
+### **Key Changes**
+1. **Dynamic Imports Adjusted:**
+   Ensure that `mod.Stage`, `mod.Layer`, etc., are correctly exported as the default.
+
+2. **Conditional Rendering:**
+   Render `Stage` and its components only after the app confirms it is running on the client.
+
+---
+
+### Testing
+- Ensure no errors occur related to dynamic imports or `use 'in' operator`.
+- Test on both server-side rendering and client-side rendering scenarios.
+
+Let me know if further adjustments are needed!

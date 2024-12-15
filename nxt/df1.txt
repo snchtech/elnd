@@ -1,0 +1,10 @@
+'use client'
+import dynamic from 'next/dynamic';
+
+const Home = dynamic(() => import('./components/Home'), {
+  ssr: false, // Disable server-side rendering
+});
+
+export default function Index() {
+  return <Home />;
+}

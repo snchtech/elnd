@@ -1,0 +1,175 @@
+'use client';
+
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Line } from 'react-konva';
+import ToolPanel from '../components/ToolPanel';
+
+const Home = () => {
+  const stageRef = useRef(); // Reference to the stage
+  const [elements, setElements] = useState([]); // React state for rendering elements
+
+  // Add a new element
+  const addElement = (type) => {
+    const newElement = {
+      id: elements.length + 1,
+      type,
+      x: Math.random() * 300,
+      y: Math.random() * 300,
+      width: 100,
+      height: 100,
+      radius: 50,
+      text: 'Text',
+      points: [0, 0, 100, 100],
+      fill: 'gray',
+      draggable: true,
+      rotation: 0, // Initialize rotation
+    };
+
+    setElements((prevElements) => [...prevElements, newElement]); // Update state
+  };
+
+  // Handle element drag
+  const handleDragEnd = (id, e) => {
+    setElements((prevElements) =>
+      prevElements.map((el) =>
+        el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+      )
+    );
+  };
+
+  // Handle element rotation
+  const handleRotate = (id, angle) => {
+    setElements((prevElements) =>
+      prevElements.map((el) =>
+        el.id === id ? { ...el, rotation: (el.rotation + angle) % 360 } : el
+      )
+    );
+  };
+
+  // Save final state
+  const handleSave = () => {
+    console.log('Saved Elements:', elements);
+    // Here you can send the data to your backend or store it locally
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      {/* Tool Panel */}
+      <ToolPanel addElement={addElement} />
+
+      {/* Drawing Container */}
+      <div style={{ flex: 1, background: '#f0f0f0' }}>
+        <button
+          onClick={handleSave}
+          style={{
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            zIndex: 10,
+            padding: '10px 20px',
+            backgroundColor: '#007BFF',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Save
+        </button>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 200}
+          height={window.innerHeight}
+          style={{ background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    rotation={el.rotation} // Apply rotation
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    rotation={el.rotation} // Apply rotation
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={20}
+                    rotation={el.rotation} // Apply rotation
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    points={el.points}
+                    stroke="black"
+                    strokeWidth={2}
+                    rotation={el.rotation} // Apply rotation
+                    draggable
+                    onDragEnd={(e) => handleDragEnd(el.id, e)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+
+      {/* Rotation Controls */}
+      <div
+        style={{
+          width: '200px',
+          padding: '10px',
+          backgroundColor: '#eee',
+          borderLeft: '1px solid #ccc',
+        }}
+      >
+        <h3>Rotate Element</h3>
+        {elements.map((el) => (
+          <div key={el.id} style={{ marginBottom: '10px' }}>
+            <span>Element {el.id}:</span>
+            <button
+              onClick={() => handleRotate(el.id, -15)}
+              style={{ margin: '5px' }}
+            >
+              Rotate Left
+            </button>
+            <button onClick={() => handleRotate(el.id, 15)}>Rotate Right</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default Home;

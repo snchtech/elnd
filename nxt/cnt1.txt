@@ -1,0 +1,65 @@
+'use client';
+
+import React, { useRef, useEffect, useState } from 'react';
+import { Stage, Layer, Rect } from 'react-konva';
+
+const KonvaExample = () => {
+  const stageRef = useRef(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure client-side rendering
+  useEffect(() => {
+    setIsClient(true); // Set client-side flag
+  }, []);
+
+  const shapesRef = useRef({
+    rect1: { x: 100, y: 100, width: 100, height: 100, fill: 'red' },
+  });
+
+  const handleSave = () => {
+    const stage = stageRef.current;
+    const json = stage.toJSON();
+    console.log('Saved Data:', json);
+    // You can send this JSON to the server or store it locally
+  };
+
+  const handleDragEnd = (e, id) => {
+    const shape = shapesRef.current[id];
+    shape.x = e.target.x();
+    shape.y = e.target.y();
+    console.log(`Shape ${id} moved to:`, shape);
+  };
+
+  return (
+    <div>
+      {isClient && (
+        <>
+          <button onClick={handleSave} style={{ marginBottom: '10px' }}>
+            Save
+          </button>
+          <Stage
+            width={window.innerWidth} // This is safe because `isClient` is true
+            height={window.innerHeight - 50}
+            style={{ border: '1px solid black' }}
+            ref={stageRef}
+          >
+            <Layer>
+              <Rect
+                id="rect1"
+                x={shapesRef.current.rect1.x}
+                y={shapesRef.current.rect1.y}
+                width={shapesRef.current.rect1.width}
+                height={shapesRef.current.rect1.height}
+                fill={shapesRef.current.rect1.fill}
+                draggable
+                onDragEnd={(e) => handleDragEnd(e, 'rect1')}
+              />
+            </Layer>
+          </Stage>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default KonvaExample;

@@ -1,0 +1,204 @@
+To enable the functionality for deleting specific elements (e.g., `Rect`, `Line`, etc.) from the scheme in **React-Konva**, you can follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **Add a Click or Selection Mechanism:**
+   - Add a mechanism (e.g., click, right-click, or selection with a key press) to identify the element to be deleted.
+
+2. **Maintain a Selected Element State:**
+   - Use `useState` to store the `id` of the currently selected element.
+
+3. **Handle Delete Action:**
+   - Add a `deleteElement` function that removes the selected element from the `elements` state.
+
+4. **Update the Canvas:**
+   - After deleting the element, re-render the canvas to reflect the changes.
+
+---
+
+### **Updated Code with Delete Functionality**
+
+```javascript
+'use client';
+
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: 1, type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'red' },
+    { id: 2, type: 'circle', x: 200, y: 200, radius: 50, fill: 'blue' },
+    { id: 3, type: 'line', points: [300, 300, 400, 400], stroke: 'black', strokeWidth: 3 },
+  ]);
+  const [selectedId, setSelectedId] = useState(null); // Currently selected element
+  const stageRef = useRef(null); // Reference to the stage
+
+  // Handle element selection
+  const handleSelect = (id) => {
+    setSelectedId(id); // Set the selected element ID
+  };
+
+  // Handle element deletion
+  const deleteElement = () => {
+    if (selectedId === null) {
+      alert('No element selected to delete.');
+      return;
+    }
+
+    const updatedElements = elements.filter((el) => el.id !== selectedId); // Remove the selected element
+    setElements(updatedElements);
+    setSelectedId(null); // Clear the selection
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px' }}>
+      <h3>Scheme Editor</h3>
+      <button
+        onClick={deleteElement}
+        style={{
+          padding: '10px 20px',
+          fontSize: '16px',
+          backgroundColor: 'red',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+      >
+        Delete Selected Element
+      </button>
+      <div style={{ border: '1px solid #ccc', padding: '10px', background: '#f0f0f0' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 50}
+          height={500}
+          style={{ border: '1px solid black', background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    stroke={el.id === selectedId ? 'black' : undefined} // Highlight selected
+                    strokeWidth={el.id === selectedId ? 2 : 0}
+                    draggable
+                    onClick={() => handleSelect(el.id)} // Select on click
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    stroke={el.id === selectedId ? 'black' : undefined} // Highlight selected
+                    strokeWidth={el.id === selectedId ? 2 : 0}
+                    draggable
+                    onClick={() => handleSelect(el.id)} // Select on click
+                  />
+                );
+              } else if (el.type === 'line') {
+                return (
+                  <Line
+                    key={el.id}
+                    points={el.points}
+                    stroke={el.stroke}
+                    strokeWidth={el.strokeWidth}
+                    draggable
+                    onClick={() => handleSelect(el.id)} // Select on click
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **How It Works**
+
+1. **Element Selection:**
+   - Each `Rect`, `Circle`, or `Line` has an `onClick` handler to set the `selectedId` state.
+   - The selected element is visually highlighted with a black stroke.
+
+   ```javascript
+   onClick={() => handleSelect(el.id)}
+   ```
+
+2. **Delete Action:**
+   - The `deleteElement` function filters the `elements` array to remove the selected element and updates the state.
+
+   ```javascript
+   const updatedElements = elements.filter((el) => el.id !== selectedId);
+   setElements(updatedElements);
+   ```
+
+3. **Dynamic Rendering:**
+   - The `elements` array is mapped to render the shapes on the canvas.
+   - After deletion, the canvas is automatically updated to reflect the changes.
+
+4. **Visual Feedback:**
+   - The selected element is highlighted with a black stroke for better UI feedback.
+
+---
+
+### **Expected Behavior**
+
+1. **Select an Element:**
+   - Click on a rectangle, circle, or line to select it.
+   - The selected element gets a black stroke.
+
+2. **Delete the Element:**
+   - Click the **Delete Selected Element** button.
+   - The selected element is removed from the canvas.
+
+3. **Empty Selection:**
+   - If no element is selected, clicking the delete button shows an alert.
+
+---
+
+### **Enhancements**
+
+1. **Keyboard Shortcut:**
+   - Add a keyboard shortcut (e.g., `Delete` key) to delete the selected element.
+
+   ```javascript
+   useEffect(() => {
+     const handleKeyDown = (e) => {
+       if (e.key === 'Delete' && selectedId !== null) {
+         deleteElement();
+       }
+     };
+
+     window.addEventListener('keydown', handleKeyDown);
+     return () => window.removeEventListener('keydown', handleKeyDown);
+   }, [selectedId]);
+   ```
+
+2. **Context Menu for Deletion:**
+   - Add a right-click context menu to delete elements instead of using a button.
+
+3. **Undo/Redo:**
+   - Implement an undo/redo system to allow restoring accidentally deleted elements.
+
+---
+
+Let me know if you’d like help implementing any of these enhancements or further features! 😊

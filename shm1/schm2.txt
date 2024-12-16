@@ -1,0 +1,220 @@
+To use the `/api/schemes` endpoint and populate a React `Select` component with options where the `value` is `scheme_id` and the text is `scheme_name`, follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **Fetch Schemes Data from the API:**
+   - Use `useEffect` to fetch the `/api/schemes` endpoint on component mount.
+   - Use `useState` to store the fetched data.
+
+2. **Transform the Data:**
+   - Convert the API response into an array of options formatted as `{ value: scheme_id, label: scheme_name }`.
+
+3. **Render the `Select` Component:**
+   - Use the fetched and transformed options in the `Select` component.
+
+4. **Handle User Selection:**
+   - Add a `handleChange` function to log or use the selected scheme's `value`.
+
+---
+
+### **Code Example**
+
+#### **Using React-Select Library**
+
+```javascript
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import Select from 'react-select';
+
+const SchemeSelector = () => {
+  const [options, setOptions] = useState([]); // Store transformed options
+  const [selectedScheme, setSelectedScheme] = useState(null); // Store selected value
+
+  // Fetch schemes data from API
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+
+        if (data.success) {
+          // Transform the API data into Select options format
+          const transformedOptions = data.data.map((scheme) => ({
+            value: scheme.scheme_id,
+            label: scheme.scheme_name,
+          }));
+          setOptions(transformedOptions);
+        } else {
+          console.error('Failed to fetch schemes:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  // Handle scheme selection
+  const handleChange = (selectedOption) => {
+    setSelectedScheme(selectedOption);
+    console.log('Selected Scheme:', selectedOption);
+  };
+
+  return (
+    <div>
+      <h3>Select a Scheme</h3>
+      <Select
+        options={options}
+        value={selectedScheme}
+        onChange={handleChange}
+        placeholder="Choose a scheme"
+        isLoading={options.length === 0} // Show loading spinner until options are loaded
+      />
+      {selectedScheme && (
+        <div style={{ marginTop: '20px' }}>
+          <h4>Selected Scheme:</h4>
+          <p>
+            <strong>ID:</strong> {selectedScheme.value}
+          </p>
+          <p>
+            <strong>Name:</strong> {selectedScheme.label}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SchemeSelector;
+```
+
+---
+
+### **Key Points in the Code**
+
+1. **Fetching Data:**
+   - The `useEffect` hook fetches data from the `/api/schemes` endpoint once the component mounts.
+   - The API response is transformed into the format required by the `Select` component.
+
+   ```javascript
+   const transformedOptions = data.data.map((scheme) => ({
+     value: scheme.scheme_id,
+     label: scheme.scheme_name,
+   }));
+   ```
+
+2. **Dynamic Options:**
+   - The options in the `Select` component are dynamically set from the API response.
+
+3. **Loading State:**
+   - The `isLoading` prop ensures a loading spinner is shown until the data is fetched.
+
+4. **Selection Handling:**
+   - The `handleChange` function logs the selected scheme and updates the `selectedScheme` state.
+
+---
+
+### **Expected Behavior**
+
+1. **When the Component Mounts:**
+   - The `/api/schemes` endpoint is called.
+   - The fetched schemes are displayed as options in the `Select` dropdown.
+
+2. **When a Scheme is Selected:**
+   - The selected scheme is displayed below the dropdown with its `scheme_id` and `scheme_name`.
+
+---
+
+### **Example Output**
+
+#### **Dropdown Options:**
+- Option 1: "Engineering Plan" (value: `1`)
+- Option 2: "Marketing Plan" (value: `2`)
+
+#### **When a Scheme is Selected:**
+```plaintext
+Selected Scheme:
+ID: 1
+Name: Engineering Plan
+```
+
+---
+
+### **React-Select Installation (if not already installed)**
+Run the following command to install `react-select`:
+```bash
+npm install react-select
+```
+
+---
+
+### **Alternative: Native `<select>` Element**
+
+If you prefer using the native HTML `<select>` element:
+
+```javascript
+const SchemeSelector = () => {
+  const [options, setOptions] = useState([]);
+  const [selectedScheme, setSelectedScheme] = useState('');
+
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+
+        if (data.success) {
+          setOptions(data.data);
+        } else {
+          console.error('Failed to fetch schemes:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  const handleChange = (e) => {
+    const selectedId = e.target.value;
+    const selected = options.find((opt) => opt.scheme_id === selectedId);
+    setSelectedScheme(selected);
+  };
+
+  return (
+    <div>
+      <h3>Select a Scheme</h3>
+      <select onChange={handleChange} defaultValue="">
+        <option value="" disabled>
+          Choose a scheme
+        </option>
+        {options.map((scheme) => (
+          <option key={scheme.scheme_id} value={scheme.scheme_id}>
+            {scheme.scheme_name}
+          </option>
+        ))}
+      </select>
+      {selectedScheme && (
+        <div style={{ marginTop: '20px' }}>
+          <h4>Selected Scheme:</h4>
+          <p>
+            <strong>ID:</strong> {selectedScheme.scheme_id}
+          </p>
+          <p>
+            <strong>Name:</strong> {selectedScheme.scheme_name}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+---
+
+Let me know which approach you prefer or if you need further assistance! 😊

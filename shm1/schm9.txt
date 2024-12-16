@@ -1,0 +1,228 @@
+Here's how you can add a **"Preview for Print"** button that simulates the print view using the selected format:
+
+---
+
+### **Implementation Steps**
+
+1. **Add a "Preview for Print" Button:**
+   - When clicked, open a new window with the canvas rendered in the selected format.
+
+2. **Simulate Print View:**
+   - Use a new window and dynamically render the canvas content.
+
+3. **Pass Dimensions and Content:**
+   - The print preview should match the current format dimensions and display the same border and elements.
+
+---
+
+### **Updated Code**
+
+#### **`pages/schemes/create.js`:**
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Text } from 'react-konva';
+
+// Page formats in mm (converted to pixels at 72 DPI)
+const pageFormats = {
+  A4: { width: 841.89, height: 595.28 },
+  A3: { width: 1190.55, height: 841.89 },
+  A2: { width: 1683.78, height: 1190.55 },
+  A1: { width: 2383.94, height: 1683.78 },
+  A0: { width: 3370.79, height: 2383.94 },
+};
+
+const SchemeCreatePage = () => {
+  const [selectedFormat, setSelectedFormat] = useState('A4'); // Default format
+  const [canvasSize, setCanvasSize] = useState(pageFormats[selectedFormat]);
+  const stageRef = useRef(null);
+
+  // Update canvas size when format changes
+  useEffect(() => {
+    setCanvasSize(pageFormats[selectedFormat]);
+  }, [selectedFormat]);
+
+  const handleFormatChange = (format) => {
+    setSelectedFormat(format);
+  };
+
+  // Handle Preview for Print
+  const handlePrintPreview = () => {
+    if (!stageRef.current) return;
+
+    // Open a new window
+    const printWindow = window.open('', '_blank');
+
+    // Get the stage data URL (rendered as a PNG)
+    const dataUrl = stageRef.current.toDataURL();
+
+    // Write the HTML content for the preview
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print Preview - ${selectedFormat}</title>
+          <style>
+            body {
+              margin: 0;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              background-color: #f0f0f0;
+            }
+            img {
+              border: 2px solid black;
+            }
+          </style>
+        </head>
+        <body>
+          <img src="${dataUrl}" width="${canvasSize.width}" height="${canvasSize.height}" />
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', padding: '20px' }}>
+      {/* Panel for choosing format */}
+      <div
+        style={{
+          width: '200px',
+          borderRight: '1px solid #ccc',
+          padding: '10px',
+          background: '#f9f9f9',
+        }}
+      >
+        <h3>Page Format</h3>
+        {Object.keys(pageFormats).map((format) => (
+          <div key={format} style={{ marginBottom: '10px' }}>
+            <label>
+              <input
+                type="radio"
+                name="format"
+                value={format}
+                checked={selectedFormat === format}
+                onChange={() => handleFormatChange(format)}
+              />
+              {format}
+            </label>
+          </div>
+        ))}
+        <div style={{ marginTop: '20px', padding: '10px', background: '#e9ecef' }}>
+          <strong>Selected Format:</strong> {selectedFormat}
+          <p>
+            Dimensions: {Math.round(canvasSize.width)}px x {Math.round(canvasSize.height)}px
+          </p>
+        </div>
+        <button
+          onClick={handlePrintPreview}
+          style={{
+            marginTop: '20px',
+            padding: '10px 20px',
+            backgroundColor: '#007BFF',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Preview for Print
+        </button>
+      </div>
+
+      {/* Drawing Canvas */}
+      <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
+        <Stage
+          ref={stageRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          style={{
+            border: '2px solid black',
+            background: '#fff',
+            margin: '0 auto',
+          }}
+        >
+          <Layer>
+            {/* Border Rectangle */}
+            <Rect
+              x={0}
+              y={0}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              stroke="black"
+              strokeWidth={2}
+              dash={[10, 5]} // Dashed border for better visibility
+            />
+            {/* Display text */}
+            <Text
+              x={20}
+              y={20}
+              text={`Format: ${selectedFormat}`}
+              fontSize={20}
+              fontStyle="bold"
+              fill="black"
+            />
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default SchemeCreatePage;
+```
+
+---
+
+### **Key Changes**
+
+1. **`handlePrintPreview` Function:**
+   - Captures the current canvas (`Stage`) as a PNG using `toDataURL`.
+   - Opens a new browser window and writes an HTML preview containing the image.
+
+2. **Preview Styling:**
+   - Adds CSS styles to center the image and mimic a print view.
+
+3. **Dynamic Sizing:**
+   - The PNG image matches the dimensions of the selected format.
+
+4. **Print View Updates Dynamically:**
+   - The preview reflects the current format selection.
+
+---
+
+### **Expected Behavior**
+
+1. **Choose Format:**
+   - Select a page format (e.g., A4, A3) from the radio buttons.
+
+2. **View Dimensions:**
+   - The panel updates with the selected format and its dimensions.
+
+3. **Print Preview:**
+   - Click the **"Preview for Print"** button.
+   - A new window opens with the rendered canvas image sized to the selected format.
+
+4. **Print from Browser:**
+   - You can directly print the opened preview from the browser.
+
+---
+
+### **Enhancements**
+
+1. **Export as PDF:**
+   - Use libraries like `jspdf` to convert the `Stage` into a downloadable PDF.
+
+2. **Custom Backgrounds:**
+   - Allow users to set a background image for the canvas (e.g., grids or branding).
+
+3. **User Annotations:**
+   - Enable users to add custom shapes, text, or annotations before printing.
+
+---
+
+Let me know if you'd like to explore these enhancements! 😊

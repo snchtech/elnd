@@ -1,0 +1,258 @@
+To implement the functionality of updating a scheme's JSON file in the `scheme_src` folder when the user clicks the "Update Scheme" button:
+
+---
+
+### **Steps to Implement**
+
+1. **Add an "Update Scheme" Button:**
+   - Display the button only if a scheme is loaded.
+
+2. **Capture Updated Scheme Data:**
+   - Track changes made to the scheme elements (e.g., using React state).
+
+3. **Send an Update Request:**
+   - Send a `PUT` request to the `/api/schemes/[id]` endpoint with the updated scheme data.
+
+4. **Update the JSON File:**
+   - Use the API endpoint to write the updated data back to the scheme's JSON file in the `scheme_src` folder.
+
+---
+
+### **Updated Code**
+
+#### **Frontend: Scheme Update Button**
+
+Update the scheme page to include an "Update Scheme" button that sends the updated scheme data to the backend.
+
+##### **`pages/schemes/[id].js`:**
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const SchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query; // Get the scheme ID from the route
+  const [scheme, setScheme] = useState(null); // Store the scheme data
+  const [elements, setElements] = useState([]); // Store the canvas elements
+  const [isUpdated, setIsUpdated] = useState(false); // Track if elements were updated
+
+  // Fetch the scheme data from the API
+  useEffect(() => {
+    if (!id) return; // Wait for the ID to be available
+    const fetchScheme = async () => {
+      try {
+        const response = await fetch(`/api/schemes/${id}`);
+        const data = await response.json();
+        setScheme(data);
+        setElements(data.scheme_data.elements || []); // Load the Konva elements
+      } catch (error) {
+        console.error('Error loading scheme:', error);
+      }
+    };
+
+    fetchScheme();
+  }, [id]);
+
+  // Handle element changes (e.g., dragging)
+  const handleElementChange = (index, newAttrs) => {
+    const updatedElements = elements.map((el, i) => (i === index ? newAttrs : el));
+    setElements(updatedElements);
+    setIsUpdated(true); // Mark as updated
+  };
+
+  // Handle scheme update
+  const handleUpdateScheme = async () => {
+    if (!scheme) return;
+
+    const updatedScheme = {
+      ...scheme,
+      scheme_data: {
+        ...scheme.scheme_data,
+        elements,
+      },
+    };
+
+    try {
+      const response = await fetch(`/api/schemes/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedScheme),
+      });
+
+      if (response.ok) {
+        alert('Scheme updated successfully!');
+        setIsUpdated(false); // Reset update flag
+      } else {
+        alert('Failed to update scheme.');
+      }
+    } catch (error) {
+      console.error('Error updating scheme:', error);
+    }
+  };
+
+  if (!scheme) return <p>Loading...</p>; // Show a loading state while fetching
+
+  return (
+    <div>
+      <h1>{scheme.scheme_name}</h1>
+      <p>Department: {scheme.scheme_department}</p>
+      <Stage
+        width={window.innerWidth}
+        height={500}
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  {...el}
+                  draggable
+                  onDragEnd={(e) => {
+                    handleElementChange(index, {
+                      ...el,
+                      x: e.target.x(),
+                      y: e.target.y(),
+                    });
+                  }}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  {...el}
+                  draggable
+                  onDragEnd={(e) => {
+                    handleElementChange(index, {
+                      ...el,
+                      x: e.target.x(),
+                      y: e.target.y(),
+                    });
+                  }}
+                />
+              );
+            }
+            return null; // Add other shape types as needed
+          })}
+        </Layer>
+      </Stage>
+      {isUpdated && (
+        <button
+          onClick={handleUpdateScheme}
+          style={{
+            marginTop: '20px',
+            padding: '10px 20px',
+            backgroundColor: 'green',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Update Scheme
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default SchemePage;
+```
+
+---
+
+#### **Backend: Update Scheme API**
+
+Create an API endpoint to update the scheme file in the `scheme_src` folder.
+
+##### **`pages/api/schemes/[id].js`:**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { id } = req.query; // Get the scheme ID from the query
+  const folderPath = path.join(process.cwd(), 'scheme_src'); // Path to the folder
+
+  if (req.method === 'GET') {
+    // Fetch a single scheme by ID
+    try {
+      const files = fs.readdirSync(folderPath);
+      const file = files.find((file) => file.includes(`scheme${id}`) && file.endsWith('.json'));
+
+      if (!file) {
+        res.status(404).json({ error: 'Scheme not found.' });
+        return;
+      }
+
+      const filePath = path.join(folderPath, file);
+      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      const scheme = JSON.parse(fileContent);
+
+      res.status(200).json(scheme);
+    } catch (error) {
+      console.error('Error loading scheme:', error);
+      res.status(500).json({ error: 'Failed to load scheme.' });
+    }
+  } else if (req.method === 'PUT') {
+    // Update the scheme JSON file
+    try {
+      const updatedScheme = req.body; // Get the updated scheme data
+      const filePath = path.join(folderPath, `scheme${id}.json`);
+
+      if (!fs.existsSync(filePath)) {
+        res.status(404).json({ error: 'Scheme file not found.' });
+        return;
+      }
+
+      fs.writeFileSync(filePath, JSON.stringify(updatedScheme, null, 2), 'utf-8'); // Write updated data
+      res.status(200).json({ success: true, message: 'Scheme updated successfully.' });
+    } catch (error) {
+      console.error('Error updating scheme:', error);
+      res.status(500).json({ error: 'Failed to update scheme.' });
+    }
+  } else {
+    res.setHeader('Allow', ['GET', 'PUT']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}
+```
+
+---
+
+### **Key Points**
+
+1. **Frontend:**
+   - Tracks changes to elements in `elements` state using `handleElementChange`.
+   - Sends a `PUT` request with the updated scheme data when "Update Scheme" is clicked.
+
+2. **Backend:**
+   - The `PUT` endpoint updates the JSON file in the `scheme_src` folder with the new data.
+
+3. **Validation:**
+   - Ensures the file exists before writing to it.
+   - Handles errors gracefully, both on the client and server.
+
+---
+
+### **Expected Behavior**
+
+1. **Load Scheme:**
+   - Open a scheme page (`/schemes/[id]`) to load and display the scheme.
+
+2. **Modify Scheme:**
+   - Drag shapes on the canvas to modify their positions.
+
+3. **Update Scheme:**
+   - Click the "Update Scheme" button to save changes to the `scheme_src` JSON file.
+
+---
+
+Let me know if you need further assistance! 😊

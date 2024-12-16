@@ -1,0 +1,368 @@
+To enable deleting the currently selected scheme (whose ID is displayed in the input field), we need to:
+
+1. **Create a DELETE API endpoint** to handle scheme deletion on the server-side.
+2. **Update the React component** to include a "Delete Scheme" button that calls this API endpoint.
+
+---
+
+## **1. Create a DELETE API Endpoint**
+
+We'll create a new API route in `pages/api/schemes/[id].js` to handle DELETE requests. This endpoint will delete the JSON file corresponding to the scheme ID from the `scheme_src` folder.
+
+### **API Route: `pages/api/schemes/[id].js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { id } = req.query;
+
+  // Define the file path
+  const filePath = path.join(process.cwd(), 'scheme_src', `scheme${id}.json`);
+
+  if (req.method === 'DELETE') {
+    // Check if the file exists
+    if (fs.existsSync(filePath)) {
+      try {
+        // Delete the file
+        fs.unlinkSync(filePath);
+        res.status(200).json({ success: true, message: 'Scheme deleted successfully.' });
+      } catch (error) {
+        console.error('Error deleting scheme:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete scheme.' });
+      }
+    } else {
+      res.status(404).json({ success: false, error: 'Scheme not found.' });
+    }
+  } else {
+    // Method not allowed
+    res.setHeader('Allow', ['DELETE']);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}
+```
+
+**Explanation:**
+
+- **Import necessary modules:** We use `fs` for file system operations and `path` to construct the file path.
+- **Retrieve the scheme ID:** Extract the `id` from `req.query`.
+- **Handle DELETE requests:**
+  - **Check if the file exists:** Use `fs.existsSync` to verify if the JSON file exists.
+  - **Delete the file:** Use `fs.unlinkSync` to delete the file synchronously.
+  - **Error handling:** Catch any errors and respond accordingly.
+- **Handle unsupported methods:** If the request method is not DELETE, respond with a `405 Method Not Allowed`.
+
+---
+
+## **2. Update the React Component**
+
+We'll add a "Delete Scheme" button to the component, which will send a DELETE request to the new API endpoint when clicked.
+
+### **Updated React Component**
+
+```jsx
+'use client';
+
+import React, { useRef, useState, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+import Select from 'react-select';
+
+const SchemeSelector = () => {
+  const [options, setOptions] = useState([]); // Options for the dropdown
+  const [selectedScheme, setSelectedScheme] = useState(null); // Selected scheme
+  const [elements, setElements] = useState([]); // Konva elements to render
+  const stageRef = useRef(null); // Reference to the Konva stage
+
+  // Fetch schemes from the API
+  useEffect(() => {
+    fetchSchemes();
+  }, []);
+
+  const fetchSchemes = async () => {
+    try {
+      const response = await fetch('/api/schemes');
+      const data = await response.json();
+
+      if (data.success) {
+        // Transform the data for React-Select
+        const transformedOptions = data.data.map((scheme) => ({
+          value: scheme.scheme_id,
+          label: scheme.scheme_name,
+          schemeData: scheme.scheme_data, // Include scheme_data for rendering
+        }));
+        setOptions(transformedOptions);
+      } else {
+        console.error('Failed to fetch schemes:', data.error);
+      }
+    } catch (error) {
+      console.error('Error fetching schemes:', error);
+    }
+  };
+
+  // Handle scheme selection
+  const handleSelectChange = (selectedOption) => {
+    setSelectedScheme(selectedOption); // Update the selected scheme
+    setElements(selectedOption.schemeData.elements || []); // Load elements to render
+  };
+
+  // Handle scheme deletion
+  const handleDeleteScheme = async () => {
+    if (!selectedScheme) {
+      alert('No scheme selected.');
+      return;
+    }
+
+    const confirmDelete = confirm(
+      `Are you sure you want to delete the scheme "${selectedScheme.label}"?`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/schemes/${selectedScheme.value}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Scheme deleted successfully.');
+        // Refresh the schemes list and reset the selection
+        fetchSchemes();
+        setSelectedScheme(null);
+        setElements([]);
+      } else {
+        alert('Failed to delete scheme: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error deleting scheme:', error);
+      alert('An error occurred while deleting the scheme.');
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+        padding: '20px',
+      }}
+    >
+      <h3>Select a Scheme</h3>
+      <Select
+        options={options}
+        onChange={handleSelectChange}
+        placeholder="Choose a scheme"
+        value={selectedScheme}
+        isLoading={options.length === 0}
+      />
+      <input
+        type="text"
+        value={selectedScheme ? selectedScheme.value : ''}
+        placeholder="Scheme ID"
+        readOnly
+        style={{ padding: '10px', fontSize: '16px', width: '300px' }}
+      />
+
+      {/* Delete Scheme Button */}
+      <button
+        onClick={handleDeleteScheme}
+        style={{
+          padding: '10px',
+          fontSize: '16px',
+          backgroundColor: '#ff4d4f',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          width: '150px',
+        }}
+        disabled={!selectedScheme}
+      >
+        Delete Scheme
+      </button>
+
+      <div
+        style={{
+          border: '1px solid #ccc',
+          padding: '10px',
+          background: '#f0f0f0',
+        }}
+      >
+        <h3>Canvas</h3>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 50}
+          height={400}
+          style={{ border: '1px solid black', background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el, index) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={index}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={index}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              }
+              return null; // Add other shape types as needed
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default SchemeSelector;
+```
+
+**Explanation:**
+
+- **Added a Delete Button:**
+  ```jsx
+  <button
+    onClick={handleDeleteScheme}
+    // ...styles
+    disabled={!selectedScheme}
+  >
+    Delete Scheme
+  </button>
+  ```
+  - The button is disabled if no scheme is selected.
+
+- **`handleDeleteScheme` Function:**
+  - Checks if a scheme is selected.
+  - Prompts the user for confirmation using `confirm()`.
+  - Sends a DELETE request to `/api/schemes/{scheme_id}`.
+  - On success, it refreshes the schemes list, resets the selection, and clears the canvas.
+
+- **Refetching Schemes:**
+  - After deletion, `fetchSchemes()` is called to refresh the dropdown options.
+
+---
+
+## **Testing the Functionality**
+
+1. **Start Your Next.js Application:**
+   ```bash
+   npm run dev
+   ```
+
+2. **Access the Application:**
+   Navigate to `http://localhost:3000` in your browser.
+
+3. **Select a Scheme:**
+   - Use the dropdown to select a scheme.
+   - The scheme ID appears in the input field.
+   - The canvas displays the scheme's elements.
+
+4. **Delete the Scheme:**
+   - Click the **Delete Scheme** button.
+   - Confirm the deletion when prompted.
+   - On success:
+     - The scheme is removed from the dropdown.
+     - The input field and canvas are cleared.
+
+5. **Verify Deletion:**
+   - Check the `scheme_src` folder to confirm the JSON file corresponding to the deleted scheme is gone.
+   - Refresh the page and ensure the scheme no longer appears in the dropdown.
+
+---
+
+## **Important Considerations**
+
+- **File Naming Convention:**
+  - The API route assumes that scheme files are named as `scheme{scheme_id}.json`, e.g., `scheme1.json`.
+  - Ensure your files follow this naming pattern.
+
+- **Error Handling:**
+  - The API and client code include error handling to manage scenarios like:
+    - The scheme file does not exist.
+    - An error occurs during file deletion.
+    - The user cancels the deletion.
+
+- **Security Considerations:**
+  - **Validation:** Ensure that the `scheme_id` is validated to prevent directory traversal attacks.
+  - **Authentication and Authorization:** In a production environment, implement proper authentication to ensure only authorized users can delete schemes.
+
+  For example, you might add checks to ensure that `scheme_id` is a valid number and does not contain any malicious characters.
+
+---
+
+## **Enhancements and Best Practices**
+
+- **Use Asynchronous File Operations:**
+  - To prevent blocking the event loop, consider using asynchronous versions of `fs` methods, such as `fs.unlink` with promises.
+
+  ```javascript
+  import fs from 'fs/promises';
+  // ...
+
+  if (req.method === 'DELETE') {
+    // Check if the file exists
+    try {
+      await fs.access(filePath); // Throws if file does not exist
+
+      // Delete the file asynchronously
+      await fs.unlink(filePath);
+
+      res.status(200).json({ success: true, message: 'Scheme deleted successfully.' });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        res.status(404).json({ success: false, error: 'Scheme not found.' });
+      } else {
+        console.error('Error deleting scheme:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete scheme.' });
+      }
+    }
+  }
+  ```
+
+- **Sanitize Input:**
+  - Ensure that `scheme_id` is sanitized and validated to prevent security vulnerabilities.
+
+  ```javascript
+  const id = parseInt(req.query.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ success: false, error: 'Invalid scheme ID.' });
+  }
+  ```
+
+- **User Feedback:**
+  - Enhance the UI to provide better feedback to the user, such as loading indicators or toast notifications.
+
+- **Error Messages:**
+  - Display more user-friendly error messages and log detailed errors on the server-side.
+
+- **Authentication:**
+  - Implement user authentication to secure the delete operation.
+
+---
+
+## **Final Thoughts**
+
+By implementing the DELETE API endpoint and updating the React component, users can now delete the currently selected scheme directly from the UI. Remember to handle file operations carefully and consider security best practices when working with file systems and user input.
+
+Let me know if you have any questions or need further assistance! 😊

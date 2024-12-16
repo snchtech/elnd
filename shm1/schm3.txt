@@ -1,0 +1,210 @@
+To achieve this, you can follow these steps:
+
+1. **Set the Selected Scheme ID in the Input Text:**
+   - When a user selects a scheme from the dropdown, update an `input` element's value with the selected scheme's `scheme_id`.
+
+2. **Render React-Konva Elements Based on the Selected Scheme:**
+   - Use the `scheme_data` from the selected scheme to dynamically render React-Konva elements on the canvas.
+
+---
+
+### **Implementation**
+
+Here’s the updated code that integrates the **React-Select**, **input field**, and **React-Konva** components:
+
+```javascript
+'use client';
+
+import React, { useRef, useState, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+import Select from 'react-select';
+
+const SchemeSelector = () => {
+  const [options, setOptions] = useState([]); // Options for the dropdown
+  const [selectedScheme, setSelectedScheme] = useState(null); // Selected scheme
+  const [elements, setElements] = useState([]); // Konva elements to render
+  const stageRef = useRef(null); // Reference to the Konva stage
+
+  // Fetch schemes from the API
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+
+        if (data.success) {
+          // Transform the data for React-Select
+          const transformedOptions = data.data.map((scheme) => ({
+            value: scheme.scheme_id,
+            label: scheme.scheme_name,
+            schemeData: scheme.scheme_data, // Include scheme_data for rendering
+          }));
+          setOptions(transformedOptions);
+        } else {
+          console.error('Failed to fetch schemes:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  // Handle scheme selection
+  const handleSelectChange = (selectedOption) => {
+    setSelectedScheme(selectedOption); // Update the selected scheme
+    setElements(selectedOption.schemeData.elements || []); // Load elements to render
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px' }}>
+      <h3>Select a Scheme</h3>
+      <Select
+        options={options}
+        onChange={handleSelectChange}
+        placeholder="Choose a scheme"
+        isLoading={options.length === 0}
+      />
+      <input
+        type="text"
+        value={selectedScheme ? selectedScheme.value : ''}
+        placeholder="Scheme ID"
+        readOnly
+        style={{ padding: '10px', fontSize: '16px', width: '300px' }}
+      />
+      <div style={{ border: '1px solid #ccc', padding: '10px', background: '#f0f0f0' }}>
+        <h3>Canvas</h3>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth - 50}
+          height={400}
+          style={{ border: '1px solid black', background: '#fff' }}
+        >
+          <Layer>
+            {elements.map((el, index) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={index}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={index}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              }
+              return null; // Add other shape types as needed
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default SchemeSelector;
+```
+
+---
+
+### **Key Points in the Code**
+
+1. **Dropdown Integration:**
+   - The `react-select` component fetches data from the `/api/schemes` endpoint and populates the dropdown.
+   - The selected scheme's `scheme_id` is displayed in the input field.
+
+2. **Setting the Scheme ID in Input:**
+   - The input field's `value` is dynamically updated with the selected scheme's `scheme_id`.
+
+   ```javascript
+   <input
+     type="text"
+     value={selectedScheme ? selectedScheme.value : ''}
+     placeholder="Scheme ID"
+     readOnly
+   />
+   ```
+
+3. **Rendering Konva Elements:**
+   - When a scheme is selected, its `scheme_data.elements` are used to render shapes (like `Rect` and `Circle`) on the canvas.
+   - The shapes are dynamically created based on their `type`, `x`, `y`, and other properties.
+
+4. **Canvas Setup:**
+   - A `Stage` and `Layer` are used to render the shapes.
+   - The `elements` state is updated with the selected scheme's `elements`.
+
+   ```javascript
+   setElements(selectedOption.schemeData.elements || []);
+   ```
+
+---
+
+### **Expected Behavior**
+
+1. **User Selects a Scheme:**
+   - The dropdown displays all schemes fetched from the `/api/schemes` endpoint.
+   - Selecting a scheme updates the input field with the `scheme_id`.
+
+2. **Rendering Konva Elements:**
+   - The React-Konva canvas displays the elements defined in the selected scheme's `scheme_data`.
+
+3. **Draggable Shapes:**
+   - Shapes like `Rect` and `Circle` are draggable on the canvas.
+
+---
+
+### **Example Scenario**
+
+#### **Sample Scheme JSON (File: `scheme1.json`):**
+```json
+{
+  "scheme_id": "1",
+  "scheme_name": "Engineering Plan",
+  "scheme_department": "Engineering",
+  "scheme_data": {
+    "elements": [
+      { "type": "rect", "x": 50, "y": 50, "width": 100, "height": 100, "fill": "red" },
+      { "type": "circle", "x": 200, "y": 150, "radius": 50, "fill": "blue" }
+    ]
+  }
+}
+```
+
+#### **Result After Selecting the Scheme:**
+
+- **Input Field:**
+  ```plaintext
+  Scheme ID: 1
+  ```
+
+- **Canvas:**
+  - A red rectangle at `(50, 50)` and a blue circle at `(200, 150)`.
+
+---
+
+### **Enhancements**
+
+1. **Save Changes:**
+   - Add a "Save Changes" button to update the JSON file when the user modifies shapes.
+
+2. **Add Shape Types:**
+   - Extend the rendering logic to support other Konva shapes like `Text` and `Line`.
+
+3. **Dynamic Sizing:**
+   - Adjust the `Stage` width and height dynamically based on the viewport.
+
+Let me know if you need additional features or adjustments! 😊

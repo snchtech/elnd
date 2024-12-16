@@ -1,0 +1,261 @@
+To implement the functionality you described:
+
+1. **Generate the List Dynamically from `scheme_src`:**
+   - Create a server-side API endpoint that reads the `scheme_src` folder and provides the list of schemes.
+
+2. **Dynamic Route for Each Scheme:**
+   - Use Next.js dynamic routing (`[id].js`) to render a page for each scheme.
+
+3. **Pass Data to the Scheme Page:**
+   - Fetch the data for the selected scheme from the API and render the `React-Konva` elements.
+
+---
+
+### **Step 1: API to Fetch Schemes List**
+
+Update the `/api/schemes` endpoint to return the list of schemes dynamically from the `scheme_src` folder.
+
+#### **`pages/api/schemes.js`:**
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  try {
+    const folderPath = path.join(process.cwd(), 'scheme_src'); // Path to the folder
+    const files = fs.readdirSync(folderPath);
+
+    // Read and parse each JSON file
+    const schemes = files
+      .filter((file) => file.endsWith('.json')) // Only JSON files
+      .map((file) => {
+        const filePath = path.join(folderPath, file);
+        const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const data = JSON.parse(fileContent); // Parse the JSON file
+        return {
+          id: data.scheme_id,
+          name: data.scheme_name,
+          department: data.scheme_department,
+        };
+      });
+
+    res.status(200).json(schemes);
+  } catch (error) {
+    console.error('Error loading schemes:', error);
+    res.status(500).json({ error: 'Failed to load schemes.' });
+  }
+}
+```
+
+---
+
+### **Step 2: Update Schemes List Page**
+
+Modify the `SchemesList` page to fetch the schemes list from the `/api/schemes` endpoint.
+
+#### **`pages/schemes/index.js`:**
+```javascript
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+const SchemesList = () => {
+  const [schemes, setSchemes] = useState([]);
+
+  // Fetch the schemes list from the API
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+        setSchemes(data);
+      } catch (error) {
+        console.error('Error loading schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  return (
+    <div>
+      <h1>Scheme List</h1>
+      <ul>
+        {schemes.map((scheme) => (
+          <li key={scheme.id}>
+            <Link href={`/schemes/${scheme.id}`}>
+              <a>{scheme.name}</a>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default SchemesList;
+```
+
+---
+
+### **Step 3: Dynamic Route for Each Scheme**
+
+Create a dynamic route to render the `React-Konva` canvas with the scheme data.
+
+#### **`pages/schemes/[id].js`:**
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const SchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query; // Get the scheme ID from the route
+  const [scheme, setScheme] = useState(null);
+  const [elements, setElements] = useState([]);
+
+  // Fetch the scheme data from the API
+  useEffect(() => {
+    if (!id) return; // Wait for the ID to be available
+    const fetchScheme = async () => {
+      try {
+        const response = await fetch(`/api/schemes/${id}`);
+        const data = await response.json();
+        setScheme(data);
+        setElements(data.scheme_data.elements || []); // Load the Konva elements
+      } catch (error) {
+        console.error('Error loading scheme:', error);
+      }
+    };
+
+    fetchScheme();
+  }, [id]);
+
+  if (!scheme) return <p>Loading...</p>; // Show a loading state while fetching
+
+  return (
+    <div>
+      <h1>{scheme.scheme_name}</h1>
+      <p>Department: {scheme.scheme_department}</p>
+      <Stage width={window.innerWidth} height={500} style={{ border: '1px solid black' }}>
+        <Layer>
+          {elements.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            }
+            return null; // Add other shape types as needed
+          })}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemePage;
+```
+
+---
+
+### **Step 4: API for Fetching Individual Scheme**
+
+Create an API endpoint to fetch data for a specific scheme.
+
+#### **`pages/api/schemes/[id].js`:**
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { id } = req.query; // Get the scheme ID from the query
+  const folderPath = path.join(process.cwd(), 'scheme_src'); // Path to the folder
+
+  try {
+    const files = fs.readdirSync(folderPath);
+    const file = files.find((file) => file.includes(`scheme${id}`) && file.endsWith('.json'));
+
+    if (!file) {
+      res.status(404).json({ error: 'Scheme not found.' });
+      return;
+    }
+
+    const filePath = path.join(folderPath, file);
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    const scheme = JSON.parse(fileContent);
+
+    res.status(200).json(scheme);
+  } catch (error) {
+    console.error('Error loading scheme:', error);
+    res.status(500).json({ error: 'Failed to load scheme.' });
+  }
+}
+```
+
+---
+
+### **How It Works**
+
+1. **List Page (`/schemes`):**
+   - Fetches the list of schemes from `/api/schemes`.
+   - Displays a clickable list of scheme names.
+   - Each name links to `/schemes/[id]`.
+
+2. **Dynamic Route (`/schemes/[id]`):**
+   - Fetches the specific scheme's data from `/api/schemes/[id]`.
+   - Renders the `React-Konva` canvas with the shapes from the `scheme_data`.
+
+---
+
+### **Folder Structure**
+
+```plaintext
+my_app/
+├── pages/
+│   ├── api/
+│   │   ├── schemes.js          # Endpoint to fetch schemes list
+│   │   ├── schemes/
+│   │   │   ├── [id].js         # Endpoint to fetch a single scheme by ID
+│   ├── schemes/
+│   │   ├── index.js            # List all schemes
+│   │   ├── [id].js             # Render a single scheme with Konva
+├── scheme_src/                 # Folder containing scheme JSON files
+│   ├── scheme1.json
+│   ├── scheme2.json
+```
+
+---
+
+### **Expected Behavior**
+
+1. **Visit `/schemes`:**
+   - Displays a list of all schemes from the `scheme_src` folder.
+   - Each scheme links to its respective page.
+
+2. **Click a Scheme:**
+   - Navigates to `/schemes/[id]` and renders the scheme's `React-Konva` elements.
+
+3. **Data Flow:**
+   - The API dynamically reads the `scheme_src` folder to fetch the list of schemes and their details.
+
+---
+
+Let me know if you need help with further customizations! 😊

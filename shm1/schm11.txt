@@ -1,0 +1,239 @@
+To add a **text input for `scheme_name`** and a **select input for `scheme_department`** while creating or updating a scheme, follow these steps:
+
+1. **Create Input Fields for `scheme_name` and `scheme_department`:**
+   - Add controlled inputs for `scheme_name` and `scheme_department`.
+
+2. **Handle Input Changes:**
+   - Update the local state as the user types or selects a value.
+
+3. **Set Default Values on Load:**
+   - When loading a scheme, pre-fill the inputs with the existing `scheme_name` and `scheme_department`.
+
+4. **Send Updated Values:**
+   - Include the updated `scheme_name` and `scheme_department` in the `PUT` request when updating the scheme.
+
+---
+
+### **Updated Code**
+
+#### **`pages/schemes/[id].js`:**
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const SchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query; // Get the scheme ID from the route
+  const [scheme, setScheme] = useState(null); // Store the scheme data
+  const [elements, setElements] = useState([]); // Store the canvas elements
+  const [schemeName, setSchemeName] = useState(''); // Controlled input for scheme_name
+  const [schemeDepartment, setSchemeDepartment] = useState(''); // Controlled select for scheme_department
+  const [isUpdated, setIsUpdated] = useState(false); // Track if changes were made
+
+  // List of departments (can be fetched dynamically if needed)
+  const departmentOptions = ['Engineering', 'Marketing', 'Sales', 'IT', 'HR'];
+
+  // Fetch the scheme data from the API
+  useEffect(() => {
+    if (!id) return; // Wait for the ID to be available
+    const fetchScheme = async () => {
+      try {
+        const response = await fetch(`/api/schemes/${id}`);
+        const data = await response.json();
+        setScheme(data);
+        setElements(data.scheme_data.elements || []); // Load the Konva elements
+        setSchemeName(data.scheme_name || ''); // Set scheme_name
+        setSchemeDepartment(data.scheme_department || ''); // Set scheme_department
+      } catch (error) {
+        console.error('Error loading scheme:', error);
+      }
+    };
+
+    fetchScheme();
+  }, [id]);
+
+  // Handle element changes (e.g., dragging)
+  const handleElementChange = (index, newAttrs) => {
+    const updatedElements = elements.map((el, i) => (i === index ? newAttrs : el));
+    setElements(updatedElements);
+    setIsUpdated(true); // Mark as updated
+  };
+
+  // Handle scheme update
+  const handleUpdateScheme = async () => {
+    if (!scheme) return;
+
+    const updatedScheme = {
+      ...scheme,
+      scheme_name: schemeName,
+      scheme_department: schemeDepartment,
+      scheme_data: {
+        ...scheme.scheme_data,
+        elements,
+      },
+    };
+
+    try {
+      const response = await fetch(`/api/schemes/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedScheme),
+      });
+
+      if (response.ok) {
+        alert('Scheme updated successfully!');
+        setIsUpdated(false); // Reset update flag
+      } else {
+        alert('Failed to update scheme.');
+      }
+    } catch (error) {
+      console.error('Error updating scheme:', error);
+    }
+  };
+
+  if (!scheme) return <p>Loading...</p>; // Show a loading state while fetching
+
+  return (
+    <div>
+      <h1>Edit Scheme</h1>
+      <div style={{ marginBottom: '20px' }}>
+        <label>
+          <strong>Scheme Name:</strong>
+          <input
+            type="text"
+            value={schemeName}
+            onChange={(e) => {
+              setSchemeName(e.target.value);
+              setIsUpdated(true); // Mark as updated
+            }}
+            style={{ marginLeft: '10px', padding: '5px', width: '300px' }}
+          />
+        </label>
+      </div>
+      <div style={{ marginBottom: '20px' }}>
+        <label>
+          <strong>Scheme Department:</strong>
+          <select
+            value={schemeDepartment}
+            onChange={(e) => {
+              setSchemeDepartment(e.target.value);
+              setIsUpdated(true); // Mark as updated
+            }}
+            style={{ marginLeft: '10px', padding: '5px', width: '300px' }}
+          >
+            <option value="" disabled>
+              Select a department
+            </option>
+            {departmentOptions.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <Stage
+        width={window.innerWidth}
+        height={500}
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  {...el}
+                  draggable
+                  onDragEnd={(e) => {
+                    handleElementChange(index, {
+                      ...el,
+                      x: e.target.x(),
+                      y: e.target.y(),
+                    });
+                  }}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  {...el}
+                  draggable
+                  onDragEnd={(e) => {
+                    handleElementChange(index, {
+                      ...el,
+                      x: e.target.x(),
+                      y: e.target.y(),
+                    });
+                  }}
+                />
+              );
+            }
+            return null; // Add other shape types as needed
+          })}
+        </Layer>
+      </Stage>
+      {isUpdated && (
+        <button
+          onClick={handleUpdateScheme}
+          style={{
+            marginTop: '20px',
+            padding: '10px 20px',
+            backgroundColor: 'green',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Update Scheme
+        </button>
+      )}
+    </div>
+  );
+};
+
+export default SchemePage;
+```
+
+---
+
+### **Key Features in the Code**
+
+1. **Controlled Inputs:**
+   - `scheme_name` and `scheme_department` are controlled using `useState`.
+
+2. **Dynamic Defaults:**
+   - On load, `scheme_name` and `scheme_department` are populated with the existing values from the scheme file.
+
+3. **Update Handling:**
+   - Changes to `scheme_name` or `scheme_department` are tracked in the local state and marked as updated.
+
+4. **Form Validation:**
+   - The `scheme_department` dropdown includes a default `disabled` option to ensure a valid department is selected.
+
+5. **PUT Request:**
+   - When the "Update Scheme" button is clicked, the updated values are sent to the `/api/schemes/[id]` endpoint.
+
+---
+
+### **Expected Behavior**
+
+1. **Initial View:**
+   - The page loads with the scheme's existing `scheme_name` and `scheme_department` pre-filled.
+
+2. **Edit Inputs:**
+   - The user can type a new `scheme_name` or select a different `scheme_department`.
+
+3. **Update Button:**
+   - The "Update Scheme" button becomes visible after any changes are made.
+   - Clicking the button saves the updates to the JSON file in the `scheme_src` folder.
+
+---
+
+Let me know if you need further enhancements! 😊

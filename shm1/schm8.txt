@@ -1,0 +1,176 @@
+Here's the code for creating a **scheme creation page** where the user can choose a page format (A4, A3, A2, A1, A0), display the selected format in a panel, and dynamically update the border and canvas size to reflect the selected format.
+
+---
+
+### **Code Example**
+
+#### **`pages/schemes/create.js`:**
+
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Text } from 'react-konva';
+
+// Page formats in mm (converted to pixels at 72 DPI)
+const pageFormats = {
+  A4: { width: 841.89, height: 595.28 },
+  A3: { width: 1190.55, height: 841.89 },
+  A2: { width: 1683.78, height: 1190.55 },
+  A1: { width: 2383.94, height: 1683.78 },
+  A0: { width: 3370.79, height: 2383.94 },
+};
+
+const SchemeCreatePage = () => {
+  const [selectedFormat, setSelectedFormat] = useState('A4'); // Default format
+  const [canvasSize, setCanvasSize] = useState(pageFormats[selectedFormat]);
+  const stageRef = useRef(null);
+
+  // Update canvas size when format changes
+  useEffect(() => {
+    setCanvasSize(pageFormats[selectedFormat]);
+  }, [selectedFormat]);
+
+  const handleFormatChange = (format) => {
+    setSelectedFormat(format);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', padding: '20px' }}>
+      {/* Panel for choosing format */}
+      <div
+        style={{
+          width: '200px',
+          borderRight: '1px solid #ccc',
+          padding: '10px',
+          background: '#f9f9f9',
+        }}
+      >
+        <h3>Page Format</h3>
+        {Object.keys(pageFormats).map((format) => (
+          <div key={format} style={{ marginBottom: '10px' }}>
+            <label>
+              <input
+                type="radio"
+                name="format"
+                value={format}
+                checked={selectedFormat === format}
+                onChange={() => handleFormatChange(format)}
+              />
+              {format}
+            </label>
+          </div>
+        ))}
+        <div style={{ marginTop: '20px', padding: '10px', background: '#e9ecef' }}>
+          <strong>Selected Format:</strong> {selectedFormat}
+          <p>
+            Dimensions: {Math.round(canvasSize.width)}px x {Math.round(canvasSize.height)}px
+          </p>
+        </div>
+      </div>
+
+      {/* Drawing Canvas */}
+      <div style={{ flex: 1, padding: '20px', position: 'relative' }}>
+        <Stage
+          ref={stageRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          style={{
+            border: '2px solid black',
+            background: '#fff',
+            margin: '0 auto',
+          }}
+        >
+          <Layer>
+            {/* Border Rectangle */}
+            <Rect
+              x={0}
+              y={0}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              stroke="black"
+              strokeWidth={2}
+              dash={[10, 5]} // Dashed border for better visibility
+            />
+            {/* Display text */}
+            <Text
+              x={20}
+              y={20}
+              text={`Format: ${selectedFormat}`}
+              fontSize={20}
+              fontStyle="bold"
+              fill="black"
+            />
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+export default SchemeCreatePage;
+```
+
+---
+
+### **How It Works**
+
+1. **Page Formats:**
+   - The `pageFormats` object defines the dimensions of each format in pixels (72 DPI). For instance:
+     - `A4`: `841.89px` x `595.28px`
+     - `A3`: `1190.55px` x `841.89px`
+
+2. **State Management:**
+   - `selectedFormat`: Tracks the currently selected page format.
+   - `canvasSize`: Dynamically updates to the dimensions of the selected format.
+
+3. **Dynamic Canvas:**
+   - The canvas (`Konva Stage`) resizes dynamically based on the selected format.
+
+4. **Interactive Format Selection:**
+   - A radio button panel allows users to select the desired page format.
+   - The selected format and dimensions are displayed in the panel.
+
+5. **Border Rectangle:**
+   - A `Rect` object represents the page border, matching the size of the selected format.
+   - Dashed lines improve visibility.
+
+---
+
+### **Expected Behavior**
+
+1. **Initial View:**
+   - The page displays the default format (`A4`) with its dimensions and a dashed border rectangle.
+
+2. **Change Format:**
+   - Clicking a different radio button updates:
+     - The canvas size.
+     - The displayed format name and dimensions.
+     - The border rectangle.
+
+3. **Resizable Canvas:**
+   - The `Stage` dynamically resizes to match the selected page format.
+
+---
+
+### **Enhancements**
+
+1. **Real-World Dimensions (mm to px):**
+   - Use a DPI conversion to calculate sizes for various resolutions:
+     ```javascript
+     const DPI = 72; // Standard DPI
+     const convertMmToPx = (mm) => Math.round((mm / 25.4) * DPI);
+     ```
+
+2. **Print Preview:**
+   - Add a "Preview for Print" button that simulates the print view using the selected format.
+
+3. **Custom Formats:**
+   - Allow users to define custom dimensions via input fields.
+
+4. **Export Functionality:**
+   - Export the scheme as a high-resolution PNG, SVG, or PDF for printing.
+
+---
+
+Let me know if you'd like help implementing these enhancements or testing this functionality! 😊

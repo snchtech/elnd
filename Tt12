@@ -1,0 +1,39 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// POST endpoint to save state data
+app.post('/api/state', (req, res) => {
+    // Generate a unique ID
+    const uniqueId = uuidv4();
+
+    // Get the data from the request body
+    const data = req.body;
+
+    // Create a filename using the unique ID
+    const filename = `${uniqueId}.json`;
+    const filepath = path.join(__dirname, 'scheme_sec', filename);
+
+    // Write the data to a JSON file
+    fs.writeFile(filepath, JSON.stringify(data, null, 2), (err) => {
+        if (err) {
+            console.error('Error writing file', err);
+            return res.status(500).send('Error saving data');
+        }
+
+        // Respond with the unique ID or the saved filename
+        res.json({ message: 'File saved successfully', id: uniqueId });
+    });
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});

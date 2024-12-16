@@ -1,0 +1,51 @@
+const fs = require('fs');
+const path = require('path');
+
+// Function to read all JSON files from the specified folder
+function readJsonFilesFromFolder(folderPath) {
+    // Get absolute path to the folder
+    const absolutePath = path.resolve(__dirname, folderPath);
+    
+    // Array to hold the JSON objects
+    const jsonObjects = [];
+
+    // Read the contents of the folder
+    fs.readdir(absolutePath, (err, files) => {
+        if (err) {
+            console.error('Error reading folder:', err);
+            return;
+        }
+
+        // Filter for JSON files
+        const jsonFiles = files.filter(file => path.extname(file) === '.json');
+
+        // Read each JSON file
+        jsonFiles.forEach(file => {
+            const filePath = path.join(absolutePath, file);
+
+            // Read and parse each JSON file
+            fs.readFile(filePath, 'utf8', (err, data) => {
+                if (err) {
+                    console.error(`Error reading file ${file}:`, err);
+                    return;
+                }
+
+                try {
+                    const jsonObject = JSON.parse(data);
+                    jsonObjects.push(jsonObject);
+                } catch (parseError) {
+                    console.error(`Error parsing JSON from file ${file}:`, parseError);
+                }
+            });
+        });
+
+        // Log the collected JSON objects after some time (e.g., wait for all reads)
+        // In a real-world application, you would likely want to handle async behavior properly.
+        setTimeout(() => {
+            console.log('Collected JSON objects:', jsonObjects);
+        }, 1000); // Adjust this timeout as needed
+    });
+}
+
+// Call the function with the folder name
+readJsonFilesFromFolder('scheme_src');

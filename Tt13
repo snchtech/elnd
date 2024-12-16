@@ -1,0 +1,58 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Ensure the 'scheme_sec' directory exists
+const dir = path.join(__dirname, 'scheme_sec');
+if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir);
+}
+
+// POST endpoint to save state data
+app.post('/api/state', (req, res) => {
+    // Get scheme data from request body
+    const { scheme_id, scheme_name, department, elements } = req.body;
+
+    // Validate mandatory fields
+    if (!scheme_id || !scheme_name || !department || !elements) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Generate a unique ID for the scheme
+    const uniqueId = uuidv4();
+
+    // Prepare the data structure
+    const dataToSave = {
+        scheme_id: scheme_id,
+        scheme_name: scheme_name,
+        department: department,
+        scheme_data: elements, // Assuming elements is already an array or object.
+    };
+
+    // Create a filename using the unique ID
+    const filename = `${uniqueId}.json`;
+    const filepath = path.join(dir, filename);
+
+    // Write the data to a JSON file
+    fs.writeFile(filepath, JSON.stringify(dataToSave, null, 2), (err) => {
+        if (err) {
+            console.error('Error writing file', err);
+            return res.status(500).send('Error saving data');
+        }
+
+        // Respond with the saved data or a message
+        res.json({ message: 'File saved successfully', data: dataToSave });
+    });
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});

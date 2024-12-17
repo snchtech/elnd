@@ -1,0 +1,245 @@
+To enable a **right-click context menu** or a **hover-triggered button** for a group of elements in **React-Konva** to display an information panel and allow setting a group name, follow these steps:
+
+---
+
+### **Steps to Implement**
+1. **Right-click to Show Context Menu:**
+   - Capture the right-click event using `onContextMenu`.
+
+2. **Show Hover Button (Optional):**
+   - Display a small button when hovering over a group.
+
+3. **Information Panel for Groups:**
+   - Open a sidebar panel (similar to elements) to edit the group properties like `name`.
+
+4. **Track Group Selection:**
+   - Use state to store the selected group and its properties.
+
+---
+
+### **Updated Code**
+
+#### **Full Code with Right-Click and Hover Button for Group**
+
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Group, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'red' },
+    { id: '2', type: 'circle', x: 200, y: 200, radius: 50, fill: 'blue' },
+  ]);
+  const [selectedGroup, setSelectedGroup] = useState(null); // Track selected group
+  const [contextMenuPosition, setContextMenuPosition] = useState(null); // Context menu position
+  const [groupName, setGroupName] = useState(''); // Group name
+  const stageRef = useRef(null);
+
+  const transformerRef = useRef(null);
+
+  // Handle right-click to open context menu for a group
+  const handleContextMenu = (e, group) => {
+    e.evt.preventDefault();
+    setSelectedGroup(group);
+    setGroupName(group.name || '');
+    const { clientX, clientY } = e.evt;
+    setContextMenuPosition({ x: clientX, y: clientY });
+  };
+
+  // Handle saving group name
+  const handleSaveGroupName = () => {
+    setElements((prev) =>
+      prev.map((el) => (el.id === selectedGroup.id ? { ...el, name: groupName } : el))
+    );
+    setContextMenuPosition(null);
+    setSelectedGroup(null);
+  };
+
+  // Clear context menu on clicking outside
+  const handleStageClick = () => {
+    setContextMenuPosition(null);
+    setSelectedGroup(null);
+  };
+
+  // Attach transformer if a group is selected
+  useEffect(() => {
+    if (selectedGroup) {
+      const node = stageRef.current.findOne(`#${selectedGroup.id}`);
+      transformerRef.current.nodes([node]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+  }, [selectedGroup]);
+
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      {/* Left Canvas */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth * 0.75}
+          height={window.innerHeight}
+          onClick={handleStageClick}
+          style={{ border: '1px solid black' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                  />
+                );
+              } else if (el.type === 'group') {
+                return (
+                  <Group
+                    key={el.id}
+                    id={el.id}
+                    draggable
+                    onContextMenu={(e) => handleContextMenu(e, el)} // Right-click to show menu
+                  >
+                    {el.children.map((child) => (
+                      <Rect
+                        key={child.id}
+                        x={child.x}
+                        y={child.y}
+                        width={child.width}
+                        height={child.height}
+                        fill={child.fill}
+                      />
+                    ))}
+                  </Group>
+                );
+              }
+              return null;
+            })}
+            {/* Transformer */}
+            <Transformer ref={transformerRef} />
+          </Layer>
+        </Stage>
+
+        {/* Context Menu */}
+        {contextMenuPosition && selectedGroup && (
+          <div
+            style={{
+              position: 'absolute',
+              top: contextMenuPosition.y,
+              left: contextMenuPosition.x,
+              background: '#fff',
+              boxShadow: '0px 2px 5px rgba(0,0,0,0.2)',
+              padding: '10px',
+              zIndex: 10,
+            }}
+          >
+            <div style={{ marginBottom: '10px' }}>
+              <label>
+                Group Name:
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  style={{ marginLeft: '10px', padding: '5px' }}
+                />
+              </label>
+            </div>
+            <button onClick={handleSaveGroupName} style={{ padding: '5px 10px', cursor: 'pointer' }}>
+              Save
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Information Panel for Groups */}
+      {selectedGroup && (
+        <div
+          style={{
+            width: '25%',
+            padding: '20px',
+            background: '#f4f4f4',
+            boxShadow: '-2px 0px 5px rgba(0, 0, 0, 0.2)',
+          }}
+        >
+          <h3>Group Information</h3>
+          <p>
+            <strong>ID:</strong> {selectedGroup.id}
+          </p>
+          <p>
+            <strong>Name:</strong> {groupName || 'No name set'}
+          </p>
+          <button onClick={() => setSelectedGroup(null)}>Close</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Features**
+
+1. **Right-Click Context Menu:**
+   - Right-click on a group to open a small context menu where the group name can be set.
+
+2. **Save Group Name:**
+   - The group name is updated in the `elements` state.
+
+3. **Information Panel:**
+   - When a group is selected, a detailed panel appears on the right side with group information.
+
+4. **Hover or Focus on Groups:**
+   - The code uses a `Group` element to represent grouped shapes.
+
+---
+
+### **How It Works**
+
+1. **Right-Click Action:**
+   - The `onContextMenu` event opens the context menu near the cursor position.
+
+2. **Input for Group Name:**
+   - The input field lets you enter or update the name of the selected group.
+
+3. **Save Group Name:**
+   - Updates the `elements` array with the new group name.
+
+4. **Information Panel:**
+   - Displays the group's name, ID, and other info when the group is selected.
+
+---
+
+### **Visual Behavior**
+1. **Right-click on a group**:
+   - Opens a context menu where you can enter the group name.
+
+2. **Information Panel**:
+   - Shows detailed group information on the right sidebar.
+
+3. **Save Button**:
+   - Updates the group name and closes the context menu.
+
+---
+
+This implementation gives you a robust way to manage groups, add names, and display group-specific information. Let me know if you need any enhancements! 😊

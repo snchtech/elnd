@@ -1,0 +1,206 @@
+To make **React-Konva elements** such as `Rect`, `Circle`, and `Line` resizable with the mouse, you can implement **"transformers"** using the Konva `Transformer` class. Transformers are visual tools that allow resizing, rotating, and scaling of shapes interactively.
+
+---
+
+### **Steps to Add Resizable Elements**
+
+1. **Use the Konva `Transformer` Tool:**
+   - A `Transformer` will visually wrap around the selected element and provide handles for resizing.
+
+2. **Track the Selected Element:**
+   - Use `useState` to store the `id` of the currently selected shape.
+
+3. **Attach Transformer to Selected Shape:**
+   - Dynamically attach the `Transformer` to the selected shape.
+
+4. **Handle Resizing:**
+   - Update the shape's size and position during the resizing process.
+
+---
+
+### **Updated Code with Resizable Elements**
+
+Here is the modified version of your component with **resize functionality**:
+
+#### **`pages/schemes/[id].js`**
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState, useRef } from 'react';
+import { Stage, Layer, Rect, Circle, Transformer } from 'react-konva';
+
+const SchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query;
+  const [scheme, setScheme] = useState(null);
+  const [elements, setElements] = useState([]);
+  const [selectedId, setSelectedId] = useState(null); // Selected element ID
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchScheme = async () => {
+      const response = await fetch(`/api/schemes/${id}`);
+      const data = await response.json();
+      setScheme(data);
+      setElements(data.scheme_data.elements || []);
+    };
+    fetchScheme();
+  }, [id]);
+
+  // Handle selection
+  const handleSelect = (id) => {
+    setSelectedId(id);
+  };
+
+  // Update element attributes after resizing
+  const handleTransformEnd = (index, e) => {
+    const node = e.target;
+
+    const updatedElements = elements.map((el, i) => {
+      if (i === index) {
+        return {
+          ...el,
+          x: node.x(),
+          y: node.y(),
+          width: node.width() * node.scaleX(),
+          height: node.height() * node.scaleY(),
+          scaleX: 1, // Reset scale
+          scaleY: 1,
+        };
+      }
+      return el;
+    });
+
+    setElements(updatedElements);
+  };
+
+  useEffect(() => {
+    if (selectedId !== null) {
+      const selectedNode = stageRef.current.findOne(`#${selectedId}`);
+      if (transformerRef.current && selectedNode) {
+        transformerRef.current.nodes([selectedNode]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    }
+  }, [selectedId]);
+
+  return (
+    <div>
+      <h1>{scheme?.scheme_name || 'Loading...'}</h1>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={500}
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  id={el.id.toString()}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)}
+                  onTransformEnd={(e) => handleTransformEnd(index, e)}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  id={el.id.toString()}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)}
+                  onTransformEnd={(e) => handleTransformEnd(index, e)}
+                />
+              );
+            }
+            return null;
+          })}
+          {/* Transformer Component */}
+          <Transformer ref={transformerRef} />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemePage;
+```
+
+---
+
+### **How It Works**
+
+1. **Selection with Transformer:**
+   - When a shape (`Rect` or `Circle`) is clicked, its `id` is set as `selectedId`.
+   - The `Transformer` attaches itself to the shape using the `id` and enables resizing.
+
+2. **Handling Resizing:**
+   - The `onTransformEnd` event captures changes made to the shape (e.g., width, height, scale).
+   - The shape’s size, position, and scale values are updated in the `elements` state.
+
+3. **Dynamic Transformer Attachment:**
+   - The `useEffect` ensures that the `Transformer` dynamically reattaches itself to the selected shape.
+
+4. **Draggable and Resizable Shapes:**
+   - The shapes remain draggable, and their dimensions can be adjusted interactively.
+
+---
+
+### **Key Konva Props Used**
+
+- **`onTransformEnd`**:
+   - Triggered when resizing or scaling ends. It provides the updated dimensions.
+
+- **`id`**:
+   - Each shape is assigned an `id` to identify and attach the `Transformer` to it.
+
+- **`Transformer` Component**:
+   - Wraps around the selected shape and provides resizing handles.
+
+---
+
+### **Expected Behavior**
+
+1. **Load Scheme:**
+   - The page loads the scheme and renders all shapes (`Rect`, `Circle`, etc.).
+
+2. **Select Shape:**
+   - Click on a shape to select it. A `Transformer` appears around the shape.
+
+3. **Resize Shape:**
+   - Use the handles to resize the shape interactively.
+   - The shape's size and position are updated dynamically.
+
+4. **Save Updated Scheme:**
+   - Once resized, the `elements` state contains the updated size and position. You can save this state back to the server.
+
+---
+
+### **Enhancements**
+
+1. **Resizable Lines:**
+   - For `Line` elements, implement custom logic to handle resizing by dragging the endpoints.
+
+2. **Rotation:**
+   - Add the `rotation` property to the shapes and allow rotation via the `Transformer`.
+
+3. **Undo/Redo:**
+   - Implement undo/redo functionality to allow restoring the previous state after resizing.
+
+---
+
+Let me know if you need help extending this functionality or enhancing it further! 😊

@@ -1,0 +1,232 @@
+To implement the functionality where a user clicks on a **Konva element** and opens a **right-side panel** to edit its properties (e.g., name and future options), we can follow these steps:
+
+1. **Track Selected Element**:
+   - Use `useState` to store the currently selected element's ID and properties.
+
+2. **Create the Sidebar Panel**:
+   - A sidebar appears when an element is selected.
+   - The sidebar includes a form with fields like `name`.
+
+3. **Edit and Save Element Properties**:
+   - Update the properties of the selected Konva element in the `elements` state when the user saves.
+
+4. **Dynamic Rendering**:
+   - Show the sidebar only when an element is selected.
+
+---
+
+### **Code Implementation**
+
+#### **Full Component: React-Konva with Sidebar**
+
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'red', name: '' },
+    { id: '2', type: 'circle', x: 200, y: 200, radius: 50, fill: 'blue', name: '' },
+  ]);
+
+  const [selectedId, setSelectedId] = useState(null); // Currently selected element ID
+  const [sidebarData, setSidebarData] = useState(null); // Data for sidebar fields
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  // Attach transformer to the selected element
+  useEffect(() => {
+    const node = stageRef.current?.findOne(`#${selectedId}`);
+    if (node) {
+      transformerRef.current.nodes([node]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+  }, [selectedId]);
+
+  // Handle element selection
+  const handleElementSelect = (id) => {
+    setSelectedId(id);
+    const element = elements.find((el) => el.id === id);
+    setSidebarData({ ...element }); // Load element data to sidebar
+  };
+
+  // Update the elements state when saving
+  const handleSidebarSave = () => {
+    const updatedElements = elements.map((el) =>
+      el.id === selectedId ? { ...el, ...sidebarData } : el
+    );
+    setElements(updatedElements);
+    alert('Element saved!');
+  };
+
+  // Clear selection when clicking outside
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedId(null);
+      setSidebarData(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      {/* Left Canvas */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <Stage
+          ref={stageRef}
+          width={window.innerWidth * 0.75} // 75% width for the canvas
+          height={window.innerHeight}
+          onClick={handleStageClick}
+          style={{ border: '1px solid black' }}
+        >
+          <Layer>
+            {elements.map((el) => {
+              const isSelected = el.id === selectedId;
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    stroke={isSelected ? 'blue' : 'black'}
+                    strokeWidth={isSelected ? 2 : 1}
+                    draggable
+                    onClick={() => handleElementSelect(el.id)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    stroke={isSelected ? 'blue' : 'black'}
+                    strokeWidth={isSelected ? 2 : 1}
+                    draggable
+                    onClick={() => handleElementSelect(el.id)}
+                  />
+                );
+              }
+              return null;
+            })}
+            <Transformer ref={transformerRef} />
+          </Layer>
+        </Stage>
+      </div>
+
+      {/* Right Sidebar */}
+      {sidebarData && (
+        <div
+          style={{
+            width: '25%',
+            height: '100%',
+            background: '#f4f4f4',
+            padding: '20px',
+            boxShadow: '-2px 0px 5px rgba(0, 0, 0, 0.2)',
+            overflowY: 'auto',
+          }}
+        >
+          <h3>Edit Element</h3>
+          <label>
+            Name:
+            <input
+              type="text"
+              value={sidebarData.name}
+              onChange={(e) => setSidebarData({ ...sidebarData, name: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '8px',
+                marginTop: '10px',
+                marginBottom: '20px',
+                fontSize: '16px',
+              }}
+            />
+          </label>
+          <button
+            onClick={handleSidebarSave}
+            style={{
+              padding: '10px 20px',
+              fontSize: '16px',
+              backgroundColor: '#007BFF',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            Save
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **How It Works**
+
+1. **Track Selected Element:**
+   - When the user clicks on a shape (`Rect` or `Circle`), the `handleElementSelect` function sets the `selectedId` and loads the shape's properties into the `sidebarData` state.
+
+2. **Sidebar for Editing:**
+   - The right sidebar appears dynamically when an element is selected.
+   - It contains:
+     - A text input for editing the `name` of the element.
+     - A "Save" button to apply the changes.
+
+3. **Save Changes:**
+   - On clicking "Save", the shape's properties in the `elements` state are updated.
+
+4. **Visual Feedback:**
+   - The selected shape gets a blue border to highlight it visually.
+
+5. **Click Outside to Clear Selection:**
+   - Clicking on the stage clears the selection and hides the sidebar.
+
+---
+
+### **Behavior**
+
+1. **Click on a Shape:**
+   - A blue border highlights the selected shape.
+   - The right sidebar appears, showing a form to edit the `name` of the shape.
+
+2. **Edit the Name:**
+   - Type a new name in the input field.
+
+3. **Save Changes:**
+   - Clicking the "Save" button updates the shape’s properties in the state.
+
+4. **Click Outside:**
+   - Clicking outside the shapes clears the selection and hides the sidebar.
+
+---
+
+### **Enhancements**
+
+1. **Add More Fields:**
+   - Extend the sidebar to include additional fields (e.g., color, size, position) based on the element type.
+
+2. **Custom Options per Element Type:**
+   - Conditionally render fields based on whether the selected shape is a `Rect`, `Circle`, or other.
+
+3. **Persistent Storage:**
+   - Send the updated `elements` state to your backend API to save the changes permanently.
+
+4. **SVG Export:**
+   - Use the updated properties (like `name`) to render an info card when exporting the canvas to SVG.
+
+---
+
+Let me know if you need further assistance or additional enhancements! 😊

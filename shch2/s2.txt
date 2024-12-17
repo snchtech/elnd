@@ -1,0 +1,217 @@
+To add a **"selected" effect** for an element in **React-Konva** when the user clicks on it, you can use the following approach:
+
+1. **Track Selected Element:**
+   - Use `useState` to store the `id` of the currently selected shape.
+
+2. **Apply Visual Effects for Selected Shapes:**
+   - Use `stroke` or `shadow` properties (like a border highlight) to visually indicate selection.
+
+3. **Handle Click Events:**
+   - Attach `onClick` or `onTap` to shapes so that clicking on a shape updates the `selectedId`.
+
+4. **Remove the Selection:**
+   - When the user clicks outside the canvas or on an empty area, clear the selection.
+
+---
+
+### **Updated Code Example**
+
+Here’s how you can add a "selected" effect for shapes in **React-Konva**:
+
+#### **`pages/schemes/[id].js`**
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState, useRef } from 'react';
+import { Stage, Layer, Rect, Circle, Transformer } from 'react-konva';
+
+const SchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query;
+  const [scheme, setScheme] = useState(null);
+  const [elements, setElements] = useState([]);
+  const [selectedId, setSelectedId] = useState(null); // Track the selected element's ID
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  // Fetch scheme data
+  useEffect(() => {
+    if (!id) return;
+    const fetchScheme = async () => {
+      const response = await fetch(`/api/schemes/${id}`);
+      const data = await response.json();
+      setScheme(data);
+      setElements(data.scheme_data.elements || []);
+    };
+    fetchScheme();
+  }, [id]);
+
+  // Attach transformer to selected shape
+  useEffect(() => {
+    if (selectedId === null) return;
+    const selectedNode = stageRef.current.findOne(`#${selectedId}`);
+    if (transformerRef.current && selectedNode) {
+      transformerRef.current.nodes([selectedNode]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+  }, [selectedId]);
+
+  // Clear selection when clicking outside shapes
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedId(null); // Clear the selection
+    }
+  };
+
+  return (
+    <div>
+      <h1>{scheme?.scheme_name || 'Loading...'}</h1>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={500}
+        onClick={handleStageClick} // Clear selection if empty space clicked
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el, index) => {
+            const isSelected = el.id === selectedId;
+
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  id={el.id.toString()}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  stroke={isSelected ? 'blue' : 'black'} // Highlight selected
+                  strokeWidth={isSelected ? 2 : 1}
+                  shadowColor={isSelected ? 'blue' : ''}
+                  shadowBlur={isSelected ? 10 : 0}
+                  draggable
+                  onClick={() => setSelectedId(el.id)} // Set selected ID
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  id={el.id.toString()}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  stroke={isSelected ? 'blue' : 'black'} // Highlight selected
+                  strokeWidth={isSelected ? 2 : 1}
+                  shadowColor={isSelected ? 'blue' : ''}
+                  shadowBlur={isSelected ? 10 : 0}
+                  draggable
+                  onClick={() => setSelectedId(el.id)} // Set selected ID
+                />
+              );
+            }
+            return null;
+          })}
+          {/* Transformer for Resizing */}
+          <Transformer ref={transformerRef} />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemePage;
+```
+
+---
+
+### **Key Changes in Code**
+
+1. **State Management for Selection:**
+   - A `selectedId` state is used to track the currently selected shape.
+
+   ```javascript
+   const [selectedId, setSelectedId] = useState(null);
+   ```
+
+2. **Click Event on Shapes:**
+   - The `onClick` event on each shape sets the `selectedId`.
+
+   ```javascript
+   onClick={() => setSelectedId(el.id)}
+   ```
+
+3. **Selection Visual Effect:**
+   - If the shape's `id` matches `selectedId`, a visual effect (like `stroke` or `shadow`) is applied.
+
+   ```javascript
+   stroke={isSelected ? 'blue' : 'black'}
+   strokeWidth={isSelected ? 2 : 1}
+   shadowColor={isSelected ? 'blue' : ''}
+   shadowBlur={isSelected ? 10 : 0}
+   ```
+
+4. **Clear Selection:**
+   - If the user clicks on an empty space (stage), the `selectedId` is reset to `null`.
+
+   ```javascript
+   const handleStageClick = (e) => {
+     if (e.target === e.target.getStage()) {
+       setSelectedId(null);
+     }
+   };
+   ```
+
+5. **Transformer:**
+   - A `Transformer` is used to show resize handles on the selected shape.
+
+   ```javascript
+   <Transformer ref={transformerRef} />
+   ```
+
+---
+
+### **Behavior**
+
+1. **Click on a Shape:**
+   - The shape is visually highlighted (e.g., a blue border and shadow).
+   - A `Transformer` appears around the shape, allowing resizing and scaling.
+
+2. **Click Outside the Canvas:**
+   - The selection is cleared.
+
+3. **Highlight Effect:**
+   - The selected shape has:
+     - A `stroke` color (e.g., blue border).
+     - A `shadowBlur` for a glow effect.
+
+---
+
+### **Visual Effect**
+
+When you click on a shape:
+- A blue border (stroke) appears.
+- A soft glow (shadow) is applied around the shape.
+
+When you click outside:
+- The selection is cleared.
+
+---
+
+### **Enhancements**
+
+1. **Keyboard Actions:**
+   - Add keyboard shortcuts to delete or duplicate the selected shape.
+
+2. **Deselect on Escape Key:**
+   - Listen for the `Escape` key to clear the selection.
+
+3. **Multiple Selection:**
+   - Extend the logic to allow selecting and transforming multiple shapes.
+
+---
+
+Let me know if you need any further clarifications or enhancements! 😊

@@ -1,0 +1,266 @@
+To implement **multi-select, group, and ungroup functionalities** in a **React-Konva** application, follow these steps:
+
+---
+
+### **Features to Implement**
+1. **Multi-select with Mouse Dragging:**
+   - Use a selection rectangle to select multiple elements on the canvas.
+
+2. **Group Selected Elements:**
+   - Create a `Group` in Konva to group the selected elements.
+
+3. **Ungroup Elements:**
+   - Break a `Group` back into individual elements.
+
+---
+
+### **Updated Code**
+
+Here is the implementation that supports:
+1. Mouse dragging to select multiple elements.
+2. Grouping and ungrouping selected elements.
+
+---
+
+#### **Complete Code with Multi-Select and Grouping**
+
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Group, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'red' },
+    { id: '2', type: 'circle', x: 200, y: 200, radius: 50, fill: 'blue' },
+  ]);
+  const [selectedIds, setSelectedIds] = useState([]); // Array of selected IDs
+  const [selectionRect, setSelectionRect] = useState(null); // Selection rectangle state
+  const [groupMode, setGroupMode] = useState(false); // If true, currently in group mode
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+  const selectionRef = useRef(null); // Reference for selection rectangle
+
+  // Handle mouse selection start
+  const handleMouseDown = (e) => {
+    if (e.target !== stageRef.current) return;
+
+    const { x, y } = stageRef.current.getPointerPosition();
+    setSelectionRect({ x, y, width: 0, height: 0 });
+    setSelectedIds([]); // Clear selection
+  };
+
+  // Handle mouse selection movement
+  const handleMouseMove = (e) => {
+    if (!selectionRect) return;
+
+    const { x, y } = stageRef.current.getPointerPosition();
+    setSelectionRect({
+      x: selectionRect.x,
+      y: selectionRect.y,
+      width: x - selectionRect.x,
+      height: y - selectionRect.y,
+    });
+  };
+
+  // Handle mouse selection end
+  const handleMouseUp = () => {
+    if (!selectionRect) return;
+
+    const selected = elements.filter((el) => {
+      const rect = {
+        x: Math.min(selectionRect.x, selectionRect.x + selectionRect.width),
+        y: Math.min(selectionRect.y, selectionRect.y + selectionRect.height),
+        width: Math.abs(selectionRect.width),
+        height: Math.abs(selectionRect.height),
+      };
+
+      // Check if the element intersects the selection rectangle
+      if (el.type === 'rect') {
+        return (
+          el.x < rect.x + rect.width &&
+          el.x + el.width > rect.x &&
+          el.y < rect.y + rect.height &&
+          el.y + el.height > rect.y
+        );
+      } else if (el.type === 'circle') {
+        return (
+          el.x - el.radius < rect.x + rect.width &&
+          el.x + el.radius > rect.x &&
+          el.y - el.radius < rect.y + rect.height &&
+          el.y + el.radius > rect.y
+        );
+      }
+      return false;
+    });
+
+    setSelectedIds(selected.map((el) => el.id));
+    setSelectionRect(null);
+  };
+
+  // Group elements
+  const handleGroup = () => {
+    if (selectedIds.length < 2) return;
+
+    const groupElements = elements.filter((el) => selectedIds.includes(el.id));
+    const otherElements = elements.filter((el) => !selectedIds.includes(el.id));
+
+    const groupId = `group-${Date.now()}`;
+    const newGroup = {
+      id: groupId,
+      type: 'group',
+      children: groupElements,
+    };
+
+    setElements([...otherElements, newGroup]);
+    setSelectedIds([groupId]);
+  };
+
+  // Ungroup elements
+  const handleUngroup = () => {
+    const groupElement = elements.find((el) => selectedIds.includes(el.id) && el.type === 'group');
+
+    if (groupElement) {
+      const otherElements = elements.filter((el) => el.id !== groupElement.id);
+      setElements([...otherElements, ...groupElement.children]);
+      setSelectedIds([]);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: '10px' }}>
+        <button onClick={handleGroup} disabled={selectedIds.length < 2}>
+          Group Selected
+        </button>
+        <button onClick={handleUngroup} disabled={!selectedIds.some((id) => id.startsWith('group'))}>
+          Ungroup
+        </button>
+      </div>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {/* Render all elements */}
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  stroke={selectedIds.includes(el.id) ? 'blue' : 'black'}
+                  strokeWidth={selectedIds.includes(el.id) ? 2 : 1}
+                  onClick={() => setSelectedIds([el.id])}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  stroke={selectedIds.includes(el.id) ? 'blue' : 'black'}
+                  strokeWidth={selectedIds.includes(el.id) ? 2 : 1}
+                  onClick={() => setSelectedIds([el.id])}
+                />
+              );
+            } else if (el.type === 'group') {
+              return (
+                <Group key={el.id} id={el.id} draggable>
+                  {el.children.map((child) => (
+                    <Rect
+                      key={child.id}
+                      x={child.x}
+                      y={child.y}
+                      width={child.width}
+                      height={child.height}
+                      fill={child.fill}
+                    />
+                  ))}
+                </Group>
+              );
+            }
+            return null;
+          })}
+
+          {/* Selection rectangle */}
+          {selectionRect && (
+            <Rect
+              x={selectionRect.x}
+              y={selectionRect.y}
+              width={selectionRect.width}
+              height={selectionRect.height}
+              fill="rgba(0, 0, 255, 0.2)"
+              stroke="blue"
+            />
+          )}
+
+          {/* Transformer for selected shapes */}
+          <Transformer ref={transformerRef} />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Features**
+
+1. **Mouse Selection:**
+   - A selection rectangle allows selecting multiple shapes by dragging over them.
+
+2. **Group Selected Elements:**
+   - When multiple elements are selected, they can be grouped into a single `Group`.
+
+3. **Ungroup Elements:**
+   - If a group is selected, clicking "Ungroup" breaks it back into individual elements.
+
+4. **Visual Feedback:**
+   - Selected elements have a blue border to indicate they are selected.
+
+---
+
+### **How It Works**
+
+1. **Selection Rectangle:**
+   - A transparent `Rect` is drawn on the canvas as the user drags the mouse.
+   - Elements that intersect this rectangle are added to the `selectedIds` state.
+
+2. **Grouping:**
+   - When multiple elements are selected, they are wrapped into a single `Group` object.
+   - The original elements are removed from the `elements` state.
+
+3. **Ungrouping:**
+   - When a `Group` is selected, it is split into its child elements and added back to the `elements` state.
+
+---
+
+### **Enhancements**
+
+1. Add options in the sidebar to edit properties for grouped elements.
+2. Allow users to "ungroup" using a context menu (right-click).
+
+---
+
+This implementation adds powerful **multi-select** and **grouping/ungrouping** functionality to your **React-Konva** application. Let me know if you need further clarification! 😊

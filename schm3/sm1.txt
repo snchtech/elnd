@@ -1,0 +1,238 @@
+To show a **delete button** only when the user clicks on a figure (e.g., `Rect`, `Circle`, or `Group`), you can implement the following:
+
+---
+
+### **Steps to Implement**
+
+1. **Track Selected Element:**
+   - Use `useState` to store the ID of the currently selected figure.
+
+2. **Display Delete Button Dynamically:**
+   - Conditionally render the delete button only when an element is selected.
+
+3. **Handle Deletion:**
+   - When the delete button is clicked, remove the selected element from the `elements` array.
+
+---
+
+### **Updated Code with Delete Button**
+
+```javascript
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 50, y: 50, width: 100, height: 100, fill: 'red' },
+    { id: '2', type: 'circle', x: 200, y: 200, radius: 50, fill: 'blue' },
+  ]);
+
+  const [selectedId, setSelectedId] = useState(null); // Track selected element
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  // Attach transformer to the selected shape
+  useEffect(() => {
+    if (selectedId) {
+      const node = stageRef.current.findOne(`#${selectedId}`);
+      if (node) {
+        transformerRef.current.nodes([node]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    } else {
+      transformerRef.current.nodes([]); // Clear transformer
+    }
+  }, [selectedId]);
+
+  // Handle element deletion
+  const handleDelete = () => {
+    setElements((prev) => prev.filter((el) => el.id !== selectedId));
+    setSelectedId(null); // Clear selection after deletion
+  };
+
+  // Clear selection when clicking outside
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedId(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      {/* Delete Button */}
+      {selectedId && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: '#ff4d4d',
+            color: '#fff',
+            padding: '10px 20px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            zIndex: 10,
+          }}
+          onClick={handleDelete}
+        >
+          Delete Selected Element
+        </div>
+      )}
+
+      {/* Canvas */}
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        onClick={handleStageClick} // Deselect if clicking outside
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el) => {
+            const isSelected = el.id === selectedId;
+
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  stroke={isSelected ? 'blue' : 'black'}
+                  strokeWidth={isSelected ? 2 : 1}
+                  draggable
+                  onClick={() => setSelectedId(el.id)}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  stroke={isSelected ? 'blue' : 'black'}
+                  strokeWidth={isSelected ? 2 : 1}
+                  draggable
+                  onClick={() => setSelectedId(el.id)}
+                />
+              );
+            }
+            return null;
+          })}
+          <Transformer ref={transformerRef} />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Features**
+
+1. **Dynamic Delete Button:**
+   - The delete button appears only when an element is selected (`selectedId` is not `null`).
+
+   ```javascript
+   {selectedId && (
+     <div onClick={handleDelete}>Delete Selected Element</div>
+   )}
+   ```
+
+2. **Delete Functionality:**
+   - Removes the selected element from the `elements` array.
+
+   ```javascript
+   const handleDelete = () => {
+     setElements((prev) => prev.filter((el) => el.id !== selectedId));
+   };
+   ```
+
+3. **Transformer for Selection:**
+   - A `Transformer` appears around the selected element, providing visual feedback.
+
+4. **Clear Selection:**
+   - Clicking on an empty area of the canvas clears the selection and hides the delete button.
+
+---
+
+### **How It Works**
+
+1. **Click on an Element:**
+   - The `onClick` event on shapes sets the `selectedId`.
+
+   ```javascript
+   onClick={() => setSelectedId(el.id)}
+   ```
+
+2. **Show Delete Button:**
+   - When `selectedId` is set, the delete button becomes visible.
+
+3. **Delete Action:**
+   - Clicking the delete button removes the selected element and clears the selection.
+
+4. **Clear Selection:**
+   - Clicking outside the shapes deselects the element and hides the delete button.
+
+---
+
+### **Expected Behavior**
+
+1. **Select an Element:**
+   - Click on a rectangle or circle to select it.
+   - A delete button appears in the top-right corner.
+
+2. **Delete the Element:**
+   - Click the delete button to remove the selected element.
+
+3. **Deselect:**
+   - Click outside the shapes to deselect and hide the delete button.
+
+---
+
+### **Enhancements**
+
+1. **Add Confirmation for Deletion:**
+   - Show a confirmation dialog before deleting an element.
+
+   ```javascript
+   const handleDelete = () => {
+     if (confirm('Are you sure you want to delete this element?')) {
+       setElements((prev) => prev.filter((el) => el.id !== selectedId));
+       setSelectedId(null);
+     }
+   };
+   ```
+
+2. **Undo/Redo System:**
+   - Store a history of actions to allow undoing deletions.
+
+3. **Keyboard Shortcut:**
+   - Enable the `Delete` key to remove the selected element.
+
+   ```javascript
+   useEffect(() => {
+     const handleKeyDown = (e) => {
+       if (e.key === 'Delete' && selectedId) {
+         handleDelete();
+       }
+     };
+     window.addEventListener('keydown', handleKeyDown);
+     return () => window.removeEventListener('keydown', handleKeyDown);
+   }, [selectedId]);
+   ```
+
+---
+
+Let me know if you'd like to implement any of these enhancements or further customization! 😊

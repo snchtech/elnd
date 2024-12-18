@@ -1,0 +1,207 @@
+To create a **full-width top navigation bar** with a menu on the left that includes links to **Main**, **Scheme Catalog**, **Editor**, and **Add New**, follow these steps:
+
+---
+
+### **Code Implementation**
+
+#### **React Component: Top Navigation Bar**
+
+```javascript
+import Link from 'next/link';
+
+const TopNavBar = () => {
+  return (
+    <div style={navBarStyle}>
+      <div style={menuStyle}>
+        <Link href="/" passHref>
+          <span style={menuItemStyle}>Main</span>
+        </Link>
+        <Link href="/schemes" passHref>
+          <span style={menuItemStyle}>Scheme Catalog</span>
+        </Link>
+        <Link href="/editor" passHref>
+          <span style={menuItemStyle}>Editor</span>
+        </Link>
+        <Link href="/create-scheme" passHref>
+          <span style={menuItemStyle}>Add New</span>
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+// Styles for the navigation bar
+const navBarStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '60px',
+  backgroundColor: '#333',
+  color: '#fff',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0 20px',
+  boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
+  zIndex: 1000,
+};
+
+// Styles for the menu
+const menuStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '20px',
+};
+
+// Styles for each menu item
+const menuItemStyle = {
+  color: '#fff',
+  textDecoration: 'none',
+  fontSize: '16px',
+  fontWeight: 'bold',
+  cursor: 'pointer',
+  transition: 'color 0.3s',
+};
+
+export default TopNavBar;
+```
+
+---
+
+### **Usage**
+
+1. Add the `TopNavBar` component to your main layout or pages where you want the navigation bar to appear.
+
+#### Example: Using it in a Layout Component
+
+##### **`components/Layout.js`:**
+```javascript
+import React from 'react';
+import TopNavBar from './TopNavBar';
+
+const Layout = ({ children }) => {
+  return (
+    <>
+      <TopNavBar />
+      <div style={{ paddingTop: '60px' }}>{children}</div> {/* Add padding to avoid overlap */}
+    </>
+  );
+};
+
+export default Layout;
+```
+
+#### Example: Wrapping a Page with Layout
+
+##### **`pages/_app.js`:**
+```javascript
+import '../styles/globals.css';
+import Layout from '../components/Layout';
+
+export default function MyApp({ Component, pageProps }) {
+  return (
+    <Layout>
+      <Component {...pageProps} />
+    </Layout>
+  );
+}
+```
+
+---
+
+### **Key Features**
+
+1. **Full-Width Top Bar:**
+   - The navigation bar spans the full width of the screen.
+
+2. **Sticky Position:**
+   - The `position: fixed` property keeps the bar at the top, even when scrolling.
+
+3. **Responsive Menu:**
+   - The `menuStyle` uses `gap` for consistent spacing between menu items.
+
+4. **Hover Effect:**
+   - Add a hover effect by extending the `menuItemStyle`:
+
+   ```javascript
+   const menuItemStyle = {
+     color: '#fff',
+     textDecoration: 'none',
+     fontSize: '16px',
+     fontWeight: 'bold',
+     cursor: 'pointer',
+     transition: 'color 0.3s',
+   };
+
+   menuItemStyle[':hover'] = {
+     color: '#00aaff',
+   };
+   ```
+
+---
+
+### **Expected Behavior**
+
+1. **Main Link**:
+   - Links to `/`.
+
+2. **Scheme Catalog Link**:
+   - Links to `/schemes`.
+
+3. **Editor Link**:
+   - Links to `/editor`.
+
+4. **Add New Link**:
+   - Links to `/create-scheme`.
+
+---
+
+### **Enhancements**
+
+1. **Active Link Styling:**
+   - Highlight the currently active link using `useRouter` from `next/router`.
+
+   ```javascript
+   import { useRouter } from 'next/router';
+
+   const TopNavBar = () => {
+     const router = useRouter();
+     const isActive = (path) => router.pathname === path;
+
+     return (
+       <div style={navBarStyle}>
+         <div style={menuStyle}>
+           <Link href="/" passHref>
+             <span style={{ ...menuItemStyle, color: isActive('/') ? '#00aaff' : '#fff' }}>Main</span>
+           </Link>
+           <Link href="/schemes" passHref>
+             <span style={{ ...menuItemStyle, color: isActive('/schemes') ? '#00aaff' : '#fff' }}>
+               Scheme Catalog
+             </span>
+           </Link>
+           <Link href="/editor" passHref>
+             <span style={{ ...menuItemStyle, color: isActive('/editor') ? '#00aaff' : '#fff' }}>Editor</span>
+           </Link>
+           <Link href="/create-scheme" passHref>
+             <span
+               style={{ ...menuItemStyle, color: isActive('/create-scheme') ? '#00aaff' : '#fff' }}
+             >
+               Add New
+             </span>
+           </Link>
+         </div>
+       </div>
+     );
+   };
+   ```
+
+2. **Dropdowns:**
+   - Add submenus or dropdowns for hierarchical navigation.
+
+3. **Responsive Design:**
+   - Use CSS media queries or a library like **Tailwind CSS** for a responsive layout.
+
+---
+
+Let me know if you’d like further enhancements! 😊

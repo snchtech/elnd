@@ -1,0 +1,172 @@
+Here's how you can create a **main app page** with navigation buttons using React. The page will include buttons with icons for the following functionalities:
+
+1. **Scheme Catalog**:
+   - A button linking to the "Schemes List" page.
+
+2. **Scheme Editor**:
+   - A button linking to the "Scheme Editor" page to select and edit an existing scheme.
+
+3. **Create New Scheme**:
+   - A button linking to the "Create New Scheme" page.
+
+---
+
+### **Code Implementation**
+
+#### **Main App Page with Navigation Buttons**
+
+##### **`pages/index.js`:**
+
+```javascript
+import Link from 'next/link';
+import { FaFolderOpen, FaEdit, FaPlusSquare } from 'react-icons/fa'; // Importing icons from react-icons
+
+const MainAppPage = () => {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        backgroundColor: '#f5f5f5',
+      }}
+    >
+      <h1 style={{ marginBottom: '30px', color: '#333' }}>Welcome to the Scheme App</h1>
+      <div style={{ display: 'flex', gap: '20px' }}>
+        {/* Scheme Catalog Button */}
+        <Link href="/schemes" passHref>
+          <div
+            style={buttonStyle}
+            onMouseEnter={(e) => handleHover(e, true)}
+            onMouseLeave={(e) => handleHover(e, false)}
+          >
+            <FaFolderOpen size={30} style={{ marginBottom: '10px' }} />
+            <span>Scheme Catalog</span>
+          </div>
+        </Link>
+
+        {/* Scheme Editor Button */}
+        <Link href="/editor" passHref>
+          <div
+            style={buttonStyle}
+            onMouseEnter={(e) => handleHover(e, true)}
+            onMouseLeave={(e) => handleHover(e, false)}
+          >
+            <FaEdit size={30} style={{ marginBottom: '10px' }} />
+            <span>Scheme Editor</span>
+          </div>
+        </Link>
+
+        {/* Create New Scheme Button */}
+        <Link href="/create-scheme" passHref>
+          <div
+            style={buttonStyle}
+            onMouseEnter={(e) => handleHover(e, true)}
+            onMouseLeave={(e) => handleHover(e, false)}
+          >
+            <FaPlusSquare size={30} style={{ marginBottom: '10px' }} />
+            <span>Create New Scheme</span>
+          </div>
+        </Link>
+      </div>
+    </div>
+  );
+};
+
+// Button styles
+const buttonStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
+  width: '150px',
+  height: '150px',
+  backgroundColor: '#fff',
+  border: '2px solid #ddd',
+  borderRadius: '10px',
+  textAlign: 'center',
+  color: '#333',
+  textDecoration: 'none',
+  cursor: 'pointer',
+  boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
+  transition: 'transform 0.2s, background-color 0.2s',
+};
+
+// Hover effect
+const handleHover = (e, isHovering) => {
+  if (isHovering) {
+    e.currentTarget.style.transform = 'scale(1.1)';
+    e.currentTarget.style.backgroundColor = '#f0f0f0';
+  } else {
+    e.currentTarget.style.transform = 'scale(1)';
+    e.currentTarget.style.backgroundColor = '#fff';
+  }
+};
+
+export default MainAppPage;
+```
+
+---
+
+### **Dependencies**
+
+1. Install **React Icons** for the button icons:
+   ```bash
+   npm install react-icons
+   ```
+
+---
+
+### **Explanation**
+
+1. **Navigation Buttons:**
+   - Each button is wrapped in a `Link` component for navigation.
+   - Icons (`FaFolderOpen`, `FaEdit`, `FaPlusSquare`) from `react-icons` are used for visual representation.
+
+2. **Hover Effects:**
+   - `handleHover` function dynamically scales the button and changes the background color on hover.
+
+3. **Reusable Styles:**
+   - The `buttonStyle` object defines consistent styles for all buttons.
+
+4. **Responsive Design:**
+   - Buttons are displayed in a row with equal spacing (`gap: '20px'`).
+
+---
+
+### **Result**
+
+1. **Scheme Catalog Button**:
+   - Links to `/schemes`.
+   - Icon: Open folder (`FaFolderOpen`).
+
+2. **Scheme Editor Button**:
+   - Links to `/editor`.
+   - Icon: Edit (`FaEdit`).
+
+3. **Create New Scheme Button**:
+   - Links to `/create-scheme`.
+   - Icon: Plus sign (`FaPlusSquare`).
+
+---
+
+### **Screenshots (Example)**
+
+- **Main Page:**
+  ```
+  Welcome to the Scheme App
+
+  [Scheme Catalog] [Scheme Editor] [Create New Scheme]
+  ```
+
+- **Icons:**
+  - **Scheme Catalog:** Folder icon.
+  - **Scheme Editor:** Pencil icon.
+  - **Create New Scheme:** Plus icon.
+
+---
+
+Let me know if you’d like to enhance it further with animations or additional features! 😊

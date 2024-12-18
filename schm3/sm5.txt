@@ -1,0 +1,214 @@
+To display the **canvas area** and **PanelTool** only after a user selects a scheme from a dropdown list, you can manage the visibility of these components using state.
+
+---
+
+### **Steps to Implement**
+
+1. **State Management:**
+   - Use `useState` to track the selected scheme.
+   - Initially, the canvas and tool panel are hidden until a scheme is selected.
+
+2. **Dropdown for Scheme Selection:**
+   - Populate a `<select>` element with a list of existing schemes.
+
+3. **Conditional Rendering:**
+   - Render the canvas and PanelTool only when a scheme is selected.
+
+---
+
+### **Updated Code**
+
+#### **Edit Scheme Page**
+
+```javascript
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect } from 'react-konva';
+
+const EditSchemePage = () => {
+  const [schemes, setSchemes] = useState([]); // List of available schemes
+  const [selectedScheme, setSelectedScheme] = useState(null); // Currently selected scheme
+  const [elements, setElements] = useState([]); // Elements for the canvas
+
+  // Fetch the list of schemes
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+        setSchemes(data);
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  // Fetch the selected scheme's data
+  useEffect(() => {
+    if (!selectedScheme) return;
+    const fetchSchemeData = async () => {
+      try {
+        const response = await fetch(`/api/schemes/${selectedScheme}`);
+        const data = await response.json();
+        setElements(data.scheme_data.elements || []);
+      } catch (error) {
+        console.error('Error fetching scheme data:', error);
+      }
+    };
+
+    fetchSchemeData();
+  }, [selectedScheme]);
+
+  const handleSchemeSelect = (e) => {
+    setSelectedScheme(e.target.value);
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      {/* Scheme Selection Dropdown */}
+      <div style={{ marginBottom: '20px' }}>
+        <label htmlFor="schemeSelect" style={{ fontSize: '18px', marginRight: '10px' }}>
+          Select a Scheme:
+        </label>
+        <select
+          id="schemeSelect"
+          onChange={handleSchemeSelect}
+          value={selectedScheme || ''}
+          style={{
+            padding: '8px',
+            fontSize: '16px',
+            borderRadius: '4px',
+            border: '1px solid #ccc',
+          }}
+        >
+          <option value="" disabled>
+            -- Select a Scheme --
+          </option>
+          {schemes.map((scheme) => (
+            <option key={scheme.id} value={scheme.id}>
+              {scheme.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Conditional Rendering: Canvas and PanelTool */}
+      {selectedScheme && (
+        <div style={{ display: 'flex' }}>
+          {/* Canvas Area */}
+          <div
+            style={{
+              flex: 2,
+              border: '1px solid black',
+              marginRight: '20px',
+              height: '500px',
+            }}
+          >
+            <Stage width={800} height={500}>
+              <Layer>
+                {elements.map((el, index) => (
+                  <Rect
+                    key={index}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                  />
+                ))}
+              </Layer>
+            </Stage>
+          </div>
+
+          {/* PanelTool */}
+          <div
+            style={{
+              flex: 1,
+              border: '1px solid #ccc',
+              padding: '20px',
+              backgroundColor: '#f9f9f9',
+            }}
+          >
+            <h3>Tool Panel</h3>
+            <p>Select and manage elements on the canvas.</p>
+            {/* Add your tool panel controls here */}
+            <button
+              style={{
+                padding: '10px 20px',
+                fontSize: '16px',
+                backgroundColor: '#007BFF',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              Add Element
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default EditSchemePage;
+```
+
+---
+
+### **Key Features**
+
+1. **Dropdown for Scheme Selection:**
+   - A `<select>` dropdown lists all available schemes fetched from `/api/schemes`.
+
+2. **State Management:**
+   - The `selectedScheme` state tracks the currently selected scheme.
+   - The canvas and tool panel are rendered conditionally based on this state.
+
+3. **Dynamic Canvas Content:**
+   - When a scheme is selected, its elements are fetched and rendered on the canvas.
+
+4. **Tool Panel:**
+   - Displays tools for managing canvas elements when a scheme is selected.
+
+---
+
+### **Expected Behavior**
+
+1. **Initial View:**
+   - The dropdown is visible with a list of available schemes.
+   - The canvas and PanelTool are hidden.
+
+2. **Select a Scheme:**
+   - When a scheme is selected, its data is fetched, and:
+     - The canvas displays the scheme's elements.
+     - The PanelTool appears for managing the scheme.
+
+3. **No Scheme Selected:**
+   - If no scheme is selected, the canvas and PanelTool remain hidden.
+
+---
+
+### **Enhancements**
+
+1. **Add Placeholder for No Schemes:**
+   - Display a message if no schemes are available:
+   ```javascript
+   if (schemes.length === 0) return <p>No schemes available.</p>;
+   ```
+
+2. **Loading Spinner:**
+   - Add a spinner while fetching schemes or scheme data.
+
+3. **Responsive Design:**
+   - Use CSS media queries or a library like **Tailwind CSS** to ensure the layout adjusts on smaller screens.
+
+4. **Validation:**
+   - Disable the dropdown if there are no schemes to select.
+
+---
+
+Let me know if you'd like to extend this functionality further! 😊

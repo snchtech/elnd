@@ -1,0 +1,162 @@
+To create a **read-only Konva canvas** on your scheme's single page, you can make the following changes:
+
+1. **Disable Dragging and Transformation:**
+   - Set the `draggable` property of all shapes to `false`.
+   - Avoid adding a `Transformer` to the canvas.
+
+2. **Remove Event Handlers:**
+   - Do not attach handlers like `onDragEnd`, `onClick`, or `onTransformEnd`.
+
+3. **Preserve Interactivity for Links:**
+   - Ensure the canvas remains interactive only if needed for visual actions, like tooltips or links.
+
+---
+
+### **Updated Code for Read-Only Scheme Canvas**
+
+Here’s how you can implement a read-only canvas for a single scheme:
+
+#### **`pages/schemes/[id].js`:**
+
+```javascript
+import { useRouter } from 'next/router';
+import { useEffect, useState } from 'react';
+import { Stage, Layer, Rect, Circle } from 'react-konva';
+
+const ReadOnlySchemePage = () => {
+  const router = useRouter();
+  const { id } = router.query; // Get the scheme ID from the route
+  const [scheme, setScheme] = useState(null); // Store the scheme data
+  const [elements, setElements] = useState([]); // Store the canvas elements
+
+  // Fetch the scheme data from the API
+  useEffect(() => {
+    if (!id) return; // Wait for the ID to be available
+    const fetchScheme = async () => {
+      try {
+        const response = await fetch(`/api/schemes/${id}`);
+        const data = await response.json();
+        setScheme(data);
+        setElements(data.scheme_data.elements || []); // Load the Konva elements
+      } catch (error) {
+        console.error('Error loading scheme:', error);
+      }
+    };
+
+    fetchScheme();
+  }, [id]);
+
+  if (!scheme) return <p>Loading...</p>; // Show a loading state while fetching
+
+  return (
+    <div>
+      <h1>{scheme.scheme_name}</h1>
+      <p>Department: {scheme.scheme_department}</p>
+      <Stage
+        width={window.innerWidth}
+        height={window.innerHeight - 100} // Deduct space for header
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el, index) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={index}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable={false} // Disable dragging
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={index}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable={false} // Disable dragging
+                />
+              );
+            }
+            return null;
+          })}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default ReadOnlySchemePage;
+```
+
+---
+
+### **Key Changes for Read-Only Canvas**
+
+1. **Disabled Dragging:**
+   - The `draggable` property is explicitly set to `false`.
+
+   ```javascript
+   draggable={false}
+   ```
+
+2. **No Event Handlers:**
+   - Removed all handlers like `onClick`, `onDragEnd`, and `onTransformEnd`.
+
+3. **No Transformer:**
+   - The `Transformer` component is not included, making the shapes non-interactive.
+
+4. **Fetch and Render Elements:**
+   - Shapes are rendered based on the JSON data fetched from the API.
+
+---
+
+### **Optional Enhancements**
+
+1. **Highlight on Hover:**
+   - Add a subtle effect for hovering over shapes (e.g., a shadow or border).
+
+   ```javascript
+   <Rect
+     onMouseEnter={(e) => e.target.stroke('blue')}
+     onMouseLeave={(e) => e.target.stroke(null)}
+   />
+   ```
+
+2. **Tooltip for Additional Info:**
+   - Show a tooltip with details when hovering over a shape.
+
+   ```javascript
+   onMouseEnter={(e) => {
+     const tooltip = stageRef.current.findOne('.tooltip');
+     tooltip.text(`ID: ${el.id}`);
+     tooltip.visible(true);
+   }}
+   ```
+
+3. **Export as Static Image (Optional):**
+   - Use `stageRef.current.toDataURL()` to save the canvas as an image for download or printing.
+
+---
+
+### **Behavior**
+
+1. **Read-Only Canvas:**
+   - The shapes are displayed but cannot be moved, resized, or edited.
+
+2. **Interactivity Removed:**
+   - Users can view the scheme but cannot modify its elements.
+
+3. **Responsive:**
+   - The canvas adjusts to the browser’s window size.
+
+---
+
+Let me know if you'd like help implementing additional features or exporting the canvas as SVG or an image! 😊

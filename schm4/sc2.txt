@@ -1,0 +1,188 @@
+To implement **scaling functionality** for a Konva canvas in **React-Konva**, including buttons for zooming in and out and mouse scroll wheel support, follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **Track the Scale:**
+   - Use a `useState` hook to store the current `scale`.
+
+2. **Zoom In/Out Buttons:**
+   - Provide buttons (`+` and `-`) to increase or decrease the scale.
+
+3. **Mouse Scroll Zoom:**
+   - Use the `onWheel` event to listen for mouse scroll events and adjust the scale.
+
+4. **Reusable Component:**
+   - Encapsulate the scaling functionality into a reusable wrapper component.
+
+---
+
+### **Reusable Component for Scalable Konva Canvas**
+
+#### **ScalableKonvaCanvas Component**
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer } from 'react-konva';
+
+const ScalableKonvaCanvas = ({ children, width = 800, height = 600 }) => {
+  const stageRef = useRef(null);
+  const [scale, setScale] = useState(1); // Track canvas scale
+  const scaleStep = 0.1; // Scaling step
+
+  // Handle zoom in/out using buttons
+  const handleZoom = (direction) => {
+    setScale((prev) => Math.max(0.5, Math.min(prev + direction * scaleStep, 5))); // Limit scale between 0.5 and 5
+  };
+
+  // Handle mouse wheel for scaling
+  const handleWheel = (e) => {
+    e.evt.preventDefault();
+    const direction = e.evt.deltaY > 0 ? -1 : 1; // Determine scroll direction
+    handleZoom(direction);
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', width: 'fit-content' }}>
+      {/* Scaling Buttons */}
+      <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
+        <button
+          onClick={() => handleZoom(1)}
+          style={{
+            padding: '10px',
+            margin: '5px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            backgroundColor: '#007bff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+          }}
+        >
+          +
+        </button>
+        <button
+          onClick={() => handleZoom(-1)}
+          style={{
+            padding: '10px',
+            margin: '5px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            backgroundColor: '#007bff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+          }}
+        >
+          -
+        </button>
+      </div>
+
+      {/* Konva Stage */}
+      <Stage
+        ref={stageRef}
+        width={width}
+        height={height}
+        scaleX={scale}
+        scaleY={scale}
+        onWheel={handleWheel} // Attach mouse wheel event
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>{children}</Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default ScalableKonvaCanvas;
+```
+
+---
+
+### **Usage Example**
+
+#### **Editor Page**
+
+```javascript
+import React from 'react';
+import ScalableKonvaCanvas from '../components/ScalableKonvaCanvas';
+import { Rect } from 'react-konva';
+
+const EditorPage = () => {
+  return (
+    <div>
+      <h1>Scheme Editor</h1>
+      <ScalableKonvaCanvas width={800} height={600}>
+        <Rect x={100} y={100} width={200} height={100} fill="red" draggable />
+        <Rect x={400} y={300} width={150} height={150} fill="blue" draggable />
+      </ScalableKonvaCanvas>
+    </div>
+  );
+};
+
+export default EditorPage;
+```
+
+---
+
+#### **View Page**
+
+```javascript
+import React from 'react';
+import ScalableKonvaCanvas from '../components/ScalableKonvaCanvas';
+import { Rect } from 'react-konva';
+
+const ViewPage = () => {
+  return (
+    <div>
+      <h1>Scheme Viewer</h1>
+      <ScalableKonvaCanvas width={800} height={600}>
+        <Rect x={150} y={150} width={300} height={200} fill="green" />
+      </ScalableKonvaCanvas>
+    </div>
+  );
+};
+
+export default ViewPage;
+```
+
+---
+
+### **Key Features**
+
+1. **Scaling with Buttons:**
+   - Buttons (`+` and `-`) allow users to zoom in and out.
+
+2. **Mouse Scroll Zoom:**
+   - The `onWheel` event enables scaling using the scroll wheel.
+
+3. **Reusable Component:**
+   - The `ScalableKonvaCanvas` component encapsulates the scaling functionality, making it reusable across pages.
+
+4. **Scale Limits:**
+   - The scale is limited to a minimum of `0.5` and a maximum of `5` for usability.
+
+5. **Flexible Canvas Size:**
+   - The `width` and `height` of the canvas are configurable.
+
+---
+
+### **Optional Enhancements**
+
+1. **Zoom to Cursor Position:**
+   - Adjust the stage position to zoom in/out at the mouse cursor location.
+
+2. **Reset Button:**
+   - Add a button to reset the scale to `1`.
+
+   ```javascript
+   <button onClick={() => setScale(1)}>Reset</button>
+   ```
+
+3. **Persistent Scale State:**
+   - Save the scale in local storage or URL query parameters to retain it across sessions.
+
+---
+
+Let me know if you’d like assistance with any of these enhancements or further customizations! 😊

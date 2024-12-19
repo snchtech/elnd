@@ -1,0 +1,241 @@
+To improve the structure and avoid 100+ `if-else` conditions for rendering elements, you can create a **GraphLibrary** of components, each responsible for rendering a specific type of element. Then use a mapping mechanism to dynamically render elements based on their type.
+
+Here's how to refactor your code:
+
+---
+
+### **Steps**
+
+1. **Create a Component Library**:
+   - Organize element components in `components/graph/` directory, e.g., `Rect.js`, `Circle.js`, `TextElement.js`, etc.
+
+2. **Dynamic Element Mapping**:
+   - Maintain a mapping between element types and their corresponding React components.
+
+3. **Reusable Rendering Function**:
+   - Use a utility function to dynamically render components based on their type.
+
+---
+
+### **Implementation**
+
+#### **1. GraphLibrary Component Directory**
+
+Create a directory structure like this:
+
+```
+components/
+  graph/
+    Rect.js
+    Circle.js
+    TextElement.js
+    LineElement.js
+    Triangle.js
+```
+
+---
+
+#### **2. Individual Element Components**
+
+##### Example: `Rect.js`
+```javascript
+import React from 'react';
+import { Rect } from 'react-konva';
+
+const RectElement = ({ el, onDragEnd }) => {
+  return (
+    <Rect
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      width={el.width}
+      height={el.height}
+      fill={el.fill}
+      draggable
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+    />
+  );
+};
+
+export default RectElement;
+```
+
+##### Example: `Circle.js`
+```javascript
+import React from 'react';
+import { Circle } from 'react-konva';
+
+const CircleElement = ({ el, onDragEnd }) => {
+  return (
+    <Circle
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      radius={el.radius}
+      fill={el.fill}
+      draggable
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+    />
+  );
+};
+
+export default CircleElement;
+```
+
+##### Example: `TextElement.js`
+```javascript
+import React from 'react';
+import { Text } from 'react-konva';
+
+const TextElement = ({ el, onDragEnd }) => {
+  return (
+    <Text
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      text={el.text}
+      fontSize={20}
+      draggable
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+    />
+  );
+};
+
+export default TextElement;
+```
+
+---
+
+#### **3. Create a GraphLibrary Map**
+
+In `components/graph/index.js`, export a mapping of element types to components:
+
+```javascript
+import RectElement from './Rect';
+import CircleElement from './Circle';
+import TextElement from './TextElement';
+import LineElement from './LineElement';
+import TriangleElement from './Triangle';
+
+const GraphLibrary = {
+  rect: RectElement,
+  circle: CircleElement,
+  text: TextElement,
+  line: LineElement,
+  triangle: TriangleElement,
+};
+
+export default GraphLibrary;
+```
+
+---
+
+#### **4. Modify the Rendering Logic**
+
+Update your code to use `GraphLibrary` for rendering elements dynamically.
+
+```javascript
+import React from 'react';
+import { Stage, Layer } from 'react-konva';
+import GraphLibrary from '../components/graph';
+
+const SchemeEditor = ({ elements, handleDragEnd }) => {
+  return (
+    <Stage
+      width={window.innerWidth - 200}
+      height={window.innerHeight}
+      style={{ background: '#fff' }}
+    >
+      <Layer>
+        {elements.map((el) => {
+          const ElementComponent = GraphLibrary[el.type];
+          if (!ElementComponent) return null; // Skip unknown element types
+          return <ElementComponent key={el.id} el={el} onDragEnd={handleDragEnd} />;
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Advantages**
+
+1. **Scalability**:
+   - Add new element types by simply creating a new component and updating the `GraphLibrary` map.
+
+2. **Code Maintainability**:
+   - Each element type has its own file for styles and logic, reducing the complexity of the main rendering function.
+
+3. **Dynamic Rendering**:
+   - The rendering logic is simplified to dynamically load components using the `GraphLibrary` map.
+
+4. **Customizable Options**:
+   - Each component can have its own unique styles and configuration.
+
+---
+
+### **Adding a New Element**
+
+1. Create a new component in `components/graph/`, e.g., `CustomElement.js`:
+   ```javascript
+   import React from 'react';
+   import { Rect } from 'react-konva';
+
+   const CustomElement = ({ el, onDragEnd }) => (
+     <Rect
+       key={el.id}
+       x={el.x}
+       y={el.y}
+       width={el.width}
+       height={el.height}
+       fill={el.customColor || 'purple'}
+       draggable
+       onDragEnd={(e) => onDragEnd(el.id, e)}
+     />
+   );
+
+   export default CustomElement;
+   ```
+
+2. Add the new element to `GraphLibrary`:
+   ```javascript
+   import CustomElement from './CustomElement';
+
+   const GraphLibrary = {
+     // Other elements...
+     custom: CustomElement,
+   };
+
+   export default GraphLibrary;
+   ```
+
+---
+
+### **Optional Enhancements**
+
+1. **Default Styling:**
+   - Add default styles or configuration in each component to reduce duplication.
+
+2. **Performance Optimization:**
+   - Use `React.memo` for components to avoid unnecessary re-renders.
+
+3. **Error Handling:**
+   - Provide meaningful error messages if an unknown type is encountered.
+
+   ```javascript
+   if (!ElementComponent) {
+     console.warn(`Unknown element type: ${el.type}`);
+     return null;
+   }
+   ```
+
+4. **Global Configurations:**
+   - Use a context or store (like Redux) for global configurations or options shared across all elements.
+
+---
+
+This refactored structure makes your **React-Konva** implementation more modular, maintainable, and scalable for large graphs or schemes. Let me know if you need further assistance! 😊

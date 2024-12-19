@@ -1,0 +1,155 @@
+To implement **hover styles** for a `Link` in a menu navbar in **Next.js**, you can achieve this with CSS. Depending on your preference, you can use:
+
+1. **CSS Modules**
+2. **Inline Styles**
+3. **Tailwind CSS**
+
+Here is how you can do it with each method:
+
+---
+
+### **1. Using CSS Modules**
+
+#### Navbar Component (`Navbar.js`):
+```javascript
+import Link from 'next/link';
+import styles from './Navbar.module.css'; // Import CSS module
+
+const Navbar = () => {
+  return (
+    <nav className={styles.navbar}>
+      <Link href="/" className={styles.navLink}>
+        Home
+      </Link>
+      <Link href="/schemes" className={styles.navLink}>
+        Schemes
+      </Link>
+      <Link href="/editor" className={styles.navLink}>
+        Editor
+      </Link>
+      <Link href="/create-scheme" className={styles.navLink}>
+        Add New
+      </Link>
+    </nav>
+  );
+};
+
+export default Navbar;
+```
+
+#### CSS Module (`Navbar.module.css`):
+```css
+.navbar {
+  background-color: #333;
+  padding: 10px 20px;
+  display: flex;
+  gap: 15px;
+}
+
+.navLink {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: bold;
+  transition: color 0.3s;
+}
+
+.navLink:hover {
+  color: #00aaff;
+}
+```
+
+---
+
+### **2. Using Inline Styles with `onMouseEnter` and `onMouseLeave`**
+
+#### Navbar Component:
+```javascript
+import Link from 'next/link';
+import { useState } from 'react';
+
+const Navbar = () => {
+  const [hovered, setHovered] = useState(null); // Track which link is hovered
+
+  const handleMouseEnter = (id) => setHovered(id);
+  const handleMouseLeave = () => setHovered(null);
+
+  const linkStyle = (id) => ({
+    color: hovered === id ? '#00aaff' : 'white',
+    textDecoration: 'none',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    transition: 'color 0.3s',
+  });
+
+  return (
+    <nav style={{ backgroundColor: '#333', padding: '10px 20px', display: 'flex', gap: '15px' }}>
+      <Link href="/" style={linkStyle('home')} onMouseEnter={() => handleMouseEnter('home')} onMouseLeave={handleMouseLeave}>
+        Home
+      </Link>
+      <Link href="/schemes" style={linkStyle('schemes')} onMouseEnter={() => handleMouseEnter('schemes')} onMouseLeave={handleMouseLeave}>
+        Schemes
+      </Link>
+      <Link href="/editor" style={linkStyle('editor')} onMouseEnter={() => handleMouseEnter('editor')} onMouseLeave={handleMouseLeave}>
+        Editor
+      </Link>
+      <Link href="/create-scheme" style={linkStyle('addNew')} onMouseEnter={() => handleMouseEnter('addNew')} onMouseLeave={handleMouseLeave}>
+        Add New
+      </Link>
+    </nav>
+  );
+};
+
+export default Navbar;
+```
+
+---
+
+### **3. Using Tailwind CSS**
+
+#### Tailwind Installation:
+First, ensure Tailwind CSS is installed in your Next.js project. If not, follow the [official Tailwind installation guide](https://tailwindcss.com/docs/installation).
+
+#### Navbar Component:
+```javascript
+import Link from 'next/link';
+
+const Navbar = () => {
+  return (
+    <nav className="bg-gray-800 p-4 flex space-x-4">
+      <Link href="/" className="text-white font-bold hover:text-blue-400">
+        Home
+      </Link>
+      <Link href="/schemes" className="text-white font-bold hover:text-blue-400">
+        Schemes
+      </Link>
+      <Link href="/editor" className="text-white font-bold hover:text-blue-400">
+        Editor
+      </Link>
+      <Link href="/create-scheme" className="text-white font-bold hover:text-blue-400">
+        Add New
+      </Link>
+    </nav>
+  );
+};
+
+export default Navbar;
+```
+
+---
+
+### **Comparison**
+
+| **Method**         | **Use Case**                                                                                  |
+|---------------------|----------------------------------------------------------------------------------------------|
+| **CSS Modules**     | When you want scoped styles and maintainability in large projects.                          |
+| **Inline Styles**   | Quick and straightforward, but not ideal for larger or complex styles.                      |
+| **Tailwind CSS**    | For utility-first styling and rapid development with a consistent design system.             |
+
+---
+
+### **Recommended Method**
+- **CSS Modules** are ideal for most Next.js projects as they provide scoped styles without global CSS conflicts.
+- If you're already using Tailwind CSS, it simplifies styling with utility classes.
+
+Let me know if you'd like further assistance! 😊

@@ -1,0 +1,203 @@
+To ensure that your code updates the existing JSON file in the `scheme_src` folder instead of creating a new file every time, follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **Check if the File Exists:**
+   - When saving, check if the file for the current `scheme_id` already exists in the `scheme_src` folder.
+
+2. **Update Existing File:**
+   - If the file exists, update it with the new data.
+
+3. **Fallback to Create New File:**
+   - If the file does not exist (edge case), create a new one.
+
+4. **API Endpoint for Saving the Scheme:**
+   - Use a `/api/schemes/save` endpoint to handle file operations.
+
+---
+
+### **Code Implementation**
+
+#### **Server-Side API (File Handling in `/api/schemes/save`)**
+
+##### **File: `/pages/api/schemes/save.js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'POST') {
+    const { scheme_id, scheme_data } = req.body;
+
+    if (!scheme_id || !scheme_data) {
+      return res.status(400).json({ error: 'Scheme ID and data are required.' });
+    }
+
+    // Define the file path based on scheme_id
+    const schemePath = path.join(process.cwd(), 'scheme_src', `${scheme_id}.json`);
+
+    try {
+      // Check if the file already exists
+      if (fs.existsSync(schemePath)) {
+        console.log(`Updating scheme file: ${scheme_id}.json`);
+      } else {
+        console.log(`Creating new scheme file: ${scheme_id}.json`);
+      }
+
+      // Write the scheme data to the file
+      fs.writeFileSync(schemePath, JSON.stringify(scheme_data, null, 2));
+
+      return res.status(200).json({ message: 'Scheme saved successfully.' });
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+      return res.status(500).json({ error: 'Error saving scheme.' });
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+#### **Client-Side Code (Editor Page)**
+
+##### **Editor Page: Updating Scheme**
+
+```javascript
+import React, { useState } from 'react';
+import { Stage, Layer, Rect } from 'react-konva';
+
+const EditorPage = ({ initialElements, schemeId }) => {
+  const [elements, setElements] = useState(initialElements || []);
+
+  const handleDragEnd = (id, e) => {
+    const updatedElements = elements.map((el) =>
+      el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+    );
+    setElements(updatedElements);
+  };
+
+  const handleSave = async () => {
+    try {
+      const response = await fetch('/api/schemes/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheme_id: schemeId,
+          scheme_data: { elements },
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        alert(result.message);
+      } else {
+        console.error(result.error);
+        alert('Failed to save scheme.');
+      }
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+      alert('Error saving scheme.');
+    }
+  };
+
+  return (
+    <div>
+      <h1>Scheme Editor</h1>
+      <input type="text" value={schemeId} readOnly style={{ marginBottom: '10px', padding: '5px' }} />
+      <button onClick={handleSave} style={{ marginBottom: '10px', padding: '10px 20px' }}>
+        Save Scheme
+      </button>
+      <Stage width={800} height={600} style={{ border: '1px solid black' }}>
+        <Layer>
+          {elements.map((el) => (
+            <Rect
+              key={el.id}
+              x={el.x}
+              y={el.y}
+              width={el.width}
+              height={el.height}
+              fill={el.fill}
+              draggable
+              onDragEnd={(e) => handleDragEnd(el.id, e)}
+            />
+          ))}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+// Fetch initial scheme data server-side for the editor page
+export async function getServerSideProps(context) {
+  const { id } = context.query;
+  const filePath = path.join(process.cwd(), 'scheme_src', `${id}.json`);
+  let initialElements = [];
+
+  if (fs.existsSync(filePath)) {
+    const fileContent = fs.readFileSync(filePath, 'utf-8');
+    initialElements = JSON.parse(fileContent).elements || [];
+  }
+
+  return {
+    props: {
+      schemeId: id,
+      initialElements,
+    },
+  };
+}
+
+export default EditorPage;
+```
+
+---
+
+### **How It Works**
+
+1. **API Endpoint `/api/schemes/save`:**
+   - Saves or updates the scheme data based on the `scheme_id`.
+   - Checks if the file already exists in the `scheme_src` folder.
+
+2. **Client-Side `handleSave`:**
+   - Sends a `POST` request with the `scheme_id` and the current `elements` to the API.
+   - Provides feedback to the user on success or failure.
+
+3. **Editor Page (Dynamic Rendering):**
+   - Dynamically fetches the initial scheme data based on the `scheme_id`.
+   - Updates the elements on the canvas and saves changes back to the file.
+
+---
+
+### **Expected Behavior**
+
+1. **Editing Existing Scheme:**
+   - The editor loads the existing scheme's JSON data into the canvas.
+   - When saved, the file is updated with the latest data.
+
+2. **Creating a New Scheme:**
+   - If the file does not exist, it creates a new one with the provided `scheme_id`.
+
+3. **File Overwrite Prevention:**
+   - Ensures that files are updated, not duplicated.
+
+---
+
+### **Enhancements**
+
+1. **Validation:**
+   - Validate the `scheme_id` and `elements` format before saving.
+
+2. **Auto-Save:**
+   - Implement auto-save functionality to save changes periodically.
+
+3. **Versioning:**
+   - Maintain version history for schemes by saving backups with timestamps.
+
+---
+
+This approach ensures that your scheme files are correctly updated and managed in the `scheme_src` folder without creating unnecessary duplicates. Let me know if you need further assistance! 😊

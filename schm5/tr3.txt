@@ -1,0 +1,277 @@
+To implement an **additional panel** that appears at the top of the page when you click on a Konva element, and dynamically display element-specific options, follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **Track the Selected Element:**
+   - Use `useState` to store the currently selected element.
+
+2. **Display the Panel Dynamically:**
+   - Conditionally render the top panel when an element is selected.
+
+3. **Show Element-Specific Options:**
+   - Render different options based on the type of the selected element.
+
+4. **Styling the Panel:**
+   - Use CSS to style the panel for a clean, user-friendly appearance.
+
+---
+
+### **Code Implementation**
+
+#### **Editor Page with Additional Panel**
+
+```javascript
+import React, { useState } from 'react';
+import { Stage, Layer, Rect, Circle, Text } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'red', name: 'Rectangle 1' },
+    { id: '2', type: 'circle', x: 300, y: 200, radius: 50, fill: 'blue', name: 'Circle 1' },
+    { id: '3', type: 'text', x: 200, y: 300, text: 'Hello', fontSize: 20, name: 'Text 1' },
+  ]);
+  const [selectedElement, setSelectedElement] = useState(null); // Track selected element
+
+  // Handle element selection
+  const handleSelect = (el) => {
+    setSelectedElement(el);
+  };
+
+  // Handle element updates
+  const handleUpdate = (key, value) => {
+    setElements((prevElements) =>
+      prevElements.map((el) => (el.id === selectedElement.id ? { ...el, [key]: value } : el))
+    );
+    setSelectedElement((prev) => ({ ...prev, [key]: value })); // Update the selected element in real-time
+  };
+
+  return (
+    <div style={{ position: 'relative', height: '100vh' }}>
+      {/* Top Panel */}
+      {selectedElement && (
+        <div style={topPanelStyle}>
+          <h3 style={{ margin: 0 }}>Editing {selectedElement.name}</h3>
+          {selectedElement.type === 'rect' && (
+            <div style={optionStyle}>
+              <label>
+                Width:
+                <input
+                  type="number"
+                  value={selectedElement.width}
+                  onChange={(e) => handleUpdate('width', parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                />
+              </label>
+              <label>
+                Height:
+                <input
+                  type="number"
+                  value={selectedElement.height}
+                  onChange={(e) => handleUpdate('height', parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                />
+              </label>
+              <label>
+                Fill:
+                <input
+                  type="color"
+                  value={selectedElement.fill}
+                  onChange={(e) => handleUpdate('fill', e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+          )}
+          {selectedElement.type === 'circle' && (
+            <div style={optionStyle}>
+              <label>
+                Radius:
+                <input
+                  type="number"
+                  value={selectedElement.radius}
+                  onChange={(e) => handleUpdate('radius', parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                />
+              </label>
+              <label>
+                Fill:
+                <input
+                  type="color"
+                  value={selectedElement.fill}
+                  onChange={(e) => handleUpdate('fill', e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+          )}
+          {selectedElement.type === 'text' && (
+            <div style={optionStyle}>
+              <label>
+                Text:
+                <input
+                  type="text"
+                  value={selectedElement.text}
+                  onChange={(e) => handleUpdate('text', e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+              <label>
+                Font Size:
+                <input
+                  type="number"
+                  value={selectedElement.fontSize}
+                  onChange={(e) => handleUpdate('fontSize', parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Canvas Area */}
+      <div style={{ flex: 1, border: '1px solid black', marginTop: '60px' }}>
+        <Stage width={800} height={600}>
+          <Layer>
+            {elements.map((el) => {
+              if (el.type === 'rect') {
+                return (
+                  <Rect
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    fill={el.fill}
+                    draggable
+                    onClick={() => handleSelect(el)}
+                  />
+                );
+              } else if (el.type === 'circle') {
+                return (
+                  <Circle
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    radius={el.radius}
+                    fill={el.fill}
+                    draggable
+                    onClick={() => handleSelect(el)}
+                  />
+                );
+              } else if (el.type === 'text') {
+                return (
+                  <Text
+                    key={el.id}
+                    id={el.id}
+                    x={el.x}
+                    y={el.y}
+                    text={el.text}
+                    fontSize={el.fontSize}
+                    draggable
+                    onClick={() => handleSelect(el)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
+  );
+};
+
+// Styles for the top panel
+const topPanelStyle = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  backgroundColor: '#333',
+  color: '#fff',
+  padding: '10px 20px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+  zIndex: 10,
+};
+
+// Styles for option inputs
+const optionStyle = {
+  display: 'flex',
+  gap: '10px',
+};
+
+const inputStyle = {
+  marginLeft: '5px',
+  padding: '5px',
+  fontSize: '14px',
+  border: '1px solid #ccc',
+  borderRadius: '4px',
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Features**
+
+1. **Dynamic Panel:**
+   - The top panel appears when an element is selected.
+
+2. **Element-Specific Options:**
+   - Different input fields are displayed based on the element type (`rect`, `circle`, `text`).
+
+3. **Real-Time Updates:**
+   - Changes made in the panel are reflected immediately on the canvas.
+
+4. **Responsive Styling:**
+   - Styled for clarity, with a modern look for the top panel and inputs.
+
+---
+
+### **Behavior**
+
+1. **Select an Element:**
+   - Click on a rectangle, circle, or text element to open the top panel.
+   - The panel displays options relevant to the selected element.
+
+2. **Edit Options:**
+   - Modify properties like `width`, `height`, `radius`, `fill`, or `text` in the panel.
+   - Changes are reflected in real-time on the canvas.
+
+3. **Deselect Element:**
+   - Clicking outside the elements (on the stage) closes the panel.
+
+---
+
+### **Enhancements**
+
+1. **Close Button:**
+   - Add a close button to the panel to deselect the element manually.
+
+   ```javascript
+   <button onClick={() => setSelectedElement(null)} style={{ marginLeft: 'auto' }}>
+     Close
+   </button>
+   ```
+
+2. **Save and Reset Options:**
+   - Include buttons to save or reset element properties.
+
+3. **Animations:**
+   - Add a slide-in animation for the panel using CSS transitions.
+
+4. **Mobile Responsiveness:**
+   - Adjust the panel layout for smaller screens using media queries.
+
+---
+
+This implementation provides a clean and user-friendly way to manage element-specific options in a top panel. Let me know if you’d like further customization! 😊

@@ -1,0 +1,226 @@
+To implement the functionality where a **new scheme is saved** to the `scheme_src` folder upon clicking the "Save" button and then **redirect** to the `/schemes` page, follow these steps:
+
+---
+
+### **Steps to Implement**
+
+1. **API Endpoint for Saving Schemes:**
+   - Create or update an API endpoint (`/api/schemes/create`) that saves the scheme data to the `scheme_src` folder.
+
+2. **Save Button Logic:**
+   - Send the scheme data to the API when the "Save" button is clicked.
+   - After saving successfully, use `useRouter` from Next.js to redirect to the `/schemes` page.
+
+3. **Schemes List Page:**
+   - Ensure the `/schemes` page dynamically reads the `scheme_src` folder to display the updated list of schemes.
+
+---
+
+### **Code Implementation**
+
+#### **1. API Endpoint for Saving Schemes**
+
+Create or update the `/pages/api/schemes/create.js` file:
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'POST') {
+    const { scheme_id, scheme_name, scheme_department, scheme_data } = req.body;
+
+    if (!scheme_id || !scheme_name || !scheme_department || !scheme_data) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+
+    // Define the file path
+    const schemePath = path.join(process.cwd(), 'scheme_src', `${scheme_id}.json`);
+
+    try {
+      // Check if the file already exists
+      if (fs.existsSync(schemePath)) {
+        return res.status(400).json({ error: 'Scheme with this ID already exists.' });
+      }
+
+      // Write the scheme data to the file
+      const schemeContent = {
+        scheme_id,
+        scheme_name,
+        scheme_department,
+        scheme_data,
+      };
+      fs.writeFileSync(schemePath, JSON.stringify(schemeContent, null, 2));
+
+      return res.status(201).json({ message: 'Scheme created successfully.' });
+    } catch (error) {
+      console.error('Error creating scheme:', error);
+      return res.status(500).json({ error: 'Error creating scheme.' });
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    return res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+#### **2. Create Scheme Page**
+
+The **Create Scheme Page** will include the canvas, input fields for `scheme_name` and `scheme_department`, and a "Save" button.
+
+##### **File: `/pages/create-scheme.js`**
+
+```javascript
+import React, { useState } from 'react';
+import { useRouter } from 'next/router';
+import { Stage, Layer, Rect } from 'react-konva';
+
+const CreateSchemePage = () => {
+  const router = useRouter();
+  const [schemeName, setSchemeName] = useState('');
+  const [schemeDepartment, setSchemeDepartment] = useState('');
+  const [elements, setElements] = useState([]);
+
+  // Handle element addition
+  const addElement = () => {
+    setElements((prev) => [
+      ...prev,
+      { id: `${Date.now()}`, type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'red' },
+    ]);
+  };
+
+  // Handle element dragging
+  const handleDragEnd = (id, e) => {
+    setElements((prev) =>
+      prev.map((el) => (el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el))
+    );
+  };
+
+  // Handle Save Scheme
+  const handleSave = async () => {
+    const schemeId = Date.now().toString(); // Generate a unique ID for the scheme
+    try {
+      const response = await fetch('/api/schemes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheme_id: schemeId,
+          scheme_name: schemeName,
+          scheme_department: schemeDepartment,
+          scheme_data: { elements },
+        }),
+      });
+
+      if (response.ok) {
+        alert('Scheme saved successfully.');
+        router.push('/schemes'); // Redirect to the schemes list page
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error}`);
+      }
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+      alert('Error saving scheme.');
+    }
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Create New Scheme</h1>
+      <div style={{ marginBottom: '10px' }}>
+        <label>
+          Scheme Name:
+          <input
+            type="text"
+            value={schemeName}
+            onChange={(e) => setSchemeName(e.target.value)}
+            style={{ marginLeft: '10px', padding: '5px', fontSize: '16px' }}
+          />
+        </label>
+      </div>
+      <div style={{ marginBottom: '10px' }}>
+        <label>
+          Department:
+          <select
+            value={schemeDepartment}
+            onChange={(e) => setSchemeDepartment(e.target.value)}
+            style={{ marginLeft: '10px', padding: '5px', fontSize: '16px' }}
+          >
+            <option value="">-- Select Department --</option>
+            <option value="IT">IT</option>
+            <option value="HR">HR</option>
+            <option value="Finance">Finance</option>
+          </select>
+        </label>
+      </div>
+      <button onClick={addElement} style={{ padding: '10px 20px', marginBottom: '10px' }}>
+        Add Element
+      </button>
+      <button onClick={handleSave} style={{ padding: '10px 20px', backgroundColor: '#007bff', color: '#fff' }}>
+        Save Scheme
+      </button>
+      <Stage width={800} height={600} style={{ border: '1px solid black', marginTop: '20px' }}>
+        <Layer>
+          {elements.map((el) => (
+            <Rect
+              key={el.id}
+              x={el.x}
+              y={el.y}
+              width={el.width}
+              height={el.height}
+              fill={el.fill}
+              draggable
+              onDragEnd={(e) => handleDragEnd(el.id, e)}
+            />
+          ))}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default CreateSchemePage;
+```
+
+---
+
+### **Behavior**
+
+1. **Input Fields for Metadata:**
+   - `Scheme Name` and `Department` fields are required.
+
+2. **Canvas for Drawing:**
+   - Add draggable rectangles to the canvas for the scheme.
+
+3. **Save Button:**
+   - Saves the scheme to the `scheme_src` folder as a JSON file.
+   - Redirects to `/schemes` after successful save.
+
+4. **Redirect to Schemes List:**
+   - Automatically navigate to the `/schemes` page to display the updated list.
+
+---
+
+### **Optional Enhancements**
+
+1. **Validation:**
+   - Ensure the `schemeName` and `schemeDepartment` are not empty before saving.
+
+   ```javascript
+   if (!schemeName || !schemeDepartment) {
+     alert('Please fill in all required fields.');
+     return;
+   }
+   ```
+
+2. **Loading Indicator:**
+   - Show a spinner or disable the "Save" button while saving the scheme.
+
+3. **Error Handling:**
+   - Provide meaningful error messages for failed saves or duplicate IDs.
+
+---
+
+This implementation handles creating, saving, and redirecting seamlessly while ensuring the data is stored in the `scheme_src` folder. Let me know if you need further refinements! 😊

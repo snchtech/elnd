@@ -1,0 +1,229 @@
+To implement a **UI confirm dialog** for scheme deletion, you can use a component library like **Material-UI** (`@mui/material`) that includes a `Dialog` component. This provides a clean and user-friendly way to confirm deletion.
+
+---
+
+### **Steps to Implement**
+
+1. **Track Delete Confirmation State:**
+   - Use `useState` to manage the visibility of the confirmation dialog and the selected scheme for deletion.
+
+2. **Show Confirmation Dialog:**
+   - Open the dialog when the "Delete" button is clicked, passing the scheme ID.
+
+3. **Handle Confirm/Cancel Actions:**
+   - On confirmation, delete the scheme using the API and close the dialog.
+   - On cancel, simply close the dialog without performing any action.
+
+---
+
+### **Code Implementation**
+
+#### **Schemes List Page with Confirmation Dialog**
+
+```javascript
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  Paper,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+} from '@mui/material';
+
+const SchemesPage = () => {
+  const router = useRouter();
+  const [schemes, setSchemes] = useState([]);
+  const [openDialog, setOpenDialog] = useState(false); // Dialog visibility
+  const [selectedScheme, setSelectedScheme] = useState(null); // Selected scheme for deletion
+
+  // Fetch schemes list
+  useEffect(() => {
+    const fetchSchemes = async () => {
+      try {
+        const response = await fetch('/api/schemes');
+        const data = await response.json();
+        setSchemes(data);
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchSchemes();
+  }, []);
+
+  // Handle Edit
+  const handleEdit = (schemeId) => {
+    router.push(`/editor/${schemeId}`);
+  };
+
+  // Open Delete Confirmation Dialog
+  const handleOpenDialog = (scheme) => {
+    setSelectedScheme(scheme);
+    setOpenDialog(true);
+  };
+
+  // Close Delete Confirmation Dialog
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setSelectedScheme(null);
+  };
+
+  // Handle Confirm Delete
+  const handleConfirmDelete = async () => {
+    try {
+      const response = await fetch('/api/schemes/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheme_id: selectedScheme.scheme_id }),
+      });
+
+      if (response.ok) {
+        alert('Scheme deleted successfully.');
+        setSchemes((prevSchemes) =>
+          prevSchemes.filter((scheme) => scheme.scheme_id !== selectedScheme.scheme_id)
+        );
+      } else {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting scheme:', error);
+      alert('Error deleting scheme.');
+    } finally {
+      handleCloseDialog(); // Close the dialog
+    }
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Schemes List</h1>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Number</TableCell>
+              <TableCell>Scheme ID</TableCell>
+              <TableCell>Scheme Name</TableCell>
+              <TableCell>Department</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {schemes.map((scheme, index) => (
+              <TableRow key={scheme.scheme_id}>
+                <TableCell>{index + 1}</TableCell>
+                <TableCell>{scheme.scheme_id}</TableCell>
+                <TableCell>{scheme.scheme_name}</TableCell>
+                <TableCell>{scheme.scheme_department}</TableCell>
+                <TableCell>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => handleEdit(scheme.scheme_id)}
+                    style={{ marginRight: '10px' }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    size="small"
+                    onClick={() => handleOpenDialog(scheme)}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Confirm Delete Dialog */}
+      <Dialog
+        open={openDialog}
+        onClose={handleCloseDialog}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete the scheme{' '}
+            <strong>{selectedScheme?.scheme_name}</strong> from the department{' '}
+            <strong>{selectedScheme?.scheme_department}</strong>? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+};
+
+export default SchemesPage;
+```
+
+---
+
+### **Key Features**
+
+1. **Confirmation Dialog:**
+   - Uses Material-UI's `Dialog` component for a user-friendly confirmation prompt.
+
+2. **Dynamic Content in Dialog:**
+   - Displays the name and department of the selected scheme in the dialog.
+
+3. **Actions:**
+   - **Confirm:** Deletes the scheme and updates the table.
+   - **Cancel:** Closes the dialog without performing any action.
+
+4. **Real-Time Updates:**
+   - Removes the deleted scheme from the UI without requiring a page refresh.
+
+---
+
+### **Expected Behavior**
+
+1. **Click "Delete":**
+   - Opens a confirmation dialog with the scheme details.
+
+2. **Click "Confirm":**
+   - Deletes the scheme using the `/api/schemes/delete` endpoint.
+   - Updates the list to remove the deleted scheme.
+
+3. **Click "Cancel":**
+   - Closes the dialog without making any changes.
+
+---
+
+### **Styling and Enhancements**
+
+1. **Custom Dialog Styling:**
+   - Customize the dialog's appearance using Material-UI's `sx` prop or classes.
+
+2. **Animations:**
+   - Material-UI's `Dialog` includes built-in animations for open/close transitions.
+
+3. **Accessibility:**
+   - The `aria-labelledby` and `aria-describedby` props improve accessibility.
+
+---
+
+This implementation ensures a clean, interactive user experience for deleting schemes. Let me know if you need further enhancements! 😊

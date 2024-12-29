@@ -1,0 +1,247 @@
+Here’s the updated **Editor** page with Material-UI integration, a dropdown for selecting albums, and modified save logic for updating schemes based on album association.
+
+---
+
+### **Updated Code**
+
+```javascript
+'use client';
+import React, { useRef, useState, useEffect } from 'react';
+import { Stage, Layer } from 'react-konva';
+import { v4 as uuidv4 } from 'uuid';
+import {
+  Button,
+  Select,
+  MenuItem,
+  TextField,
+  Typography,
+  Box,
+} from '@mui/material';
+import ToolPanel from '../interface/ToolPanel';
+import TopNavBar from '../interface/headerLine/TopHeaderLine';
+import GraphLibrary from '../../components/graph';
+
+// Page formats in mm (converted to pixels at 72 DPI)
+const pageFormats = {
+  A4: { width: 1123, height: 794 },
+  A3: { width: 1587, height: 1123 },
+  A2: { width: 2245, height: 1587 },
+  A1: { width: 3179, height: 2245 },
+  A0: { width: 4494, height: 3179 },
+};
+
+const Editor = () => {
+  const stageRef = useRef(null);
+  const [elements, setElements] = useState([]);
+  const [selectedScheme, setSelectedScheme] = useState(null);
+  const [schemeName, setSchemeName] = useState('');
+  const [schemeDepartment, setSchemeDepartment] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('A4');
+  const [canvasSize, setCanvasSize] = useState(pageFormats['A4']);
+  const [albums, setAlbums] = useState([]);
+  const [selectedAlbum, setSelectedAlbum] = useState('');
+
+  // Fetch albums and schemes
+  useEffect(() => {
+    const fetchAlbums = async () => {
+      try {
+        const response = await fetch('/api/albums');
+        const data = await response.json();
+        setAlbums(data.albums);
+      } catch (error) {
+        console.error('Error fetching albums:', error);
+      }
+    };
+
+    fetchAlbums();
+  }, []);
+
+  useEffect(() => {
+    setCanvasSize(pageFormats[selectedFormat]);
+  }, [selectedFormat]);
+
+  // Add new element
+  const addElement = (type) => {
+    const newElement = {
+      id: uuidv4(),
+      type,
+      x: Math.random() * 300,
+      y: Math.random() * 300,
+      width: 100,
+      height: 100,
+      fill: 'gray',
+      rotation: 0,
+    };
+    setElements((prev) => [...prev, newElement]);
+  };
+
+  // Update scheme
+  const handleUpdateScheme = async () => {
+    if (!schemeName || !schemeDepartment) {
+      alert('Please provide scheme name and department.');
+      return;
+    }
+
+    const updatedScheme = {
+      scheme_id: selectedScheme?.value || uuidv4(),
+      scheme_name: schemeName,
+      department: schemeDepartment,
+      scheme_format: selectedFormat,
+      scheme_data: elements,
+    };
+
+    const endpoint = selectedAlbum
+      ? `/api/savescheme?album=${selectedAlbum}`
+      : `/api/savescheme`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: selectedScheme ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedScheme),
+      });
+
+      if (response.ok) {
+        alert('Scheme saved successfully!');
+      } else {
+        alert('Error saving scheme.');
+      }
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+    }
+  };
+
+  return (
+    <div>
+      <TopNavBar />
+      <Box sx={{ padding: 3 }}>
+        <Typography variant="h5">Edit Scheme</Typography>
+
+        <TextField
+          label="Scheme Name"
+          value={schemeName}
+          onChange={(e) => setSchemeName(e.target.value)}
+          fullWidth
+          margin="normal"
+        />
+
+        <Select
+          value={schemeDepartment}
+          onChange={(e) => setSchemeDepartment(e.target.value)}
+          displayEmpty
+          fullWidth
+          style={{ marginBottom: '20px' }}
+        >
+          <MenuItem value="">Select Department (Required)</MenuItem>
+          {['ТЦ', 'РЦ'].map((dep) => (
+            <MenuItem key={dep} value={dep}>
+              {dep}
+            </MenuItem>
+          ))}
+        </Select>
+
+        <Select
+          value={selectedAlbum}
+          onChange={(e) => setSelectedAlbum(e.target.value)}
+          displayEmpty
+          fullWidth
+          style={{ marginBottom: '20px' }}
+        >
+          <MenuItem value="">No Album</MenuItem>
+          {albums.map((album) => (
+            <MenuItem key={album.album_id} value={album.album_id}>
+              {album.album_name}
+            </MenuItem>
+          ))}
+        </Select>
+
+        <Select
+          value={selectedFormat}
+          onChange={(e) => setSelectedFormat(e.target.value)}
+          displayEmpty
+          fullWidth
+          style={{ marginBottom: '20px' }}
+        >
+          {Object.keys(pageFormats).map((format) => (
+            <MenuItem key={format} value={format}>
+              {format}
+            </MenuItem>
+          ))}
+        </Select>
+
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleUpdateScheme}
+          fullWidth
+          sx={{ mt: 2 }}
+        >
+          Save Scheme
+        </Button>
+      </Box>
+
+      <ToolPanel addElement={addElement} />
+      <Box
+        sx={{
+          margin: '20px auto',
+          width: canvasSize.width,
+          height: canvasSize.height,
+          border: '2px solid black',
+          position: 'relative',
+          backgroundColor: '#fff',
+        }}
+      >
+        <Stage
+          width={canvasSize.width}
+          height={canvasSize.height}
+          ref={stageRef}
+        >
+          <Layer>
+            {elements.map((el) => {
+              const ElementComponent = GraphLibrary[el.type];
+              if (!ElementComponent) return null;
+              return (
+                <ElementComponent
+                  key={el.id}
+                  el={el}
+                  onDragEnd={(e) => {
+                    const { x, y } = e.target.attrs;
+                    setElements((prev) =>
+                      prev.map((item) =>
+                        item.id === el.id ? { ...item, x, y } : item
+                      )
+                    );
+                  }}
+                />
+              );
+            })}
+          </Layer>
+        </Stage>
+      </Box>
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+---
+
+### **Key Updates**
+
+1. **Material-UI Integration:**
+   - Used Material-UI for `TextField`, `Select`, `MenuItem`, and `Button`.
+
+2. **Album Selection:**
+   - A dropdown to select an album. If selected, schemes are saved in the album folder.
+
+3. **Save Logic:**
+   - Dynamically determines the save endpoint (`/api/savescheme`) based on whether an album is selected.
+
+4. **Validation:**
+   - Validates that `schemeName` and `schemeDepartment` are filled before saving. 
+
+5. **Canvas Area:**
+   - Scaled dynamically based on the selected format. 
+
+This ensures a modern and user-friendly interface for editing and saving schemes.

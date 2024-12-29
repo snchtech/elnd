@@ -1,0 +1,234 @@
+Для реалізації функціоналу роботи з альбомами та їх вмістом на окремій сторінці пропоную наступний підхід:
+
+---
+
+### **Структура URL**
+
+1. **Окрема сторінка для альбому:**
+   - При натисканні на альбом на сторінці списку URL буде мати вигляд: `/albums/[albumId]`.
+   - `albumId` — це унікальний ідентифікатор альбому.
+
+2. **Окрема сторінка для перегляду схем:**
+   - Для кожної схеми можна динамічно відкривати її у правій частині сторінки.
+
+---
+
+### **Функціонал**
+
+1. **Зміст альбому у лівій панелі:**
+   - Ліва панель відображатиме список схем у альбомі.
+   - Передбачені кнопки для:
+     - Редагування схеми.
+     - Видалення схеми.
+     - Зміни порядку схем у списку (кнопки "вгору" і "вниз").
+
+2. **Відображення схеми:**
+   - При кліку на схему у списку змісту, у правій частині відображається її перегляд (read-only або editable).
+
+3. **Додавання нової схеми:**
+   - Кнопка для створення нової схеми у вибраному альбомі.
+
+---
+
+### **Структура Backend**
+
+#### **API для отримання альбому та його схем**
+
+##### **Файл: `/pages/api/albums/[albumId].js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { albumId } = req.query;
+  const schemeSrcPath = path.join(process.cwd(), 'scheme_src', albumId);
+
+  try {
+    const albumInfoPath = path.join(schemeSrcPath, 'album_info.json');
+    if (!fs.existsSync(albumInfoPath)) {
+      return res.status(404).json({ error: 'Album not found' });
+    }
+
+    const albumInfo = JSON.parse(fs.readFileSync(albumInfoPath, 'utf-8'));
+
+    const schemes = fs
+      .readdirSync(schemeSrcPath)
+      .filter((file) => file !== 'album_info.json' && file.endsWith('.json'))
+      .map((file) => {
+        const schemePath = path.join(schemeSrcPath, file);
+        return JSON.parse(fs.readFileSync(schemePath, 'utf-8'));
+      });
+
+    res.status(200).json({ album: albumInfo, schemes });
+  } catch (error) {
+    console.error('Error reading album:', error);
+    res.status(500).json({ error: 'Error reading album' });
+  }
+}
+```
+
+---
+
+### **Frontend**
+
+#### **Динамічна сторінка альбому**
+
+##### **Файл: `/pages/albums/[albumId].js`**
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { Button, List, ListItem, ListItemText, IconButton, Divider } from '@mui/material';
+import { Edit, Delete, ArrowUpward, ArrowDownward } from '@mui/icons-material';
+
+const AlbumPage = () => {
+  const router = useRouter();
+  const { albumId } = router.query;
+
+  const [album, setAlbum] = useState(null);
+  const [schemes, setSchemes] = useState([]);
+  const [selectedScheme, setSelectedScheme] = useState(null);
+
+  // Fetch album data
+  useEffect(() => {
+    if (albumId) {
+      const fetchAlbum = async () => {
+        try {
+          const response = await fetch(`/api/albums/${albumId}`);
+          const data = await response.json();
+          setAlbum(data.album);
+          setSchemes(data.schemes);
+        } catch (error) {
+          console.error('Error fetching album:', error);
+        }
+      };
+
+      fetchAlbum();
+    }
+  }, [albumId]);
+
+  // Handle scheme deletion
+  const handleDelete = async (schemeId) => {
+    if (confirm('Are you sure you want to delete this scheme?')) {
+      try {
+        const response = await fetch(`/api/schemes/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheme_id: schemeId }),
+        });
+
+        if (response.ok) {
+          alert('Scheme deleted successfully.');
+          setSchemes((prev) => prev.filter((scheme) => scheme.scheme_id !== schemeId));
+        } else {
+          alert('Error deleting scheme.');
+        }
+      } catch (error) {
+        console.error('Error deleting scheme:', error);
+      }
+    }
+  };
+
+  // Handle reordering schemes
+  const handleReorder = (index, direction) => {
+    const newSchemes = [...schemes];
+    const [removed] = newSchemes.splice(index, 1);
+
+    // Move up or down
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    newSchemes.splice(newIndex, 0, removed);
+
+    setSchemes(newSchemes);
+  };
+
+  return (
+    <div style={{ display: 'flex', height: '100vh' }}>
+      {/* Left Sidebar */}
+      <div style={{ width: '300px', backgroundColor: '#f4f4f4', padding: '10px', overflowY: 'auto' }}>
+        <h3>{album?.album_name || 'Album'}</h3>
+        <Button
+          variant="contained"
+          color="primary"
+          fullWidth
+          onClick={() => router.push(`/editor/new?albumId=${albumId}`)}
+        >
+          Add New Scheme
+        </Button>
+        <Divider style={{ margin: '10px 0' }} />
+        <List>
+          {schemes.map((scheme, index) => (
+            <React.Fragment key={scheme.scheme_id}>
+              <ListItem
+                button
+                selected={selectedScheme?.scheme_id === scheme.scheme_id}
+                onClick={() => setSelectedScheme(scheme)}
+              >
+                <ListItemText primary={scheme.scheme_name} />
+                <IconButton onClick={() => handleReorder(index, 'up')} disabled={index === 0}>
+                  <ArrowUpward />
+                </IconButton>
+                <IconButton
+                  onClick={() => handleReorder(index, 'down')}
+                  disabled={index === schemes.length - 1}
+                >
+                  <ArrowDownward />
+                </IconButton>
+                <IconButton onClick={() => router.push(`/editor/${scheme.scheme_id}`)}>
+                  <Edit />
+                </IconButton>
+                <IconButton onClick={() => handleDelete(scheme.scheme_id)}>
+                  <Delete />
+                </IconButton>
+              </ListItem>
+              <Divider />
+            </React.Fragment>
+          ))}
+        </List>
+      </div>
+
+      {/* Right Content */}
+      <div style={{ flex: 1, padding: '20px' }}>
+        {selectedScheme ? (
+          <div>
+            <h2>{selectedScheme.scheme_name}</h2>
+            {/* Render scheme view */}
+            <div style={{ border: '1px solid black', height: '500px' }}>
+              {/* Add Konva Canvas or read-only scheme display here */}
+              <p>Scheme data will appear here</p>
+            </div>
+          </div>
+        ) : (
+          <p>Select a scheme to view its details.</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AlbumPage;
+```
+
+---
+
+### **Ключові Функції**
+
+1. **Ліва Панель:**
+   - Відображає список схем з кнопками:
+     - Редагування (`Edit`).
+     - Видалення (`Delete`).
+     - Переміщення вверх/вниз (`ArrowUpward`/`ArrowDownward`).
+
+2. **Права Частина:**
+   - Відображає вибрану схему у вигляді.
+   - Підходить для read-only перегляду або інтеграції Konva Canvas.
+
+3. **Додавання Нової Схеми:**
+   - Кнопка "Add New Scheme" дозволяє додати нову схему у альбом, використовуючи `albumId`.
+
+4. **Зміна Порядку:**
+   - Кнопки "вгору" та "вниз" дозволяють змінювати порядок схем у альбомі.
+
+---
+
+Цей підхід дозволяє зручно керувати схемами в альбомах, підтримуючи зміну порядку, редагування та видалення схем.

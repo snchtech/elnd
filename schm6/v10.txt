@@ -1,0 +1,198 @@
+### **Оновлення Handler для Кнопки Delete на Сторінці Schemes**
+
+Ось як можна оновити handler для видалення окремої схеми або цілого альбому:
+
+---
+
+#### **Handler на Сторінці Schemes**
+```javascript
+const handleDelete = async (id, isAlbum) => {
+  const confirmMessage = `Ви впевнені, що хочете видалити ${
+    isAlbum ? 'альбом та всі його схеми' : 'схему'
+  }?`;
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    const endpoint = isAlbum
+      ? `/api/albums/delete/${id}` // Видалення альбому
+      : `/api/schemes/delete/${id}`; // Видалення окремої схеми
+
+    const response = await fetch(endpoint, {
+      method: 'DELETE',
+    });
+
+    if (response.ok) {
+      alert(`${isAlbum ? 'Альбом' : 'Схема'} успішно видалено.`);
+      // Оновлення списку альбомів чи схем
+      if (isAlbum) {
+        setAlbums((prev) => prev.filter((album) => album.album_id !== id));
+      } else {
+        setSchemes((prev) => prev.filter((scheme) => scheme.scheme_id !== id));
+      }
+    } else {
+      const errorData = await response.json();
+      alert(`Помилка видалення: ${errorData.error}`);
+    }
+  } catch (error) {
+    console.error('Помилка видалення:', error);
+    alert('Сталася помилка при видаленні.');
+  }
+};
+```
+
+---
+
+#### **Handler для Видалення Схеми з Альбому**
+
+На сторінці `/schemes/album/[albumId]` потрібно передбачити видалення окремої схеми з альбому. У цьому випадку схема видаляється з каталогу альбому, а `album_info.json` оновлюється.
+
+```javascript
+const handleDeleteSchemeFromAlbum = async (schemeId, albumId) => {
+  const confirmMessage = 'Ви впевнені, що хочете видалити цю схему з альбому?';
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    const response = await fetch(`/api/albums/${albumId}/delete/${schemeId}`, {
+      method: 'DELETE',
+    });
+
+    if (response.ok) {
+      alert('Схема успішно видалена з альбому.');
+      // Оновлення списку схем альбому
+      setSchemes((prev) => prev.filter((scheme) => scheme.scheme_id !== schemeId));
+    } else {
+      const errorData = await response.json();
+      alert(`Помилка видалення схеми з альбому: ${errorData.error}`);
+    }
+  } catch (error) {
+    console.error('Помилка видалення схеми з альбому:', error);
+    alert('Сталася помилка при видаленні схеми.');
+  }
+};
+```
+
+---
+
+### **Оновлені API Endpoints для Видалення**
+
+#### **Видалення Окремої Схеми**
+Файл: `/pages/api/schemes/delete/[schemeId].js`
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { schemeId } = req.query;
+
+  if (req.method === 'DELETE') {
+    try {
+      const schemePath = path.join(process.cwd(), 'scheme_src', `${schemeId}.json`);
+
+      if (fs.existsSync(schemePath)) {
+        fs.unlinkSync(schemePath);
+        res.status(200).json({ message: 'Схема успішно видалена.' });
+      } else {
+        res.status(404).json({ error: 'Схема не знайдена.' });
+      }
+    } catch (error) {
+      console.error('Помилка видалення схеми:', error);
+      res.status(500).json({ error: 'Помилка видалення схеми.' });
+    }
+  } else {
+    res.setHeader('Allow', ['DELETE']);
+    res.status(405).json({ error: `Метод ${req.method} не дозволений.` });
+  }
+}
+```
+
+---
+
+#### **Видалення Альбому**
+Файл: `/pages/api/albums/delete/[albumId].js`
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { albumId } = req.query;
+
+  if (req.method === 'DELETE') {
+    try {
+      const albumPath = path.join(process.cwd(), 'scheme_src', albumId);
+
+      if (fs.existsSync(albumPath)) {
+        fs.rmSync(albumPath, { recursive: true, force: true });
+        res.status(200).json({ message: 'Альбом успішно видалено.' });
+      } else {
+        res.status(404).json({ error: 'Альбом не знайдено.' });
+      }
+    } catch (error) {
+      console.error('Помилка видалення альбому:', error);
+      res.status(500).json({ error: 'Помилка видалення альбому.' });
+    }
+  } else {
+    res.setHeader('Allow', ['DELETE']);
+    res.status(405).json({ error: `Метод ${req.method} не дозволений.` });
+  }
+}
+```
+
+---
+
+#### **Видалення Схеми з Альбому**
+Файл: `/pages/api/albums/[albumId]/delete/[schemeId].js`
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  const { albumId, schemeId } = req.query;
+
+  if (req.method === 'DELETE') {
+    try {
+      const albumPath = path.join(process.cwd(), 'scheme_src', albumId);
+      const schemePath = path.join(albumPath, `${schemeId}.json`);
+      const albumInfoPath = path.join(albumPath, 'album_info.json');
+
+      if (!fs.existsSync(schemePath)) {
+        return res.status(404).json({ error: 'Схема не знайдена.' });
+      }
+
+      // Видалення схеми
+      fs.unlinkSync(schemePath);
+
+      // Оновлення album_info.json
+      if (fs.existsSync(albumInfoPath)) {
+        const albumInfo = JSON.parse(fs.readFileSync(albumInfoPath, 'utf-8'));
+        albumInfo.schemes = albumInfo.schemes.filter(
+          (scheme) => scheme.scheme_id !== schemeId
+        );
+        fs.writeFileSync(albumInfoPath, JSON.stringify(albumInfo, null, 2), 'utf-8');
+      }
+
+      res.status(200).json({ message: 'Схема успішно видалена з альбому.' });
+    } catch (error) {
+      console.error('Помилка видалення схеми з альбому:', error);
+      res.status(500).json({ error: 'Помилка видалення схеми з альбому.' });
+    }
+  } else {
+    res.setHeader('Allow', ['DELETE']);
+    res.status(405).json({ error: `Метод ${req.method} не дозволений.` });
+  }
+}
+```
+
+---
+
+### **Переваги Реалізації**
+1. **Гнучкість:**
+   - Окремі endpoint для видалення схем, альбомів та схем з альбомів.
+
+2. **Масштабованість:**
+   - Логіка легко розширюється для додавання нових операцій.
+
+3. **Простота:**
+   - Використання `fs` для роботи з файлами та каталогами забезпечує легку підтримку.

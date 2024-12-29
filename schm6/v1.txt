@@ -1,0 +1,251 @@
+To implement functionality for selecting and resizing elements in **Konva.js**, you can use the `Transformer` component provided by Konva. The `Transformer` is a powerful tool for adding resize and rotation handles to elements, much like programs like Visio or AutoCAD.
+
+---
+
+### **Steps to Implement**
+
+1. **Track Selected Element:**
+   - Use `useState` to store the `id` of the currently selected element.
+
+2. **Attach Transformer:**
+   - Dynamically attach a `Transformer` to the selected element.
+
+3. **Enable Resizing:**
+   - Allow resizing of elements by interacting with the handles provided by the `Transformer`.
+
+4. **Handle Resized Element:**
+   - Update the dimensions of the resized element in your state.
+
+5. **Visual Feedback:**
+   - Highlight the selected element for clarity.
+
+---
+
+### **Code Implementation**
+
+Here’s how you can implement this functionality:
+
+#### **Editor Page with Selection and Resizing**
+
+```javascript
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'red' },
+    { id: '2', type: 'circle', x: 300, y: 200, radius: 50, fill: 'blue' },
+    { id: '3', type: 'text', x: 200, y: 300, text: 'Hello', fontSize: 20 },
+  ]);
+  const [selectedId, setSelectedId] = useState(null); // Track selected element
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  // Attach transformer to selected element
+  useEffect(() => {
+    if (selectedId) {
+      const stage = stageRef.current;
+      const selectedNode = stage.findOne(`#${selectedId}`);
+      if (selectedNode) {
+        transformerRef.current.nodes([selectedNode]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    } else {
+      transformerRef.current.nodes([]);
+    }
+  }, [selectedId]);
+
+  // Handle element selection
+  const handleSelect = (id) => {
+    setSelectedId(id);
+  };
+
+  // Handle stage click to deselect
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedId(null);
+    }
+  };
+
+  // Handle element changes (resize, move)
+  const handleTransformEnd = (e) => {
+    const node = e.target;
+    const id = node.id();
+    const type = node.getClassName();
+
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id !== id) return el;
+
+        if (type === 'Rect') {
+          return {
+            ...el,
+            x: node.x(),
+            y: node.y(),
+            width: node.width() * node.scaleX(), // Adjust for scaling
+            height: node.height() * node.scaleY(),
+          };
+        } else if (type === 'Circle') {
+          return {
+            ...el,
+            x: node.x(),
+            y: node.y(),
+            radius: node.radius() * node.scaleX(),
+          };
+        } else if (type === 'Text') {
+          return {
+            ...el,
+            x: node.x(),
+            y: node.y(),
+            fontSize: node.fontSize() * node.scaleX(),
+          };
+        }
+        return el;
+      })
+    );
+
+    // Reset scaling to avoid compounding transformations
+    node.scaleX(1);
+    node.scaleY(1);
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Scheme Editor</h1>
+      <Stage
+        width={window.innerWidth - 20}
+        height={window.innerHeight - 20}
+        onClick={handleStageClick}
+        ref={stageRef}
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)}
+                  onTransformEnd={handleTransformEnd}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)}
+                  onTransformEnd={handleTransformEnd}
+                />
+              );
+            } else if (el.type === 'text') {
+              return (
+                <Text
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  text={el.text}
+                  fontSize={el.fontSize}
+                  draggable
+                  onClick={() => handleSelect(el.id)}
+                  onTransformEnd={handleTransformEnd}
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Transformer for Resizing and Rotation */}
+          <Transformer ref={transformerRef} />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Key Features**
+
+1. **Selection:**
+   - Click on an element to select it.
+   - Highlight the selected element with a `Transformer`.
+
+2. **Resizing:**
+   - Handles are displayed for resizing and rotation.
+   - Adjusts dimensions dynamically based on user interaction.
+
+3. **Deselect on Background Click:**
+   - Clicking outside of elements deselects the current element.
+
+4. **Real-Time Updates:**
+   - Updates element properties (e.g., size, position) immediately after resizing.
+
+---
+
+### **How It Works**
+
+1. **Selecting an Element:**
+   - Clicking on an element sets its `id` as the `selectedId`.
+   - The `Transformer` is attached to the selected node.
+
+2. **Resizing:**
+   - The `onTransformEnd` handler updates the size and position of the element in the `elements` state.
+
+3. **Deselecting:**
+   - Clicking on the background (stage) deselects all elements and detaches the `Transformer`.
+
+4. **Scaling Adjustment:**
+   - Resizing adjusts the size using `node.width() * node.scaleX()` to account for scaling applied during resizing.
+
+---
+
+### **Visual Feedback**
+
+1. **Transformer Handles:**
+   - Square handles appear on the edges of the element, allowing resizing.
+   - Rotation is possible if enabled in the `Transformer` settings.
+
+2. **Highlight Selected:**
+   - Add a stroke or shadow to the selected element for better visibility:
+   ```javascript
+   stroke={selectedId === el.id ? 'blue' : null}
+   strokeWidth={selectedId === el.id ? 2 : 0}
+   ```
+
+---
+
+### **Enhancements**
+
+1. **Rotation:**
+   - Enable rotation by setting `enabledAnchors` in the `Transformer`:
+     ```javascript
+     <Transformer ref={transformerRef} enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']} />
+     ```
+
+2. **Custom Handles:**
+   - Customize the appearance of the resize/rotation handles using the `anchorSize` and `anchorStroke` properties.
+
+3. **Grid Snapping:**
+   - Add snapping to a grid for precise positioning during resizing or dragging.
+
+4. **Tooltips:**
+   - Display tooltips with dimensions and position when resizing.
+
+---

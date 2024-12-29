@@ -1,0 +1,264 @@
+Here's a solution to implement the functionality you've described. It will include:
+
+1. **Scheme Albums and Individual Schemes**:
+   - Display both albums (with an album icon) and individual schemes (with a scheme icon).
+   - Allow users to distinguish between the two types visually.
+
+2. **Department Filtering**:
+   - Add a dropdown to filter the displayed schemes and albums by department.
+
+3. **Edit and Delete Buttons**:
+   - Include buttons with icons for editing and deleting both schemes and albums.
+
+---
+
+### **Steps to Implement**
+
+1. **Database/Backend Structure**:
+   - Each scheme has an optional `album_id` to group it into an album.
+   - Each scheme or album belongs to a department.
+
+2. **API for Fetching Data**:
+   - Fetch schemes and albums together, including department information.
+
+3. **Frontend Layout**:
+   - Use a table or grid to display schemes and albums.
+   - Add filtering and action buttons.
+
+4. **Icons**:
+   - Use icons (e.g., from Material-UI or Font Awesome) to represent schemes, albums, and actions.
+
+---
+
+### **Backend API**
+
+#### **API for Fetching Schemes and Albums**
+
+##### **File: `/pages/api/schemes.js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'GET') {
+    const department = req.query.department; // Filter by department if provided
+    const schemeSrcPath = path.join(process.cwd(), 'scheme_src');
+
+    try {
+      const files = fs.readdirSync(schemeSrcPath);
+      const schemes = files.map((file) => {
+        const fileContent = JSON.parse(fs.readFileSync(path.join(schemeSrcPath, file), 'utf-8'));
+        return fileContent;
+      });
+
+      const filteredSchemes = department
+        ? schemes.filter((scheme) => scheme.department === department)
+        : schemes;
+
+      const albums = filteredSchemes.filter((scheme) => scheme.is_album);
+      const individualSchemes = filteredSchemes.filter((scheme) => !scheme.is_album);
+
+      res.status(200).json({ albums, individualSchemes });
+    } catch (error) {
+      console.error('Error reading schemes:', error);
+      res.status(500).json({ error: 'Error reading schemes.' });
+    }
+  } else {
+    res.setHeader('Allow', ['GET']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **Frontend Page**
+
+#### **File: `/pages/schemes.js`**
+
+```javascript
+import React, { useEffect, useState } from 'react';
+import { Button, Select, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Delete, Edit, Album, InsertDriveFile } from '@mui/icons-material';
+
+const SchemesPage = () => {
+  const [schemes, setSchemes] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [department, setDepartment] = useState(''); // Selected department
+  const [departments, setDepartments] = useState(['IT', 'HR', 'Finance']); // Example departments
+
+  // Fetch schemes and albums
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/schemes?department=${department}`);
+        const data = await response.json();
+        setAlbums(data.albums);
+        setSchemes(data.individualSchemes);
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchData();
+  }, [department]);
+
+  // Handle Delete
+  const handleDelete = async (id, isAlbum) => {
+    if (confirm(`Are you sure you want to delete this ${isAlbum ? 'album' : 'scheme'}?`)) {
+      try {
+        const response = await fetch('/api/schemes/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheme_id: id }),
+        });
+
+        if (response.ok) {
+          alert(`${isAlbum ? 'Album' : 'Scheme'} deleted successfully.`);
+          setSchemes((prev) => prev.filter((scheme) => scheme.id !== id));
+          setAlbums((prev) => prev.filter((album) => album.id !== id));
+        } else {
+          const errorData = await response.json();
+          alert(`Error: ${errorData.error}`);
+        }
+      } catch (error) {
+        console.error('Error deleting scheme/album:', error);
+        alert('Error deleting scheme/album.');
+      }
+    }
+  };
+
+  // Handle Edit
+  const handleEdit = (id) => {
+    const editUrl = `/editor/${id}`;
+    window.location.href = editUrl; // Redirect to edit page
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Schemes and Albums</h1>
+
+      {/* Department Filter */}
+      <div style={{ marginBottom: '20px' }}>
+        <Select
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          displayEmpty
+          style={{ width: '200px' }}
+        >
+          <MenuItem value="">All Departments</MenuItem>
+          {departments.map((dep) => (
+            <MenuItem key={dep} value={dep}>
+              {dep}
+            </MenuItem>
+          ))}
+        </Select>
+      </div>
+
+      {/* Schemes and Albums Table */}
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Type</TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Department</TableCell>
+              <TableCell>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {/* Albums */}
+            {albums.map((album) => (
+              <TableRow key={album.id}>
+                <TableCell>
+                  <Album style={{ color: 'blue' }} />
+                  Album
+                </TableCell>
+                <TableCell>{album.name}</TableCell>
+                <TableCell>{album.department}</TableCell>
+                <TableCell>
+                  <Button onClick={() => handleEdit(album.id)} color="primary" startIcon={<Edit />}>
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => handleDelete(album.id, true)}
+                    color="secondary"
+                    startIcon={<Delete />}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {/* Individual Schemes */}
+            {schemes.map((scheme) => (
+              <TableRow key={scheme.id}>
+                <TableCell>
+                  <InsertDriveFile style={{ color: 'green' }} />
+                  Scheme
+                </TableCell>
+                <TableCell>{scheme.name}</TableCell>
+                <TableCell>{scheme.department}</TableCell>
+                <TableCell>
+                  <Button onClick={() => handleEdit(scheme.id)} color="primary" startIcon={<Edit />}>
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => handleDelete(scheme.id, false)}
+                    color="secondary"
+                    startIcon={<Delete />}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </div>
+  );
+};
+
+export default SchemesPage;
+```
+
+---
+
+### **Key Features**
+
+1. **Albums and Schemes Display:**
+   - Albums and schemes are displayed with icons for easy distinction.
+   - Albums use the `Album` icon; individual schemes use the `InsertDriveFile` icon.
+
+2. **Department Filtering:**
+   - A `Select` dropdown filters albums and schemes by department.
+
+3. **Action Buttons:**
+   - Edit (`Edit` icon) and Delete (`Delete` icon) buttons for both albums and schemes.
+
+4. **API Integration:**
+   - The `/api/schemes` endpoint fetches filtered albums and schemes.
+   - The `/api/schemes/delete` endpoint handles deletion.
+
+5. **Styling:**
+   - Material-UI ensures a modern and clean design for the table and buttons.
+
+---
+
+### **Enhancements**
+
+1. **Sorting:**
+   - Add sorting functionality using Material-UI's `TableSortLabel`.
+
+2. **Pagination:**
+   - Add pagination using Material-UI's `TablePagination`.
+
+3. **Search:**
+   - Implement a search bar to filter by name or department.
+
+4. **Create New:**
+   - Add buttons for creating new schemes and albums.
+
+Let me know if you'd like help with any of these enhancements! 😊

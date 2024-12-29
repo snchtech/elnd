@@ -1,0 +1,224 @@
+The `Transformer` in **Konva.js** is designed to work as an interactive tool for resizing, rotating, and transforming shapes. If you can't see it or it doesn't behave as expected, it's likely due to one of these reasons:
+
+1. **The `Transformer` is not properly attached to the element.**
+2. **The element's `id` or properties are not matching what the `Transformer` expects.**
+3. **The `Transformer` is not configured to show resizing handles.**
+
+Below, I'll walk you through how to fix these issues and use the `Transformer` properly for resizing:
+
+---
+
+### **Complete Working Example**
+
+Here’s a step-by-step example to ensure the `Transformer` works for resizing and rotating shapes.
+
+```javascript
+import React, { useState, useRef, useEffect } from 'react';
+import { Stage, Layer, Rect, Circle, Text, Transformer } from 'react-konva';
+
+const SchemeEditor = () => {
+  const [elements, setElements] = useState([
+    { id: '1', type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'red' },
+    { id: '2', type: 'circle', x: 300, y: 200, radius: 50, fill: 'blue' },
+    { id: '3', type: 'text', x: 200, y: 300, text: 'Hello', fontSize: 20 },
+  ]);
+  const [selectedId, setSelectedId] = useState(null); // Track selected element
+  const transformerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  // Attach the transformer to the selected element
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    const stage = stageRef.current;
+
+    if (selectedId) {
+      const selectedNode = stage.findOne(`#${selectedId}`);
+      if (selectedNode) {
+        transformer.nodes([selectedNode]);
+        transformer.getLayer().batchDraw();
+      }
+    } else {
+      transformer.nodes([]);
+    }
+  }, [selectedId]);
+
+  // Handle element selection
+  const handleSelect = (id) => {
+    setSelectedId(id);
+  };
+
+  // Handle stage click to deselect
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedId(null);
+    }
+  };
+
+  // Handle transform end (resize, move, rotate)
+  const handleTransformEnd = (e) => {
+    const node = e.target;
+    const id = node.id();
+
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id !== id) return el;
+
+        const updatedElement = { ...el, x: node.x(), y: node.y() };
+
+        if (node.getClassName() === 'Rect') {
+          updatedElement.width = node.width() * node.scaleX();
+          updatedElement.height = node.height() * node.scaleY();
+        } else if (node.getClassName() === 'Circle') {
+          updatedElement.radius = node.radius() * node.scaleX();
+        } else if (node.getClassName() === 'Text') {
+          updatedElement.fontSize = node.fontSize() * node.scaleX();
+        }
+
+        // Reset scaling
+        node.scaleX(1);
+        node.scaleY(1);
+
+        return updatedElement;
+      })
+    );
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Scheme Editor</h1>
+      <Stage
+        width={window.innerWidth - 20}
+        height={window.innerHeight - 20}
+        ref={stageRef}
+        onClick={handleStageClick} // Deselect on stage click
+        style={{ border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)} // Select the element
+                  onTransformEnd={handleTransformEnd} // Update on transform end
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  onClick={() => handleSelect(el.id)} // Select the element
+                  onTransformEnd={handleTransformEnd} // Update on transform end
+                />
+              );
+            } else if (el.type === 'text') {
+              return (
+                <Text
+                  key={el.id}
+                  id={el.id}
+                  x={el.x}
+                  y={el.y}
+                  text={el.text}
+                  fontSize={el.fontSize}
+                  draggable
+                  onClick={() => handleSelect(el.id)} // Select the element
+                  onTransformEnd={handleTransformEnd} // Update on transform end
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Transformer */}
+          <Transformer
+            ref={transformerRef}
+            anchorSize={8} // Size of the resize handles
+            borderStroke="blue" // Border color
+            anchorFill="white" // Handle fill color
+            anchorStrokeWidth={1} // Handle border width
+          />
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **How It Works**
+
+1. **Selection:**
+   - Clicking on a shape sets its `id` as `selectedId`.
+   - The `Transformer` attaches to the selected element using `findOne`.
+
+2. **Resizing:**
+   - The `Transformer` handles provide visual feedback for resizing.
+   - The element's dimensions are updated using `onTransformEnd`.
+
+3. **Scaling:**
+   - Resizing considers `node.scaleX()` and `node.scaleY()` to account for scaling applied during the transformation.
+
+4. **Deselect:**
+   - Clicking outside any shape deselects all elements, detaching the `Transformer`.
+
+---
+
+### **Transformer Styling**
+
+You can customize the `Transformer` with these properties:
+
+- **`anchorSize`**: Size of the resize handles.
+- **`borderStroke`**: Color of the border around the selected shape.
+- **`anchorFill`**: Color inside the resize handles.
+- **`anchorStrokeWidth`**: Border width of the resize handles.
+
+---
+
+### **Troubleshooting**
+
+1. **The Transformer Is Not Visible:**
+   - Ensure the `id` of the shape matches the `selectedId` exactly.
+   - Ensure the `Transformer` is correctly attached using `nodes([node])`.
+
+2. **Elements Don't Resize Properly:**
+   - Reset scaling after resizing:
+     ```javascript
+     node.scaleX(1);
+     node.scaleY(1);
+     ```
+
+3. **Handles Are Too Small/Large:**
+   - Adjust `anchorSize` in the `Transformer` configuration.
+
+---
+
+### **Enhancements**
+
+1. **Rotation:**
+   - Enable rotation handles by default with the `Transformer`.
+
+2. **Snap to Grid:**
+   - Implement grid snapping for precise transformations.
+
+3. **Multiple Selection:**
+   - Allow selecting and transforming multiple elements.
+
+---
+
+This approach makes it easy to create a **Visio-like editor** in **Konva.js** with interactive resizing and transformation. Let me know if you need further customizations! 😊

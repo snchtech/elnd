@@ -1,0 +1,288 @@
+Для того, щоб реалізувати підтримку альбомів, де кожен альбом є папкою з набором JSON файлів схем, потрібно адаптувати структуру каталогу `scheme_src` і логіку зчитування даних. Ось як це можна реалізувати:
+
+---
+
+### **Новий Формат Каталогу**
+
+1. **Індивідуальні схеми:**
+   - Залишаються як JSON-файли в кореневій папці `scheme_src`.
+
+2. **Альбоми:**
+   - Представлені як папки всередині `scheme_src`, де кожна папка є альбомом, а її вміст — JSON-файли схем, що належать до цього альбому.
+
+#### Приклад структури каталогу:
+```
+scheme_src/
+  scheme1.json
+  scheme2.json
+  album1/
+    album_info.json
+    scheme3.json
+    scheme4.json
+  album2/
+    album_info.json
+    scheme5.json
+    scheme6.json
+```
+
+- **`album_info.json`**: Містить загальну інформацію про альбом.
+  ```json
+  {
+    "album_id": "album1",
+    "album_name": "Альбом 1",
+    "department": "IT"
+  }
+  ```
+
+- **Схеми в альбомах**: Мають таку саму структуру, як окремі схеми.
+
+---
+
+### **Оновлений Endpoint для Зчитування Даних**
+
+#### **Файл: `/pages/api/schemes.js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'GET') {
+    const department = req.query.department; // Фільтрація за відділом
+    const schemeSrcPath = path.join(process.cwd(), 'scheme_src');
+
+    try {
+      const items = fs.readdirSync(schemeSrcPath, { withFileTypes: true });
+
+      const individualSchemes = [];
+      const albums = [];
+
+      items.forEach((item) => {
+        const itemPath = path.join(schemeSrcPath, item.name);
+
+        if (item.isFile() && item.name.endsWith('.json')) {
+          // Зчитуємо індивідуальні схеми
+          const fileContent = JSON.parse(fs.readFileSync(itemPath, 'utf-8'));
+          if (!department || fileContent.department === department) {
+            individualSchemes.push(fileContent);
+          }
+        } else if (item.isDirectory()) {
+          // Зчитуємо альбоми
+          const albumInfoPath = path.join(itemPath, 'album_info.json');
+          if (fs.existsSync(albumInfoPath)) {
+            const albumInfo = JSON.parse(fs.readFileSync(albumInfoPath, 'utf-8'));
+
+            // Зчитуємо схеми альбому
+            const albumSchemes = fs
+              .readdirSync(itemPath)
+              .filter((file) => file !== 'album_info.json' && file.endsWith('.json'))
+              .map((file) => {
+                const schemePath = path.join(itemPath, file);
+                const schemeData = JSON.parse(fs.readFileSync(schemePath, 'utf-8'));
+                return schemeData;
+              });
+
+            if (!department || albumInfo.department === department) {
+              albums.push({
+                ...albumInfo,
+                schemes: albumSchemes,
+              });
+            }
+          }
+        }
+      });
+
+      res.status(200).json({ albums, individualSchemes });
+    } catch (error) {
+      console.error('Error reading schemes:', error);
+      res.status(500).json({ error: 'Error reading schemes.' });
+    }
+  } else {
+    res.setHeader('Allow', ['GET']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **Оновлений Frontend для Відображення Альбомів та Схем**
+
+#### **Файл: `/pages/schemes.js`**
+
+```javascript
+import React, { useEffect, useState } from 'react';
+import { Button, Select, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Collapse, IconButton } from '@mui/material';
+import { Delete, Edit, Album, InsertDriveFile, ExpandMore, ExpandLess } from '@mui/icons-material';
+
+const SchemesPage = () => {
+  const [schemes, setSchemes] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [department, setDepartment] = useState(''); // Вибраний відділ
+  const [departments, setDepartments] = useState(['IT', 'HR', 'Finance']); // Приклад відділів
+  const [expandedAlbum, setExpandedAlbum] = useState(null); // Розгорнутий альбом
+
+  // Завантаження даних
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/schemes?department=${department}`);
+        const data = await response.json();
+        setAlbums(data.albums);
+        setSchemes(data.individualSchemes);
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchData();
+  }, [department]);
+
+  // Видалення схеми або альбому
+  const handleDelete = async (id, isAlbum) => {
+    if (confirm(`Ви впевнені, що хочете видалити ${isAlbum ? 'альбом' : 'схему'}?`)) {
+      try {
+        const response = await fetch('/api/schemes/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheme_id: id }),
+        });
+
+        if (response.ok) {
+          alert(`${isAlbum ? 'Альбом' : 'Схема'} успішно видалено.`);
+          if (isAlbum) {
+            setAlbums((prev) => prev.filter((album) => album.album_id !== id));
+          } else {
+            setSchemes((prev) => prev.filter((scheme) => scheme.scheme_id !== id));
+          }
+        } else {
+          const errorData = await response.json();
+          alert(`Помилка: ${errorData.error}`);
+        }
+      } catch (error) {
+        console.error('Error deleting scheme/album:', error);
+        alert('Помилка видалення.');
+      }
+    }
+  };
+
+  // Розгортання альбому
+  const toggleAlbum = (albumId) => {
+    setExpandedAlbum((prev) => (prev === albumId ? null : albumId));
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Каталог схем та альбомів</h1>
+
+      {/* Фільтр за відділом */}
+      <div style={{ marginBottom: '20px' }}>
+        <Select
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          displayEmpty
+          style={{ width: '200px' }}
+        >
+          <MenuItem value="">Всі відділи</MenuItem>
+          {departments.map((dep) => (
+            <MenuItem key={dep} value={dep}>
+              {dep}
+            </MenuItem>
+          ))}
+        </Select>
+      </div>
+
+      {/* Таблиця схем та альбомів */}
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Тип</TableCell>
+              <TableCell>Назва</TableCell>
+              <TableCell>Відділ</TableCell>
+              <TableCell>Дії</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {/* Альбоми */}
+            {albums.map((album) => (
+              <React.Fragment key={album.album_id}>
+                <TableRow>
+                  <TableCell>
+                    <Album style={{ color: 'blue' }} />
+                  </TableCell>
+                  <TableCell>{album.album_name}</TableCell>
+                  <TableCell>{album.department}</TableCell>
+                  <TableCell>
+                    <Button onClick={() => handleDelete(album.album_id, true)} color="secondary" startIcon={<Delete />}>
+                      Видалити
+                    </Button>
+                    <IconButton onClick={() => toggleAlbum(album.album_id)}>
+                      {expandedAlbum === album.album_id ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={4} style={{ padding: 0 }}>
+                    <Collapse in={expandedAlbum === album.album_id}>
+                      <Table size="small">
+                        <TableBody>
+                          {album.schemes.map((scheme) => (
+                            <TableRow key={scheme.scheme_id}>
+                              <TableCell>
+                                <InsertDriveFile style={{ color: 'green' }} />
+                              </TableCell>
+                              <TableCell>{scheme.scheme_name}</TableCell>
+                              <TableCell>{scheme.department}</TableCell>
+                              <TableCell>
+                                <Button onClick={() => handleDelete(scheme.scheme_id, false)} color="secondary" startIcon={<Delete />}>
+                                  Видалити
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Collapse>
+                  </TableCell>
+                </TableRow>
+              </React.Fragment>
+            ))}
+
+            {/* Окремі схеми */}
+            {schemes.map((scheme) => (
+              <TableRow key={scheme.scheme_id}>
+                <TableCell>
+                  <InsertDriveFile style={{ color: 'green' }} />
+                </TableCell>
+                <TableCell>{scheme.scheme_name}</TableCell>
+                <TableCell>{scheme.department}</TableCell>
+                <TableCell>
+                  <Button onClick={() => handleDelete(scheme.scheme_id, false)} color="secondary" startIcon={<Delete />}>
+                    Видалити
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </div>
+  );
+};
+
+export default SchemesPage;
+```
+
+---
+
+### **Особливості**
+
+1. **Відображення альбомів та схем:**
+   - Альбоми мають можливість розгортання (`Collapse`), щоб показати схеми всередині.
+
+2. **Фільтрація за відділом:**
+   - Вибір відділу фільтрує як альбоми, так і схеми.
+
+3. **Видалення та редагування:**
+   - Видалення можливе для обох типів об'єктів через кнопки.

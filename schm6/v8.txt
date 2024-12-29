@@ -1,0 +1,216 @@
+Для створення **endpoint для збереження альбомів** необхідно передбачити можливість збереження даних про альбом у вигляді JSON-файлу в каталозі `scheme_src`. Кожен альбом матиме файл `album_info.json`, який зберігає метаінформацію про альбом, а також можливість додавання схем до цього альбому.
+
+---
+
+### **Пропонований Код Endpoint для Збереження Альбомів**
+
+#### **Файл: `/pages/api/albums/save.js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'POST') {
+    try {
+      const { album_id, album_name, department, schemes } = req.body;
+
+      if (!album_id || !album_name || !department) {
+        return res.status(400).json({ error: 'Album ID, name, and department are required.' });
+      }
+
+      // Path to the album folder
+      const albumPath = path.join(process.cwd(), 'scheme_src', album_id);
+
+      // Create album folder if it doesn't exist
+      if (!fs.existsSync(albumPath)) {
+        fs.mkdirSync(albumPath, { recursive: true });
+      }
+
+      // Save album_info.json
+      const albumInfo = {
+        album_id,
+        album_name,
+        department,
+        schemes: schemes || [], // Schemes can be empty initially
+      };
+
+      fs.writeFileSync(
+        path.join(albumPath, 'album_info.json'),
+        JSON.stringify(albumInfo, null, 2),
+        'utf-8'
+      );
+
+      res.status(200).json({ message: 'Album saved successfully!' });
+    } catch (error) {
+      console.error('Error saving album:', error);
+      res.status(500).json({ error: 'Error saving album.' });
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **Як Використовувати Endpoint**
+
+1. **Запит на Збереження Альбому**
+
+При створенні нового альбому, необхідно відправити запит `POST` з таким JSON-телом:
+
+```json
+{
+  "album_id": "album_12345",
+  "album_name": "My Album",
+  "department": "IT",
+  "schemes": [
+    {
+      "scheme_id": "scheme_1",
+      "scheme_name": "Scheme 1",
+      "scheme_format": "A4",
+      "department": "IT"
+    },
+    {
+      "scheme_id": "scheme_2",
+      "scheme_name": "Scheme 2",
+      "scheme_format": "A3",
+      "department": "IT"
+    }
+  ]
+}
+```
+
+2. **Структура Файлів**
+
+Після збереження альбом створить таку структуру:
+
+```
+scheme_src/
+  album_12345/
+    album_info.json
+    scheme_1.json
+    scheme_2.json
+```
+
+---
+
+### **Збереження Нових Схем в Альбом**
+
+#### **Оновлений Endpoint для Схем**
+
+Для додавання схеми до існуючого альбому потрібно:
+
+- Зчитати `album_info.json`.
+- Додати схему до списку `schemes`.
+- Зберегти нову схему у відповідний каталог.
+
+#### **Файл: `/pages/api/schemes/save.js`**
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export default function handler(req, res) {
+  if (req.method === 'POST') {
+    try {
+      const { scheme_id, scheme_name, department, scheme_format, scheme_data, album_id } = req.body;
+
+      if (!scheme_id || !scheme_name || !department) {
+        return res.status(400).json({ error: 'Scheme ID, name, and department are required.' });
+      }
+
+      const basePath = album_id
+        ? path.join(process.cwd(), 'scheme_src', album_id)
+        : path.join(process.cwd(), 'scheme_src');
+
+      // Create album folder if it doesn't exist
+      if (!fs.existsSync(basePath)) {
+        fs.mkdirSync(basePath, { recursive: true });
+      }
+
+      // Save scheme JSON file
+      const schemePath = path.join(basePath, `${scheme_id}.json`);
+      const schemeDataToSave = {
+        scheme_id,
+        scheme_name,
+        department,
+        scheme_format,
+        scheme_data,
+      };
+
+      fs.writeFileSync(schemePath, JSON.stringify(schemeDataToSave, null, 2), 'utf-8');
+
+      // If the scheme is part of an album, update album_info.json
+      if (album_id) {
+        const albumInfoPath = path.join(basePath, 'album_info.json');
+        if (fs.existsSync(albumInfoPath)) {
+          const albumInfo = JSON.parse(fs.readFileSync(albumInfoPath, 'utf-8'));
+          albumInfo.schemes.push({ scheme_id, scheme_name, scheme_format, department });
+          fs.writeFileSync(albumInfoPath, JSON.stringify(albumInfo, null, 2), 'utf-8');
+        }
+      }
+
+      res.status(200).json({ message: 'Scheme saved successfully!' });
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+      res.status(500).json({ error: 'Error saving scheme.' });
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **Збереження Альбому з Фронтенда**
+
+Ось як виглядає приклад збереження альбому через запит:
+
+```javascript
+const saveAlbum = async () => {
+  try {
+    const albumData = {
+      album_id: 'album_67890',
+      album_name: 'New Album',
+      department: 'HR',
+      schemes: [], // Start with an empty album
+    };
+
+    const response = await fetch('/api/albums/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(albumData),
+    });
+
+    const result = await response.json();
+    alert(result.message);
+  } catch (error) {
+    console.error('Error saving album:', error);
+  }
+};
+```
+
+---
+
+### **Переваги Реалізації**
+
+1. **Гнучкість:**
+   - Можливість зберігати альбоми з будь-якою кількістю схем.
+   - Легке оновлення альбому.
+
+2. **Сумісність:**
+   - Альбоми та схеми працюють в єдиній структурі, спрощуючи організацію даних.
+
+3. **Модульність:**
+   - Код для альбомів та схем легко розширити або змінити.
+
+---
+
+Це дозволить гнучко працювати як з окремими схемами, так і з альбомами.

@@ -1,0 +1,235 @@
+Щоб адаптувати ваш код для нових URL і функціоналу відкриття сторінки альбому зі списком схем та кнопками для редагування і видалення, необхідно додати можливість переходу на відповідну сторінку альбому та схеми. Нижче наведено оновлений код для сторінки "Каталог схем":
+
+---
+
+### **Оновлений Код Сторінки**
+
+```javascript
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import {
+  Button,
+  Select,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Collapse,
+  IconButton,
+} from '@mui/material';
+import { Delete, Edit, Album, InsertDriveFile, ExpandMore, ExpandLess } from '@mui/icons-material';
+
+const SchemesPage = () => {
+  const [schemes, setSchemes] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [department, setDepartment] = useState(''); // Вибраний відділ
+  const [departments, setDepartments] = useState(['IT', 'HR', 'Finance']); // Приклад відділів
+  const [expandedAlbum, setExpandedAlbum] = useState(null); // Розгорнутий альбом
+  const router = useRouter(); // Для навігації
+
+  // Завантаження даних
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch(`/api/schemes?department=${department}`);
+        const data = await response.json();
+        setAlbums(data.albums);
+        setSchemes(data.individualSchemes);
+      } catch (error) {
+        console.error('Error fetching schemes:', error);
+      }
+    };
+
+    fetchData();
+  }, [department]);
+
+  // Видалення схеми або альбому
+  const handleDelete = async (id, isAlbum) => {
+    if (confirm(`Ви впевнені, що хочете видалити ${isAlbum ? 'альбом' : 'схему'}?`)) {
+      try {
+        const response = await fetch('/api/schemes/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scheme_id: id }),
+        });
+
+        if (response.ok) {
+          alert(`${isAlbum ? 'Альбом' : 'Схема'} успішно видалено.`);
+          if (isAlbum) {
+            setAlbums((prev) => prev.filter((album) => album.album_id !== id));
+          } else {
+            setSchemes((prev) => prev.filter((scheme) => scheme.scheme_id !== id));
+          }
+        } else {
+          const errorData = await response.json();
+          alert(`Помилка: ${errorData.error}`);
+        }
+      } catch (error) {
+        console.error('Error deleting scheme/album:', error);
+        alert('Помилка видалення.');
+      }
+    }
+  };
+
+  // Розгортання альбому
+  const toggleAlbum = (albumId) => {
+    setExpandedAlbum((prev) => (prev === albumId ? null : albumId));
+  };
+
+  // Перехід на сторінку альбому
+  const handleAlbumClick = (albumId) => {
+    router.push(`/albums/${albumId}`); // Перехід до сторінки альбому
+  };
+
+  // Перехід на сторінку схеми
+  const handleSchemeClick = (schemeId) => {
+    router.push(`/schemes/${schemeId}`); // Перехід до сторінки схеми
+  };
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Каталог схем та альбомів</h1>
+
+      {/* Фільтр за відділом */}
+      <div style={{ marginBottom: '20px' }}>
+        <Select
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          displayEmpty
+          style={{ width: '200px' }}
+        >
+          <MenuItem value="">Всі відділи</MenuItem>
+          {departments.map((dep) => (
+            <MenuItem key={dep} value={dep}>
+              {dep}
+            </MenuItem>
+          ))}
+        </Select>
+      </div>
+
+      {/* Таблиця схем та альбомів */}
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Тип</TableCell>
+              <TableCell>Назва</TableCell>
+              <TableCell>Відділ</TableCell>
+              <TableCell>Дії</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {/* Альбоми */}
+            {albums.map((album) => (
+              <React.Fragment key={album.album_id}>
+                <TableRow>
+                  <TableCell>
+                    <Album style={{ color: 'blue' }} />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="text"
+                      onClick={() => handleAlbumClick(album.album_id)}
+                    >
+                      {album.album_name}
+                    </Button>
+                  </TableCell>
+                  <TableCell>{album.department}</TableCell>
+                  <TableCell>
+                    <Button onClick={() => handleDelete(album.album_id, true)} color="secondary" startIcon={<Delete />}>
+                      Видалити
+                    </Button>
+                    <IconButton onClick={() => toggleAlbum(album.album_id)}>
+                      {expandedAlbum === album.album_id ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={4} style={{ padding: 0 }}>
+                    <Collapse in={expandedAlbum === album.album_id}>
+                      <Table size="small">
+                        <TableBody>
+                          {album.schemes.map((scheme) => (
+                            <TableRow key={scheme.scheme_id}>
+                              <TableCell>
+                                <InsertDriveFile style={{ color: 'green' }} />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="text"
+                                  onClick={() => handleSchemeClick(scheme.scheme_id)}
+                                >
+                                  {scheme.scheme_name}
+                                </Button>
+                              </TableCell>
+                              <TableCell>{scheme.department}</TableCell>
+                              <TableCell>
+                                <Button
+                                  onClick={() => handleDelete(scheme.scheme_id, false)}
+                                  color="secondary"
+                                  startIcon={<Delete />}
+                                >
+                                  Видалити
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Collapse>
+                  </TableCell>
+                </TableRow>
+              </React.Fragment>
+            ))}
+
+            {/* Окремі схеми */}
+            {schemes.map((scheme) => (
+              <TableRow key={scheme.scheme_id}>
+                <TableCell>
+                  <InsertDriveFile style={{ color: 'green' }} />
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="text"
+                    onClick={() => handleSchemeClick(scheme.scheme_id)}
+                  >
+                    {scheme.scheme_name}
+                  </Button>
+                </TableCell>
+                <TableCell>{scheme.department}</TableCell>
+                <TableCell>
+                  <Button
+                    onClick={() => handleDelete(scheme.scheme_id, false)}
+                    color="secondary"
+                    startIcon={<Delete />}
+                  >
+                    Видалити
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </div>
+  );
+};
+
+export default SchemesPage;
+```
+
+---
+
+### **Основні Зміни**
+1. **Перехід до сторінки альбому:**
+   - Додано функцію `handleAlbumClick`, яка перенаправляє на `/albums/[albumId]`.
+
+2. **Перехід до сторінки схеми:**
+   - Додано функцію `handleSchemeClick`, яка перенаправляє на `/schemes/[schemeId]`.
+
+3. **Кнопки у таблиці:**
+   - Імена альбомів та схем стали інтерактивними кнопками для переходу на відповідні сторінки.

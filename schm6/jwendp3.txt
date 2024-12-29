@@ -1,0 +1,111 @@
+Ось приклад функції `validateJWT`, яка використовує вбудований пакет `APEX_JWT` для перевірки JWT токенів у Oracle APEX. Пакет `APEX_JWT` надає зручний спосіб обробки і перевірки JWT.
+
+---
+
+### Реалізація `validateJWT` за допомогою `APEX_JWT`
+
+```sql
+CREATE OR REPLACE FUNCTION validateJWT(p_token IN VARCHAR2) RETURN BOOLEAN IS
+    v_jwt_header   CLOB;
+    v_jwt_payload  CLOB;
+    v_jwt_signature CLOB;
+    v_claims       APEX_JWT.T_CLAIMS;
+    v_expiration   NUMBER;
+    v_current_time NUMBER := FLOOR(SYSTIMESTAMP AT TIME ZONE 'UTC' - TO_DATE('1970-01-01', 'YYYY-MM-DD')) * 86400; -- Поточний час у секундах з 1970-01-01
+    v_is_valid     BOOLEAN := FALSE;
+BEGIN
+    -- Розбираємо JWT
+    APEX_JWT.DECODE(
+        p_jwt             => p_token,
+        p_secret          => 'YOUR_SECRET_KEY', -- Ваш секретний ключ
+        p_claims          => v_claims,
+        p_header          => v_jwt_header,
+        p_payload         => v_jwt_payload,
+        p_signature       => v_jwt_signature
+    );
+
+    -- Перевіряємо expiration (exp)
+    v_expiration := TO_NUMBER(v_claims.EXP);
+    IF v_expiration < v_current_time THEN
+        RETURN FALSE; -- Токен протермінований
+    END IF;
+
+    -- Опціональні перевірки (aud, iss)
+    IF v_claims.AUD IS NOT NULL AND v_claims.AUD != 'your_audience' THEN
+        RETURN FALSE; -- Невідповідний "audience"
+    END IF;
+
+    IF v_claims.ISS IS NOT NULL AND v_claims.ISS != 'your_issuer' THEN
+        RETURN FALSE; -- Невідповідний "issuer"
+    END IF;
+
+    -- Якщо всі перевірки пройдено
+    v_is_valid := TRUE;
+
+    RETURN v_is_valid;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE; -- У разі помилки токен вважається невалідним
+END;
+/
+```
+
+---
+
+### Як це працює
+
+1. **`APEX_JWT.DECODE`:**
+   Цей метод автоматично:
+   - Розділяє JWT на `header`, `payload`, `signature`.
+   - Перевіряє підпис токена за допомогою секретного ключа.
+
+2. **Параметри перевірки:**
+   - **`EXP` (Expiration):** Термін дії токена.
+   - **`AUD` (Audience):** Перевіряється відповідність цільового призначення токена.
+   - **`ISS` (Issuer):** Перевіряється відповідність випускаючого сервера.
+
+3. **Секретний ключ:**
+   Замініть `'YOUR_SECRET_KEY'` на ваш реальний секретний ключ, який використовується для підпису токенів.
+
+---
+
+### Додаткові Перевірки
+
+- **Аудиторія (`aud`):**
+  Якщо ваші токени мають параметр `aud`, переконайтеся, що його значення відповідає очікуваному.
+
+- **Видавець (`iss`):**
+  Якщо ваші токени мають параметр `iss`, перевірте, чи збігається він з очікуваним значенням.
+
+- **Термін дії (`exp`):**
+  Поле `exp` автоматично перетворюється у властивість `v_claims.EXP`, яку можна перевірити.
+
+---
+
+### Приклад Виклику
+
+```sql
+BEGIN
+    IF validateJWT('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE2ODMwMzkwMjJ9.RdCjmtM9I9C97kTzkejeFYOsp3FhFyGeFt5lxFZG9OA') THEN
+        DBMS_OUTPUT.PUT_LINE('Token is valid');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Token is invalid');
+    END IF;
+END;
+```
+
+---
+
+### Переваги Використання `APEX_JWT`
+1. **Простота:**
+   Пакет автоматично розбирає і перевіряє токен, значно скорочуючи код.
+   
+2. **Безпека:**
+   Використовується стандартний метод HMAC для перевірки підпису.
+
+3. **Гнучкість:**
+   Можна легко додати перевірки для інших полів токена (`sub`, `nbf`, тощо).
+
+---
+
+Якщо потрібна допомога з інтеграцією або уточнення функціоналу, дайте знати!

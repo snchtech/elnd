@@ -1,0 +1,119 @@
+Якщо JWT-токен передається через URL як параметр, наприклад, `/?x01=tokenvalue`, то ви можете використовувати функцію `validateJWT`, адаптовану до такого сценарію. Ось приклад:
+
+---
+
+### Реалізація `validateJWT` для параметра `x01`
+
+```sql
+CREATE OR REPLACE FUNCTION validateJWT RETURN BOOLEAN IS
+    v_token          VARCHAR2(4000);
+    v_jwt_header     CLOB;
+    v_jwt_payload    CLOB;
+    v_jwt_signature  CLOB;
+    v_claims         APEX_JWT.T_CLAIMS;
+    v_expiration     NUMBER;
+    v_current_time   NUMBER := FLOOR(SYSTIMESTAMP AT TIME ZONE 'UTC' - TO_DATE('1970-01-01', 'YYYY-MM-DD')) * 86400; -- Поточний час у секундах з 1970-01-01
+    v_is_valid       BOOLEAN := FALSE;
+BEGIN
+    -- Отримуємо токен з параметра x01
+    v_token := APEX_APPLICATION.G_X01;
+
+    -- Якщо токен не переданий, повертаємо FALSE
+    IF v_token IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Розбираємо і перевіряємо JWT
+    APEX_JWT.DECODE(
+        p_jwt             => v_token,
+        p_secret          => 'YOUR_SECRET_KEY', -- Ваш секретний ключ
+        p_claims          => v_claims,
+        p_header          => v_jwt_header,
+        p_payload         => v_jwt_payload,
+        p_signature       => v_jwt_signature
+    );
+
+    -- Перевіряємо expiration (exp)
+    v_expiration := TO_NUMBER(v_claims.EXP);
+    IF v_expiration < v_current_time THEN
+        RETURN FALSE; -- Токен протермінований
+    END IF;
+
+    -- Опціональні перевірки (aud, iss)
+    IF v_claims.AUD IS NOT NULL AND v_claims.AUD != 'your_audience' THEN
+        RETURN FALSE; -- Невідповідний "audience"
+    END IF;
+
+    IF v_claims.ISS IS NOT NULL AND v_claims.ISS != 'your_issuer' THEN
+        RETURN FALSE; -- Невідповідний "issuer"
+    END IF;
+
+    -- Якщо всі перевірки пройдено
+    v_is_valid := TRUE;
+
+    RETURN v_is_valid;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE; -- У разі помилки токен вважається невалідним
+END;
+/
+```
+
+---
+
+### Як це працює:
+
+1. **Отримання токена з URL параметра:**
+   Токен зчитується з параметра `x01`, доступного через `APEX_APPLICATION.G_X01`.
+
+2. **Перевірка токена:**
+   - Токен передається у `APEX_JWT.DECODE` для перевірки підпису і отримання claims.
+   - Перевіряється `exp` (термін дії токена).
+   - Опціонально перевіряються `aud` (цільова аудиторія) і `iss` (видавець).
+
+3. **Результат:**
+   - Функція повертає `TRUE`, якщо токен валідний.
+   - Якщо токен не переданий або невалідний, повертається `FALSE`.
+
+---
+
+### Використання в RESTful Web Service
+
+Ось як можна використати `validateJWT` у RESTful Web Service:
+
+```plsql
+BEGIN
+    -- Перевіряємо токен
+    IF NOT validateJWT THEN
+        owa_util.status_line(401, 'Unauthorized');
+        htp.p('{"status": "Помилка: Невалідний токен"}');
+        RETURN;
+    END IF;
+
+    -- Виконання основної логіки
+    htp.p('{"status": "Токен валідний, доступ дозволено"}');
+END;
+```
+
+---
+
+### Приклад URL-запиту:
+
+```http
+GET https://your-apex-domain/ords/<workspace>/<module>?x01=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MDAwMDAwMDB9.2YbNCyOwIfE8-mIpXuHkjO4VcFwMuBlW5RxoZ-wFCEc
+```
+
+---
+
+### Додаткові Примітки:
+
+1. **Секретний ключ:**
+   Замініть `'YOUR_SECRET_KEY'` на ваш реальний секретний ключ.
+
+2. **Обробка помилок:**
+   У разі помилки або невалідного токена функція повертає `FALSE`, і RESTful Web Service може відправити відповідь із кодом 401.
+
+3. **Параметри перевірки:**
+   Додайте перевірки для інших claims, якщо це потрібно (`sub`, `nbf`, `iat` тощо).
+
+Цей підхід дозволяє інтегрувати перевірку JWT в APEX з мінімумом зусиль.

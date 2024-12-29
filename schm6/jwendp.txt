@@ -1,0 +1,115 @@
+Щоб додати перевірку JWT-токена в Oracle APEX і дозволити запускати процедуру тільки для валідного токена, виконайте наступні дії:
+
+---
+
+### 1. **Додати перевірку токена в APEX RESTful Web Service**
+
+#### PL/SQL Код для перевірки JWT
+Припустимо, що у вас є функція `validateJWT`, яка повертає `TRUE`, якщо токен валідний, інакше `FALSE`.
+
+Використовуйте її у вашому RESTful Web Service:
+
+```plsql
+DECLARE
+    v_token    VARCHAR2(4000);
+    v_result   VARCHAR2(4000);
+BEGIN
+    -- Отримуємо токен з HTTP-заголовків
+    v_token := apex_web_service.g_headers('Authorization');
+
+    -- Видаляємо префікс 'Bearer ' (якщо присутній)
+    IF v_token LIKE 'Bearer %' THEN
+        v_token := SUBSTR(v_token, 8);
+    END IF;
+
+    -- Перевіряємо токен
+    IF NOT validateJWT(v_token) THEN
+        -- Якщо токен не валідний, завершуємо з помилкою
+        owa_util.status_line(401, 'Unauthorized');
+        htp.p('{"status":"Помилка: невалідний токен"}');
+        RETURN;
+    END IF;
+
+    -- Викликаємо процедуру
+    my_procedure(v_result);
+
+    -- Формуємо JSON-відповідь
+    htp.p('{"status": "' || v_result || '"}');
+EXCEPTION
+    WHEN OTHERS THEN
+        owa_util.status_line(500, 'Internal Server Error');
+        htp.p('{"status":"Помилка: ' || SQLERRM || '"}');
+END;
+```
+
+#### Основні моменти:
+1. **Токен передається в заголовку `Authorization`:**
+   ```
+   Authorization: Bearer <your-jwt-token>
+   ```
+2. **Функція `validateJWT`:** Ви вже маєте цю функцію на рівні APEX, яка перевіряє дійсність токена.
+
+3. **HTTP Статуси:**
+   - `401 Unauthorized` для невалідного токена.
+   - `500 Internal Server Error` для інших помилок.
+
+---
+
+### 2. **Оновлений Node.js Код з Fetch**
+
+Ось приклад запиту на ваш APEX RESTful Web Service з використанням `fetch`:
+
+```javascript
+async function callOracleEndpoint() {
+    const jwtToken = 'YOUR_JWT_TOKEN_HERE'; // Замініть на ваш токен
+
+    try {
+        const response = await fetch('https://your-apex-domain/ords/<workspace>/<module>/<endpoint>', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${jwtToken}`
+            }
+        });
+
+        // Перевірка статусу відповіді
+        if (response.status === 401) {
+            console.error('Помилка: Невалідний токен');
+            return;
+        } else if (!response.ok) {
+            console.error('Помилка:', await response.text());
+            return;
+        }
+
+        // Обробка успішної відповіді
+        const data = await response.json();
+        console.log('Response:', data);
+    } catch (error) {
+        console.error('Помилка запиту:', error.message);
+    }
+}
+
+callOracleEndpoint();
+```
+
+---
+
+### 3. **Покрокова Інструкція**
+
+1. **Передавання токена:**
+   У заголовку `Authorization` передайте ваш JWT токен у форматі:
+   ```
+   Authorization: Bearer <your-jwt-token>
+   ```
+
+2. **Перевірка на стороні APEX:**
+   Використовуйте функцію `validateJWT` для перевірки токена перед виконанням SQL-процедури.
+
+3. **Обробка помилок:**
+   На рівні Node.js перевіряйте статус відповіді:
+   - `401` означає невалідний токен.
+   - Інші помилки обробляються через `response.ok` або `catch`.
+
+---
+
+Це дозволить забезпечити безпеку доступу до вашої SQL-процедури і спростить інтеграцію між Node.js та Oracle APEX.

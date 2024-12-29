@@ -1,0 +1,106 @@
+Ось приклад реалізації функції `validateJWT` в Oracle APEX для перевірки JWT-токенів. Функція перевіряє підпис токена, дійсність (exp) і опціонально інші поля, як-от `aud`, `iss`, або `sub`.
+
+---
+
+### Реалізація `validateJWT`
+
+```sql
+CREATE OR REPLACE FUNCTION validateJWT(p_token IN VARCHAR2) RETURN BOOLEAN IS
+    v_header         VARCHAR2(4000);
+    v_payload        VARCHAR2(4000);
+    v_signature      VARCHAR2(4000);
+    v_decoded_header VARCHAR2(4000);
+    v_decoded_payload VARCHAR2(4000);
+    v_signature_check VARCHAR2(4000);
+    v_key            VARCHAR2(4000) := 'YOUR_SECRET_KEY'; -- Задайте ваш секретний ключ
+    v_expiration     NUMBER;
+    v_current_time   NUMBER := FLOOR(SYSTIMESTAMP AT TIME ZONE 'UTC' - TO_DATE('1970-01-01', 'YYYY-MM-DD')) * 86400; -- Поточний час в секундах з 1970-01-01
+    v_is_valid       BOOLEAN := FALSE;
+BEGIN
+    -- Розділяємо токен на частини (header.payload.signature)
+    v_header := REGEXP_SUBSTR(p_token, '^[^\.]+');
+    v_payload := REGEXP_SUBSTR(p_token, '\.([^\.]+)\.', 1, 1);
+    v_signature := REGEXP_SUBSTR(p_token, '[^\.]+$', 1, 1);
+
+    -- Декодуємо header і payload з Base64
+    v_decoded_header := UTL_RAW.CAST_TO_VARCHAR2(UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(v_header)));
+    v_decoded_payload := UTL_RAW.CAST_TO_VARCHAR2(UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(v_payload)));
+
+    -- Перевіряємо expiration (exp)
+    v_expiration := JSON_EXT.GET_NUMBER(v_decoded_payload, 'exp');
+    IF v_expiration < v_current_time THEN
+        RETURN FALSE; -- Токен протермінований
+    END IF;
+
+    -- Перевіряємо підпис (signature)
+    v_signature_check := UTL_RAW.CAST_TO_VARCHAR2(
+        UTL_ENCODE.BASE64_ENCODE(
+            UTL_RAW.CAST_TO_RAW(
+                APEX_UTIL.HMAC_SHA256(v_header || '.' || v_payload, v_key)
+            )
+        )
+    );
+
+    IF v_signature = v_signature_check THEN
+        v_is_valid := TRUE;
+    END IF;
+
+    RETURN v_is_valid;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE; -- У разі будь-якої помилки вважаємо токен невалідним
+END;
+/
+```
+
+---
+
+### Опис функції
+
+1. **Аргументи:**
+   - `p_token` — JWT-токен, переданий клієнтом.
+
+2. **Логіка функції:**
+   - **Розділення токена**: Токен розділяється на три частини: `header`, `payload`, `signature`.
+   - **Декодування Base64**: `header` і `payload` декодуються для перевірки JSON-даних.
+   - **Перевірка дійсності**: Перевіряється, чи не минув термін дії токена (поле `exp`).
+   - **Перевірка підпису**: Генерується підпис HMAC SHA256 для `header.payload` з використанням секретного ключа, і він порівнюється з підписом токена.
+
+3. **JSON доступ:**
+   - JSON значення з `payload` витягуються за допомогою пакета `JSON_EXT`.
+
+4. **Повернення:**
+   - Функція повертає `TRUE`, якщо токен валідний, інакше `FALSE`.
+
+---
+
+### Необхідні налаштування
+
+1. **Секретний ключ:**
+   Замініть `YOUR_SECRET_KEY` на ваш секретний ключ, який використовується для підпису токенів.
+
+2. **Пакет `JSON_EXT`:**
+   Використовується для парсингу JSON. Якщо цей пакет недоступний, можна скористатися `PL/JSON` або вбудованим Oracle JSON API (`JSON_OBJECT_T`).
+
+---
+
+### Приклад Виклику
+
+```sql
+BEGIN
+    IF validateJWT('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE2ODMwMzkwMjJ9.RdCjmtM9I9C97kTzkejeFYOsp3FhFyGeFt5lxFZG9OA') THEN
+        DBMS_OUTPUT.PUT_LINE('Token is valid');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Token is invalid');
+    END IF;
+END;
+```
+
+---
+
+### Додаткові Параметри для Перевірки
+- **aud (Audience)**: Перевірити, чи токен призначений для правильного сервісу.
+- **iss (Issuer)**: Перевірити, чи токен випущений коректним сервером.
+- **sub (Subject)**: Перевірити, чи токен стосується коректного користувача.
+
+Цей підхід дозволяє ефективно перевіряти JWT токени в Oracle APEX.

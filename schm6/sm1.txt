@@ -1,0 +1,164 @@
+
+
+Ось як реалізувати праву панель на всю висоту екрану, яка відкривається при кліку на елемент `Konva`, використовуючи **Material-UI**. Панель міститиме два текстових поля (`input`) для введення назви елемента та позначення елемента.
+
+---
+
+### **Код Компонента**
+
+```javascript
+import React, { useState } from 'react';
+import { Stage, Layer, Rect } from 'react-konva';
+import {
+  Drawer,
+  TextField,
+  Typography,
+  Button,
+  Box,
+} from '@mui/material';
+
+const KonvaWithPanel = () => {
+  const [elements, setElements] = useState([
+    { id: 1, x: 100, y: 100, width: 100, height: 100, fill: 'red', name: '', designation: '' },
+    { id: 2, x: 300, y: 150, width: 150, height: 100, fill: 'blue', name: '', designation: '' },
+  ]);
+  const [selectedElement, setSelectedElement] = useState(null); // Currently selected element
+  const [isDrawerOpen, setDrawerOpen] = useState(false); // Panel visibility
+
+  const handleElementClick = (element) => {
+    setSelectedElement(element);
+    setDrawerOpen(true);
+  };
+
+  const handleInputChange = (field, value) => {
+    setElements((prevElements) =>
+      prevElements.map((el) =>
+        el.id === selectedElement.id ? { ...el, [field]: value } : el
+      )
+    );
+    setSelectedElement((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    setSelectedElement(null);
+  };
+
+  return (
+    <div>
+      {/* Konva Canvas */}
+      <Stage width={window.innerWidth - 300} height={window.innerHeight}>
+        <Layer>
+          {elements.map((el) => (
+            <Rect
+              key={el.id}
+              x={el.x}
+              y={el.y}
+              width={el.width}
+              height={el.height}
+              fill={el.fill}
+              draggable
+              onClick={() => handleElementClick(el)}
+              onDragEnd={(e) => {
+                const { x, y } = e.target.attrs;
+                setElements((prev) =>
+                  prev.map((item) =>
+                    item.id === el.id ? { ...item, x, y } : item
+                  )
+                );
+              }}
+            />
+          ))}
+        </Layer>
+      </Stage>
+
+      {/* Right Panel */}
+      <Drawer
+        anchor="right"
+        open={isDrawerOpen}
+        onClose={handleDrawerClose}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 300,
+            padding: 2,
+            backgroundColor: '#f9f9f9',
+          },
+        }}
+      >
+        {selectedElement ? (
+          <Box>
+            <Typography variant="h6" sx={{ marginBottom: 2 }}>
+              Edit Element #{selectedElement.id}
+            </Typography>
+
+            {/* Input for Element Name */}
+            <TextField
+              label="Element Name"
+              value={selectedElement.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
+              fullWidth
+              margin="normal"
+            />
+
+            {/* Input for Element Designation */}
+            <TextField
+              label="Element Designation"
+              value={selectedElement.designation}
+              onChange={(e) => handleInputChange('designation', e.target.value)}
+              fullWidth
+              margin="normal"
+            />
+
+            {/* Save Button */}
+            <Button
+              variant="contained"
+              color="primary"
+              fullWidth
+              onClick={handleDrawerClose}
+              sx={{ marginTop: 2 }}
+            >
+              Save
+            </Button>
+          </Box>
+        ) : (
+          <Typography variant="h6" sx={{ padding: 2 }}>
+            No Element Selected
+          </Typography>
+        )}
+      </Drawer>
+    </div>
+  );
+};
+
+export default KonvaWithPanel;
+```
+
+---
+
+### **Пояснення Коду**
+
+1. **Konva Stage**:
+   - Елементи `Rect` відображаються на полотні.
+   - При кліку на елемент викликається `handleElementClick`, який відкриває панель і передає дані про вибраний елемент.
+
+2. **Material-UI Drawer**:
+   - Панель розташована праворуч і займає всю висоту.
+   - Стилізована через `sx` та `& .MuiDrawer-paper` для ширини та фону.
+
+3. **Текстові поля**:
+   - `TextField` використовується для введення назви (`name`) та позначення (`designation`) елемента.
+   - Значення динамічно оновлюються у стані `elements` за допомогою `handleInputChange`.
+
+4. **Кнопка Save**:
+   - Закриває панель і зберігає зміни, натискаючи `Save`.
+
+---
+
+### **Результат**
+- **Екран**: 
+  - Зліва - полотна `Konva`.
+  - Справа - панель редагування вибраного елемента.
+- **Функціонал**:
+  - Клік на елемент відкриває панель.
+  - У панелі вводяться назва та позначення елемента.
+  - Кнопка `Save` зберігає зміни та закриває панель.

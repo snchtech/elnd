@@ -1,0 +1,69 @@
+DECLARE
+    v_auth_header    VARCHAR2(4000);
+    v_token          VARCHAR2(4000);
+    v_is_valid       BOOLEAN := FALSE;
+    v_request_body   CLOB;
+    v_json           JSON_OBJECT_T;
+    v_username       VARCHAR2(100);
+    v_password       VARCHAR2(100);
+BEGIN
+    -- Отримуємо Authorization заголовок
+    v_auth_header := OWA_UTIL.GET_CGI_ENV('Authorization');
+
+    -- Видаляємо "Bearer " префікс, якщо присутній
+    IF v_auth_header LIKE 'Bearer %' THEN
+        v_token := SUBSTR(v_auth_header, 8);
+    ELSE
+        v_token := NULL;
+    END IF;
+
+    -- Перевіряємо JWT токен (припускається, що функція validateJWT існує)
+    IF v_token IS NOT NULL AND validateJWT(v_token) THEN
+        v_is_valid := TRUE;
+    ELSE
+        owa_util.status_line(401, 'Unauthorized');
+        htp.p('{"status": "Невалідний токен"}');
+        RETURN;
+    END IF;
+
+    -- Зчитуємо тіло запиту
+    v_request_body := APEX_APPLICATION.G_POST_BODY;
+
+    -- Перевіряємо, чи тіло не порожнє
+    IF v_request_body IS NULL THEN
+        owa_util.status_line(400, 'Bad Request');
+        htp.p('{"status": "Порожнє тіло запиту"}');
+        RETURN;
+    END IF;
+
+    -- Розбираємо JSON тіло
+    v_json := JSON_OBJECT_T.PARSE(v_request_body);
+
+    -- Отримуємо username і password
+    v_username := v_json.get_string('username');
+    v_password := v_json.get_string('password');
+
+    -- Робимо потрібну обробку (наприклад, аутентифікація)
+    htp.p('{"status": "Успішно", "username": "' || v_username || '"}');
+EXCEPTION
+    WHEN JSON_VALUE_ERROR THEN
+        owa_util.status_line(400, 'Bad Request');
+        htp.p('{"status": "Помилка в структурі JSON"}');
+    WHEN OTHERS THEN
+        owa_util.status_line(500, 'Internal Server Error');
+        htp.p('{"status": "Внутрішня помилка сервера"}');
+END;
+
+
+
+------------------------------
+
+POST /ords/<workspace>/<module> HTTP/1.1
+Authorization: Bearer your-jwt-token
+Content-Type: application/json
+
+{
+    "username": "test_user",
+    "password": "test_pass"
+}
+

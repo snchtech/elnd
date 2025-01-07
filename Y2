@@ -1,0 +1,29 @@
+CREATE OR REPLACE PROCEDURE process_user_update (
+    p_json IN CLOB
+) AS
+    v_username VARCHAR2(100);
+    v_new_password VARCHAR2(100);
+    v_start_pos INTEGER;
+    v_end_pos INTEGER;
+BEGIN
+    -- Extract username
+    v_start_pos := INSTR(p_json, 'username') + LENGTH('username": "') + 1;
+    v_end_pos := INSTR(p_json, '",', v_start_pos);
+    v_username := SUBSTR(p_json, v_start_pos, v_end_pos - v_start_pos);
+
+    -- Extract new_password
+    v_start_pos := INSTR(p_json, 'new_password') + LENGTH('new_password": "') + 1;
+    v_end_pos := INSTR(p_json, '}', v_start_pos) - 1;
+    v_new_password := SUBSTR(p_json, v_start_pos, v_end_pos - v_start_pos + 1);
+    
+    -- Output the values for demonstration purposes
+    DBMS_OUTPUT.PUT_LINE('Username: ' || v_username);
+    DBMS_OUTPUT.PUT_LINE('New Password: ' || v_new_password);
+    
+    -- Here you can proceed with logic to handle the username and new password (e.g., update in database)
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/

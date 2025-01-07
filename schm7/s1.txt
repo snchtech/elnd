@@ -1,0 +1,202 @@
+Для реалізації прив'язки графічних елементів у схемах, з використанням **Konva.js** і **Next.js**, потрібно організувати **логіку збереження зв'язків між елементами**, які будуть оновлюватися під час переміщення будь-якого з пов'язаних елементів.
+
+Розглянемо детально, як це зробити для випадку прямокутника, лінії та кола.
+
+---
+
+### **Алгоритм Реалізації**
+
+1. **Зберігання даних про з'єднання:**
+   - Кожен елемент має унікальний `id`.
+   - Лінії також мають унікальний `id` і зберігають `from` (елемент, з якого починається з'єднання) та `to` (елемент, до якого приєднується).
+
+2. **Оновлення позицій з'єднань:**
+   - Коли елемент переміщується (`onDragEnd`), оновлюються координати лінії, яка приєднана до нього.
+
+3. **Реалізація логіки прив'язок:**
+   - Під час рендерингу лінії перевіряється актуальна позиція початкового (`from`) і кінцевого (`to`) елемента.
+
+---
+
+### **Реалізація з кодом**
+
+#### **Компонент: SchemeEditor**
+
+```javascript
+'use client';
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line } from 'react-konva';
+
+const SchemeEditor = () => {
+  const stageRef = useRef(null);
+
+  // Стан елементів
+  const [elements, setElements] = useState([
+    {
+      id: 'rect1',
+      type: 'rect',
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 50,
+      fill: 'blue',
+    },
+    {
+      id: 'circle1',
+      type: 'circle',
+      x: 300,
+      y: 150,
+      radius: 25,
+      fill: 'red',
+    },
+  ]);
+
+  // Стан ліній (з'єднань)
+  const [connections, setConnections] = useState([
+    {
+      id: 'line1',
+      from: 'rect1',
+      to: 'circle1',
+    },
+  ]);
+
+  // Оновлення координат елемента після переміщення
+  const handleDragEnd = (id, e) => {
+    const { x, y } = e.target.attrs;
+
+    // Оновити елемент
+    setElements((prevElements) =>
+      prevElements.map((el) => (el.id === id ? { ...el, x, y } : el))
+    );
+  };
+
+  // Обчислення точок для лінії з'єднання
+  const getLinePoints = (fromId, toId) => {
+    const fromElement = elements.find((el) => el.id === fromId);
+    const toElement = elements.find((el) => el.id === toId);
+
+    if (!fromElement || !toElement) return [];
+
+    // Визначення центру кожного елемента
+    const fromX =
+      fromElement.type === 'rect'
+        ? fromElement.x + fromElement.width
+        : fromElement.x;
+    const fromY =
+      fromElement.type === 'rect'
+        ? fromElement.y + fromElement.height / 2
+        : fromElement.y;
+
+    const toX =
+      toElement.type === 'rect'
+        ? toElement.x
+        : toElement.x;
+    const toY =
+      toElement.type === 'rect'
+        ? toElement.y + toElement.height / 2
+        : toElement.y;
+
+    return [fromX, fromY, toX, toY];
+  };
+
+  return (
+    <div>
+      <h3 style={{ textAlign: 'center' }}>Konva.js Scheme Editor</h3>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        style={{ background: '#f4f4f4' }}
+      >
+        <Layer>
+          {/* Рендер елементів */}
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  onDragEnd={(e) => handleDragEnd(el.id, e)}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  onDragEnd={(e) => handleDragEnd(el.id, e)}
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Рендер з'єднань */}
+          {connections.map((conn) => {
+            const points = getLinePoints(conn.from, conn.to);
+            return (
+              <Line
+                key={conn.id}
+                points={points}
+                stroke="black"
+                strokeWidth={2}
+              />
+            );
+          })}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Пояснення Реалізації**
+
+1. **Структура `elements`**:
+   - Зберігає всі графічні елементи (прямокутники, кола тощо) з координатами та характеристиками.
+
+2. **Структура `connections`**:
+   - Зберігає дані про з'єднання, включаючи `from` та `to` — це `id` елементів, між якими створено з'єднання.
+
+3. **Обчислення координат для ліній**:
+   - `getLinePoints`: Вираховує координати початкової та кінцевої точки лінії з урахуванням розмірів і позицій елементів.
+
+4. **Переміщення елементів**:
+   - `handleDragEnd`: Оновлює позиції елемента в стані та автоматично оновлює з'єднання, оскільки `connections` використовує динамічний розрахунок координат.
+
+5. **Рендеринг**:
+   - Спочатку рендеряться всі елементи (`elements`).
+   - Потім рендеряться всі лінії (`connections`), координати яких динамічно розраховуються.
+
+---
+
+### **Можливі Покращення**
+
+1. **Додавання з'єднань**:
+   - Реалізувати функціонал додавання ліній між елементами через кнопку або контекстне меню.
+
+2. **Кастомізація з'єднань**:
+   - Додати стилі для різних типів ліній, наприклад, стрілки.
+
+3. **Збереження та завантаження**:
+   - Зберігати `elements` і `connections` у базі даних або файлі для подальшого відтворення.
+
+---
+
+### **Результат**
+- Прямокутник і коло з'єднані лінією.
+- При переміщенні одного з елементів лінія автоматично оновлюється.
+- Ця логіка дозволяє легко розширювати схеми із прив'язками.

@@ -1,0 +1,261 @@
+### **Реалізація третього типу прив'язки: точки з описом, назвою та зображенням**
+
+Цей тип прив'язки реалізується як "інтерактивна точка", яка дозволяє додавати і зберігати інформацію (назва, опис, зображення) в базі даних Oracle. При перегляді схеми користувач може клікнути на точку і переглянути ці дані у вигляді модального вікна.
+
+---
+
+### **1. Структура бази даних**
+
+#### Таблиця для інтерактивних точок (`info_points`)
+
+```sql
+CREATE TABLE info_points (
+    point_id VARCHAR2(50) PRIMARY KEY,      -- Унікальний ідентифікатор точки
+    scheme_id VARCHAR2(50),                -- Схема, до якої належить точка
+    x_position NUMBER NOT NULL,            -- X-координата точки
+    y_position NUMBER NOT NULL,            -- Y-координата точки
+    title VARCHAR2(200),                   -- Назва
+    description CLOB,                      -- Опис (може бути довгим)
+    image_path VARCHAR2(500),              -- Шлях до зображення
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+- **`point_id`** — унікальний ідентифікатор точки.
+- **`scheme_id`** — прив'язка точки до конкретної схеми.
+- **`x_position`, `y_position`** — координати точки на схемі.
+- **`title`** — назва точки.
+- **`description`** — текстовий опис.
+- **`image_path`** — шлях до файлу зображення (наприклад, в папці `uploads/`).
+
+---
+
+### **2. Завантаження файлів (зображень)**
+
+#### **API для завантаження файлів**
+
+Файл: `/pages/api/upload.js`
+
+```javascript
+import fs from 'fs';
+import path from 'path';
+
+export const config = {
+  api: {
+    bodyParser: false, // Вимикаємо парсер тіла запиту для роботи з файлами
+  },
+};
+
+const uploadHandler = async (req, res) => {
+  if (req.method === 'POST') {
+    const { createWriteStream } = await import('fs');
+    const formidable = await import('formidable');
+
+    const uploadDir = path.join(process.cwd(), 'public/uploads'); // Каталог для завантаження
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const form = formidable({
+      uploadDir,
+      keepExtensions: true,
+    });
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        console.error('Error uploading file:', err);
+        return res.status(500).json({ error: 'Error uploading file.' });
+      }
+
+      const filePath = path.relative(process.cwd(), files.file.filepath);
+      res.status(200).json({ filePath });
+    });
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+};
+
+export default uploadHandler;
+```
+
+---
+
+### **3. Реалізація в інтерфейсі**
+
+#### **Компонент для додавання точки з інформацією**
+
+```javascript
+import React, { useState } from 'react';
+import { Stage, Layer, Circle } from 'react-konva';
+import { Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+
+const InfoPointEditor = ({ schemeId }) => {
+  const [points, setPoints] = useState([]);
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({ title: '', description: '', image: null });
+
+  const handleAddPoint = (e) => {
+    const stage = e.target.getStage();
+    const pointerPosition = stage.getPointerPosition();
+
+    const newPoint = {
+      id: `point_${Date.now()}`,
+      x: pointerPosition.x,
+      y: pointerPosition.y,
+      title: '',
+      description: '',
+      image: '',
+    };
+
+    setPoints((prevPoints) => [...prevPoints, newPoint]);
+  };
+
+  const handleSavePoint = async () => {
+    // Завантаження зображення
+    let imagePath = '';
+    if (formData.image) {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', formData.image);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await response.json();
+      imagePath = data.filePath;
+    }
+
+    // Оновлення даних точки
+    setPoints((prevPoints) =>
+      prevPoints.map((point) =>
+        point.id === selectedPoint.id
+          ? { ...point, title: formData.title, description: formData.description, image: imagePath }
+          : point
+      )
+    );
+
+    setIsDialogOpen(false);
+    setFormData({ title: '', description: '', image: null });
+  };
+
+  return (
+    <div>
+      <Stage width={800} height={600} onClick={handleAddPoint} style={{ border: '1px solid black' }}>
+        <Layer>
+          {points.map((point) => (
+            <Circle
+              key={point.id}
+              x={point.x}
+              y={point.y}
+              radius={10}
+              fill="blue"
+              onClick={(e) => {
+                e.cancelBubble = true; // Щоб Stage не додавав нову точку
+                setSelectedPoint(point);
+                setFormData({
+                  title: point.title,
+                  description: point.description,
+                  image: null,
+                });
+                setIsDialogOpen(true);
+              }}
+            />
+          ))}
+        </Layer>
+      </Stage>
+
+      {/* Модальне вікно для редагування точки */}
+      <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)}>
+        <DialogTitle>Редагувати Точку</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Назва"
+            value={formData.title}
+            onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+            fullWidth
+            margin="dense"
+          />
+          <TextField
+            label="Опис"
+            value={formData.description}
+            onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+            fullWidth
+            margin="dense"
+            multiline
+            rows={4}
+          />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFormData((prev) => ({ ...prev, image: e.target.files[0] }))}
+            style={{ marginTop: '10px' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsDialogOpen(false)}>Скасувати</Button>
+          <Button onClick={handleSavePoint} variant="contained" color="primary">
+            Зберегти
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </div>
+  );
+};
+
+export default InfoPointEditor;
+```
+
+---
+
+### **4. Збереження точки в базу даних**
+
+#### **API для збереження точки**
+```javascript
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    const { point_id, scheme_id, x_position, y_position, title, description, image_path } = req.body;
+
+    const connection = await oracledb.getConnection({
+      user: 'your_user',
+      password: 'your_password',
+      connectString: 'your_connection_string',
+    });
+
+    try {
+      await connection.execute(
+        `INSERT INTO info_points (point_id, scheme_id, x_position, y_position, title, description, image_path)
+         VALUES (:point_id, :scheme_id, :x_position, :y_position, :title, :description, :image_path)`,
+        { point_id, scheme_id, x_position, y_position, title, description, image_path }
+      );
+
+      await connection.commit();
+      res.status(200).json({ message: 'Point saved successfully.' });
+    } catch (error) {
+      console.error('Error saving point:', error);
+      res.status(500).json({ error: 'Failed to save point.' });
+    } finally {
+      await connection.close();
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **Результат**
+
+1. **Редактор:**
+   - Точки додаються кліком на полотні.
+   - Для кожної точки можна додати назву, опис і зображення.
+
+2. **Перегляд:**
+   - При кліку на точку в редакторі відкривається модальне вікно для редагування даних.
+
+3. **Збереження:**
+   - Точки зберігаються в базі даних Oracle разом із назвою, описом і шляхом до зображення.

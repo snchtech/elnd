@@ -1,0 +1,244 @@
+Для реалізації цього типу прив'язки з'єднань між схемами (зокрема, між різними аркушами, альбомами чи відділами), можна використовувати наступний підхід:
+
+---
+
+### **1. Архітектура даних**
+
+#### **Таблиця для точок з'єднань (`connection_points`)**
+```sql
+CREATE TABLE connection_points (
+    connection_id VARCHAR2(50) PRIMARY KEY, -- Унікальний ідентифікатор точки з'єднання
+    album_id VARCHAR2(50), -- Альбом, до якого належить з'єднання
+    scheme_id VARCHAR2(50), -- Схема, до якої належить з'єднання
+    point_name VARCHAR2(100), -- Назва точки (наприклад, "Вхід A")
+    x_position NUMBER, -- X-координата
+    y_position NUMBER, -- Y-координата
+    linked_album_id VARCHAR2(50), -- Альбом, до якого прив'язана точка
+    linked_scheme_id VARCHAR2(50), -- Схема, до якої прив'язана точка
+    linked_connection_id VARCHAR2(50), -- Зв'язана точка (ID у іншій схемі)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Ця таблиця зберігатиме:
+- **Основну інформацію про точку з'єднання** (поточний альбом, схема, координати, назва).
+- **Прив'язки до інших схем або альбомів** (посилання на інші точки з'єднання).
+
+---
+
+### **2. Інтерфейс у редакторі**
+
+На сторінці редагування додаємо окремий інтерфейс для вибору та прив'язки точок з'єднань.
+
+#### **UI для вибору точки з'єднання**
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Button, TextField, Select, MenuItem, Box, Typography } from '@mui/material';
+import { Stage, Layer, Circle, Line } from 'react-konva';
+
+const ConnectionPointManager = ({ currentSchemeId, albumId }) => {
+  const [connectionPoints, setConnectionPoints] = useState([]);
+  const [linkedPoints, setLinkedPoints] = useState([]);
+  const [selectedPoint, setSelectedPoint] = useState(null);
+  const [linkedPoint, setLinkedPoint] = useState(null);
+
+  useEffect(() => {
+    // Fetch connection points for the current scheme
+    const fetchConnectionPoints = async () => {
+      const response = await fetch(`/api/connection-points?scheme_id=${currentSchemeId}`);
+      const data = await response.json();
+      setConnectionPoints(data.points);
+    };
+
+    fetchConnectionPoints();
+  }, [currentSchemeId]);
+
+  const handleLinkPoint = async () => {
+    if (!selectedPoint || !linkedPoint) {
+      alert('Виберіть точки для зв\'язку.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/link-connection-point`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          connection_id: selectedPoint.id,
+          linked_connection_id: linkedPoint.id,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Точки успішно зв\'язані!');
+      } else {
+        alert('Помилка зв\'язку точок.');
+      }
+    } catch (error) {
+      console.error('Error linking points:', error);
+    }
+  };
+
+  const handleHighlightLinkedPoint = async (linkedConnectionId) => {
+    // Перехід на пов'язану схему та підсвічування з'єднання
+    const response = await fetch(`/api/connection-point/${linkedConnectionId}`);
+    const data = await response.json();
+    if (data.point) {
+      alert(`Перехід на схему: ${data.point.scheme_id}, Підсвічено точку: ${data.point.point_name}`);
+    }
+  };
+
+  return (
+    <Box sx={{ padding: 2 }}>
+      <Typography variant="h6">Управління точками з'єднань</Typography>
+
+      <Box sx={{ marginBottom: 2 }}>
+        <Select
+          value={selectedPoint ? selectedPoint.id : ''}
+          onChange={(e) => {
+            const point = connectionPoints.find((p) => p.id === e.target.value);
+            setSelectedPoint(point);
+          }}
+          displayEmpty
+          fullWidth
+        >
+          <MenuItem value="" disabled>
+            Виберіть точку
+          </MenuItem>
+          {connectionPoints.map((point) => (
+            <MenuItem key={point.id} value={point.id}>
+              {point.point_name} (x: {point.x_position}, y: {point.y_position})
+            </MenuItem>
+          ))}
+        </Select>
+      </Box>
+
+      <Box sx={{ marginBottom: 2 }}>
+        <TextField
+          label="Зв'язана точка (ID)"
+          value={linkedPoint ? linkedPoint.id : ''}
+          onChange={(e) => {
+            const point = linkedPoints.find((p) => p.id === e.target.value);
+            setLinkedPoint(point);
+          }}
+          fullWidth
+        />
+      </Box>
+
+      <Button variant="contained" color="primary" onClick={handleLinkPoint}>
+        Зв'язати
+      </Button>
+
+      <Typography variant="h6" sx={{ marginTop: 4 }}>
+        Список з'єднань:
+      </Typography>
+      <ul>
+        {connectionPoints.map((point) => (
+          <li key={point.id}>
+            {point.point_name} → {point.linked_connection_id ? (
+              <Button onClick={() => handleHighlightLinkedPoint(point.linked_connection_id)}>
+                Перейти до з'єднання
+              </Button>
+            ) : (
+              'Немає зв\'язку'
+            )}
+          </li>
+        ))}
+      </ul>
+    </Box>
+  );
+};
+
+export default ConnectionPointManager;
+```
+
+---
+
+### **3. Реалізація API**
+
+#### **Отримання точок з'єднань**
+```javascript
+export default async function handler(req, res) {
+  const { scheme_id } = req.query;
+
+  if (req.method === 'GET') {
+    const connection = await oracledb.getConnection({
+      user: 'your_user',
+      password: 'your_password',
+      connectString: 'your_connection_string',
+    });
+
+    try {
+      const result = await connection.execute(
+        `SELECT * FROM connection_points WHERE scheme_id = :scheme_id`,
+        { scheme_id }
+      );
+
+      res.status(200).json({ points: result.rows });
+    } catch (error) {
+      console.error('Error fetching connection points:', error);
+      res.status(500).json({ error: 'Failed to fetch connection points.' });
+    } finally {
+      await connection.close();
+    }
+  }
+}
+```
+
+#### **Зв'язування точок**
+```javascript
+export default async function handler(req, res) {
+  const { connection_id, linked_connection_id } = req.body;
+
+  if (req.method === 'POST') {
+    const connection = await oracledb.getConnection({
+      user: 'your_user',
+      password: 'your_password',
+      connectString: 'your_connection_string',
+    });
+
+    try {
+      await connection.execute(
+        `UPDATE connection_points 
+         SET linked_connection_id = :linked_connection_id 
+         WHERE connection_id = :connection_id`,
+        { connection_id, linked_connection_id }
+      );
+
+      await connection.commit();
+      res.status(200).json({ message: 'Connection points linked successfully.' });
+    } catch (error) {
+      console.error('Error linking connection points:', error);
+      res.status(500).json({ error: 'Failed to link connection points.' });
+    } finally {
+      await connection.close();
+    }
+  }
+}
+```
+
+---
+
+### **4. Підсвічування З'єднань**
+Після переходу на схему викликати функцію підсвічування через `Konva`.
+
+```javascript
+const highlightElement = (id) => {
+  setElements((prev) =>
+    prev.map((el) => (el.id === id ? { ...el, fill: 'yellow' } : el))
+  );
+};
+```
+
+---
+
+### **Результат**
+1. **Інтерфейс для управління точками з'єднань:**
+   - Вибір точки на поточній схемі.
+   - Вибір точки, до якої прив'язати.
+   - Кнопка для прив'язки.
+
+2. **Функціонал переходу між схемами:**
+   - Користувач може переглянути зв'язану схему.
+   - Елемент у зв'язаній схемі підсвічується для ідентифікації.

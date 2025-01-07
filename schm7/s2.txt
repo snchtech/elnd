@@ -1,0 +1,228 @@
+### **Реалізація функціоналу додавання ліній між елементами через кнопку або контекстне меню**
+
+---
+
+### **Опис функціоналу**
+1. **Вибір елементів для з'єднання**:
+   - Користувач може вибрати два елементи (початковий і кінцевий) для з'єднання.
+   - Використовується або контекстне меню (при натисканні правою кнопкою миші) або кнопка "Додати з'єднання".
+
+2. **Додавання лінії**:
+   - Після вибору елементів і підтвердження додається нове з'єднання у стан `connections`.
+
+3. **Автоматичне оновлення**:
+   - Лінії динамічно оновлюються при переміщенні елементів.
+
+---
+
+### **Код Реалізації**
+
+#### **Компонент: SchemeEditor**
+
+```javascript
+'use client';
+import React, { useRef, useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line } from 'react-konva';
+import { Menu, MenuItem, Button } from '@mui/material';
+
+const SchemeEditor = () => {
+  const stageRef = useRef(null);
+
+  // Стан елементів
+  const [elements, setElements] = useState([
+    { id: 'rect1', type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'blue' },
+    { id: 'circle1', type: 'circle', x: 300, y: 150, radius: 25, fill: 'red' },
+  ]);
+
+  // Стан ліній (з'єднань)
+  const [connections, setConnections] = useState([]);
+
+  // Для вибору елементів з'єднання
+  const [selectedElements, setSelectedElements] = useState([]);
+  const [contextMenu, setContextMenu] = useState(null); // Позиція контекстного меню
+
+  // Обробка кліку для вибору елемента
+  const handleElementClick = (element) => {
+    if (selectedElements.length < 2) {
+      setSelectedElements((prev) => [...prev, element.id]);
+    } else {
+      alert('Ви можете вибрати лише 2 елементи для з\'єднання.');
+    }
+  };
+
+  // Додавання з'єднання
+  const addConnection = () => {
+    if (selectedElements.length === 2) {
+      setConnections((prev) => [
+        ...prev,
+        { id: `line_${Date.now()}`, from: selectedElements[0], to: selectedElements[1] },
+      ]);
+      setSelectedElements([]);
+    } else {
+      alert('Будь ласка, виберіть 2 елементи для з\'єднання.');
+    }
+  };
+
+  // Видалення вибору
+  const clearSelection = () => {
+    setSelectedElements([]);
+  };
+
+  // Контекстне меню
+  const handleContextMenu = (e, element) => {
+    e.evt.preventDefault();
+    setContextMenu({
+      mouseX: e.evt.clientX - 2,
+      mouseY: e.evt.clientY - 4,
+      element,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // Обчислення точок для лінії
+  const getLinePoints = (fromId, toId) => {
+    const fromElement = elements.find((el) => el.id === fromId);
+    const toElement = elements.find((el) => el.id === toId);
+
+    if (!fromElement || !toElement) return [];
+
+    const fromX =
+      fromElement.type === 'rect'
+        ? fromElement.x + fromElement.width
+        : fromElement.x;
+    const fromY =
+      fromElement.type === 'rect'
+        ? fromElement.y + fromElement.height / 2
+        : fromElement.y;
+
+    const toX =
+      toElement.type === 'rect'
+        ? toElement.x
+        : toElement.x;
+    const toY =
+      toElement.type === 'rect'
+        ? toElement.y + toElement.height / 2
+        : toElement.y;
+
+    return [fromX, fromY, toX, toY];
+  };
+
+  return (
+    <div>
+      <h3 style={{ textAlign: 'center' }}>Konva.js Scheme Editor</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px' }}>
+        <Button variant="contained" color="primary" onClick={addConnection}>
+          Додати З'єднання
+        </Button>
+        <Button variant="outlined" color="secondary" onClick={clearSelection}>
+          Очистити Вибір
+        </Button>
+      </div>
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        style={{ background: '#f4f4f4' }}
+        onContextMenu={(e) => e.evt.preventDefault()}
+      >
+        <Layer>
+          {/* Елементи */}
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                  onDragEnd={(e) => {
+                    const { x, y } = e.target.attrs;
+                    setElements((prev) =>
+                      prev.map((item) => (item.id === el.id ? { ...item, x, y } : item))
+                    );
+                  }}
+                  onClick={() => handleElementClick(el)}
+                  onContextMenu={(e) => handleContextMenu(e, el)}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                  onDragEnd={(e) => {
+                    const { x, y } = e.target.attrs;
+                    setElements((prev) =>
+                      prev.map((item) => (item.id === el.id ? { ...item, x, y } : item))
+                    );
+                  }}
+                  onClick={() => handleElementClick(el)}
+                  onContextMenu={(e) => handleContextMenu(e, el)}
+                />
+              );
+            }
+            return null;
+          })}
+
+          {/* Лінії */}
+          {connections.map((conn) => {
+            const points = getLinePoints(conn.from, conn.to);
+            return <Line key={conn.id} points={points} stroke="black" strokeWidth={2} />;
+          })}
+        </Layer>
+      </Stage>
+
+      {/* Контекстне меню */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={closeContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        <MenuItem onClick={addConnection}>Додати З'єднання</MenuItem>
+      </Menu>
+    </div>
+  );
+};
+
+export default SchemeEditor;
+```
+
+---
+
+### **Ключові Моменти Реалізації**
+
+1. **Контекстне Меню:**
+   - Реалізується через компонент `Menu` з Material-UI.
+   - Викликається при натисканні правою кнопкою миші на елемент.
+
+2. **Додавання Лінії:**
+   - Лінія додається між двома вибраними елементами.
+   - Якщо вибрано два елементи, натиснення кнопки "Додати З'єднання" створює нову лінію.
+
+3. **Оновлення Позицій Ліній:**
+   - Позиції ліній динамічно оновлюються при переміщенні елементів.
+
+4. **Кнопки "Додати З'єднання" та "Очистити Вибір":**
+   - "Додати З'єднання" додає нову лінію.
+   - "Очистити Вибір" знімає вибір з елементів.
+
+---
+
+### **Результат**
+- Ви можете вибирати два елементи і додавати між ними лінію як через контекстне меню, так і через кнопку.
+- Лінії залишаються прив'язаними до елементів і динамічно оновлюються при їх переміщенні.

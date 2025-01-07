@@ -1,0 +1,277 @@
+Для збереження елементів (`elements`) і з'єднань (`connections`) у базі даних Oracle, необхідно:
+
+1. **Створити структуру таблиць в Oracle**.
+2. **Реалізувати API для збереження та отримання даних**.
+3. **Інтегрувати збереження в базу даних у ваш React-додаток**.
+
+---
+
+### **1. Структура Таблиць**
+
+#### Таблиця для елементів (`elements`)
+```sql
+CREATE TABLE elements (
+    element_id VARCHAR2(50) PRIMARY KEY,
+    scheme_id VARCHAR2(50),
+    element_type VARCHAR2(50) NOT NULL,
+    x_position NUMBER NOT NULL,
+    y_position NUMBER NOT NULL,
+    width NUMBER,
+    height NUMBER,
+    radius NUMBER,
+    fill_color VARCHAR2(50),
+    rotation NUMBER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Таблиця для з'єднань (`connections`)
+```sql
+CREATE TABLE connections (
+    connection_id VARCHAR2(50) PRIMARY KEY,
+    scheme_id VARCHAR2(50),
+    from_element_id VARCHAR2(50) NOT NULL REFERENCES elements(element_id) ON DELETE CASCADE,
+    to_element_id VARCHAR2(50) NOT NULL REFERENCES elements(element_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Таблиця для схем (`schemes`)
+```sql
+CREATE TABLE schemes (
+    scheme_id VARCHAR2(50) PRIMARY KEY,
+    scheme_name VARCHAR2(100) NOT NULL,
+    department VARCHAR2(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+### **2. Реалізація API**
+
+#### **API для збереження елементів і з'єднань**
+
+Файл: `/pages/api/scheme/save.js`
+
+```javascript
+import oracledb from 'oracledb';
+
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    const { scheme_id, scheme_name, department, elements, connections } = req.body;
+
+    if (!scheme_id || !scheme_name || !elements) {
+      return res.status(400).json({ error: 'Missing required fields: scheme_id, scheme_name, elements.' });
+    }
+
+    const connection = await oracledb.getConnection({
+      user: 'your_user',
+      password: 'your_password',
+      connectString: 'your_connection_string',
+    });
+
+    try {
+      // Збереження схеми
+      await connection.execute(
+        `MERGE INTO schemes s
+         USING (SELECT :scheme_id AS scheme_id FROM dual) d
+         ON (s.scheme_id = d.scheme_id)
+         WHEN MATCHED THEN
+           UPDATE SET scheme_name = :scheme_name, department = :department
+         WHEN NOT MATCHED THEN
+           INSERT (scheme_id, scheme_name, department) VALUES (:scheme_id, :scheme_name, :department)`,
+        { scheme_id, scheme_name, department }
+      );
+
+      // Видалення старих елементів
+      await connection.execute(`DELETE FROM elements WHERE scheme_id = :scheme_id`, { scheme_id });
+
+      // Видалення старих з'єднань
+      await connection.execute(`DELETE FROM connections WHERE scheme_id = :scheme_id`, { scheme_id });
+
+      // Додавання нових елементів
+      for (const el of elements) {
+        await connection.execute(
+          `INSERT INTO elements (element_id, scheme_id, element_type, x_position, y_position, width, height, radius, fill_color, rotation)
+           VALUES (:element_id, :scheme_id, :element_type, :x_position, :y_position, :width, :height, :radius, :fill_color, :rotation)`,
+          {
+            element_id: el.id,
+            scheme_id,
+            element_type: el.type,
+            x_position: el.x,
+            y_position: el.y,
+            width: el.width || null,
+            height: el.height || null,
+            radius: el.radius || null,
+            fill_color: el.fill,
+            rotation: el.rotation || 0,
+          }
+        );
+      }
+
+      // Додавання нових з'єднань
+      for (const conn of connections) {
+        await connection.execute(
+          `INSERT INTO connections (connection_id, scheme_id, from_element_id, to_element_id)
+           VALUES (:connection_id, :scheme_id, :from_element_id, :to_element_id)`,
+          {
+            connection_id: conn.id,
+            scheme_id,
+            from_element_id: conn.from,
+            to_element_id: conn.to,
+          }
+        );
+      }
+
+      await connection.commit();
+      res.status(200).json({ message: 'Scheme saved successfully!' });
+    } catch (error) {
+      await connection.rollback();
+      console.error('Error saving scheme:', error);
+      res.status(500).json({ error: 'Failed to save scheme.' });
+    } finally {
+      await connection.close();
+    }
+  } else {
+    res.setHeader('Allow', ['POST']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+#### **API для отримання даних схеми**
+
+Файл: `/pages/api/scheme/[schemeId].js`
+
+```javascript
+import oracledb from 'oracledb';
+
+export default async function handler(req, res) {
+  const { schemeId } = req.query;
+
+  if (req.method === 'GET') {
+    const connection = await oracledb.getConnection({
+      user: 'your_user',
+      password: 'your_password',
+      connectString: 'your_connection_string',
+    });
+
+    try {
+      // Отримати схему
+      const schemeResult = await connection.execute(
+        `SELECT scheme_name, department FROM schemes WHERE scheme_id = :scheme_id`,
+        { scheme_id: schemeId }
+      );
+
+      if (schemeResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Scheme not found.' });
+      }
+
+      const scheme = schemeResult.rows[0];
+
+      // Отримати елементи
+      const elementsResult = await connection.execute(
+        `SELECT element_id, element_type, x_position, y_position, width, height, radius, fill_color, rotation
+         FROM elements WHERE scheme_id = :scheme_id`,
+        { scheme_id: schemeId }
+      );
+
+      // Отримати з'єднання
+      const connectionsResult = await connection.execute(
+        `SELECT connection_id, from_element_id, to_element_id
+         FROM connections WHERE scheme_id = :scheme_id`,
+        { scheme_id: schemeId }
+      );
+
+      res.status(200).json({
+        scheme: {
+          scheme_id: schemeId,
+          scheme_name: scheme.SCHEME_NAME,
+          department: scheme.DEPARTMENT,
+          elements: elementsResult.rows.map((row) => ({
+            id: row.ELEMENT_ID,
+            type: row.ELEMENT_TYPE,
+            x: row.X_POSITION,
+            y: row.Y_POSITION,
+            width: row.WIDTH,
+            height: row.HEIGHT,
+            radius: row.RADIUS,
+            fill: row.FILL_COLOR,
+            rotation: row.ROTATION,
+          })),
+          connections: connectionsResult.rows.map((row) => ({
+            id: row.CONNECTION_ID,
+            from: row.FROM_ELEMENT_ID,
+            to: row.TO_ELEMENT_ID,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching scheme:', error);
+      res.status(500).json({ error: 'Failed to fetch scheme.' });
+    } finally {
+      await connection.close();
+    }
+  } else {
+    res.setHeader('Allow', ['GET']);
+    res.status(405).json({ error: `Method ${req.method} not allowed.` });
+  }
+}
+```
+
+---
+
+### **3. Інтеграція з React**
+
+#### Збереження схеми
+```javascript
+const saveScheme = async () => {
+  const data = {
+    scheme_id: 'scheme_1',
+    scheme_name: 'My Scheme',
+    department: 'IT',
+    elements,
+    connections,
+  };
+
+  try {
+    const response = await fetch('/api/scheme/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    const result = await response.json();
+    alert(result.message);
+  } catch (error) {
+    console.error('Error saving scheme:', error);
+  }
+};
+```
+
+#### Завантаження схеми
+```javascript
+const fetchScheme = async (schemeId) => {
+  try {
+    const response = await fetch(`/api/scheme/${schemeId}`);
+    const data = await response.json();
+
+    if (data.scheme) {
+      setElements(data.scheme.elements);
+      setConnections(data.scheme.connections);
+    }
+  } catch (error) {
+    console.error('Error fetching scheme:', error);
+  }
+};
+```
+
+---
+
+### **Результат**
+- **Збереження:** Дані елементів і з'єднань зберігаються у базі Oracle.
+- **Завантаження:** Дані завантажуються у форматі, готовому для використання у `React`. 
+- **Інтеграція:** Легка робота з елементами і з'єднаннями через API.

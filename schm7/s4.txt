@@ -1,0 +1,211 @@
+Для реалізації функціоналу, який знаходить усі елементи між двома вибраними елементами (з урахуванням зв’язків через з’єднання), можна зробити це окремим функціоналом без значної переробки коду вище. Це забезпечить гнучкість і масштабованість.
+
+---
+
+### **Алгоритм Реалізації**
+
+1. **Вибір двох елементів:**
+   - Додати форму, де користувач послідовно обирає два елементи.
+   - Вибір можна реалізувати через комбінацію кліку на елемент `Konva` і підтвердження в інпуті.
+
+2. **Пошук з’єднань:**
+   - Використовувати графову структуру для обробки з’єднань.
+   - Побудувати алгоритм для знаходження всіх елементів між двома вибраними елементами.
+
+3. **Відображення результатів:**
+   - Після вибору двох елементів відобразити список їхніх `id`, включаючи проміжні елементи.
+
+---
+
+### **Покрокова Реалізація**
+
+#### **1. Вибір Елементів через Форму**
+
+Додамо форму для вибору елементів.
+
+```javascript
+import React, { useState } from 'react';
+import { Stage, Layer, Rect, Circle, Line } from 'react-konva';
+import { Button, TextField, Typography, Box } from '@mui/material';
+
+const ConnectionAnalyzer = () => {
+  const [elements] = useState([
+    { id: 'rect1', type: 'rect', x: 100, y: 100, width: 100, height: 50, fill: 'blue' },
+    { id: 'circle1', type: 'circle', x: 300, y: 150, radius: 25, fill: 'red' },
+    { id: 'circle2', type: 'circle', x: 500, y: 200, radius: 25, fill: 'green' },
+  ]);
+
+  const [connections] = useState([
+    { id: 'line1', from: 'rect1', to: 'circle1' },
+    { id: 'line2', from: 'circle1', to: 'circle2' },
+  ]);
+
+  const [selectedElements, setSelectedElements] = useState({ from: '', to: '' });
+  const [pathElements, setPathElements] = useState([]);
+
+  // Вибір елемента
+  const handleSelectElement = (field, id) => {
+    setSelectedElements((prev) => ({ ...prev, [field]: id }));
+  };
+
+  // Пошук усіх елементів між двома вибраними
+  const findPathElements = () => {
+    const graph = buildGraph(connections);
+    const result = bfs(graph, selectedElements.from, selectedElements.to);
+    setPathElements(result);
+  };
+
+  // Побудова графа
+  const buildGraph = (connections) => {
+    const graph = {};
+    connections.forEach((conn) => {
+      if (!graph[conn.from]) graph[conn.from] = [];
+      if (!graph[conn.to]) graph[conn.to] = [];
+      graph[conn.from].push(conn.to);
+      graph[conn.to].push(conn.from); // Для двонаправленого зв'язку
+    });
+    return graph;
+  };
+
+  // BFS для пошуку шляху
+  const bfs = (graph, start, end) => {
+    const visited = new Set();
+    const queue = [[start]];
+
+    while (queue.length > 0) {
+      const path = queue.shift();
+      const node = path[path.length - 1];
+
+      if (node === end) {
+        return path; // Шлях знайдено
+      }
+
+      if (!visited.has(node)) {
+        visited.add(node);
+        const neighbors = graph[node] || [];
+
+        for (const neighbor of neighbors) {
+          queue.push([...path, neighbor]);
+        }
+      }
+    }
+    return [];
+  };
+
+  return (
+    <Box sx={{ padding: 2 }}>
+      <Typography variant="h6">Аналіз З'єднань</Typography>
+      <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
+        <TextField
+          label="Виберіть перший елемент"
+          value={selectedElements.from}
+          onChange={(e) => handleSelectElement('from', e.target.value)}
+        />
+        <TextField
+          label="Виберіть другий елемент"
+          value={selectedElements.to}
+          onChange={(e) => handleSelectElement('to', e.target.value)}
+        />
+        <Button variant="contained" color="primary" onClick={findPathElements}>
+          Знайти шлях
+        </Button>
+      </Box>
+      <Typography variant="h6">Елементи на шляху:</Typography>
+      <ul>
+        {pathElements.map((el) => (
+          <li key={el}>{el}</li>
+        ))}
+      </ul>
+      <Stage width={800} height={400} style={{ border: '1px solid black' }}>
+        <Layer>
+          {elements.map((el) => {
+            if (el.type === 'rect') {
+              return (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  onClick={() => handleSelectElement('from', el.id)}
+                />
+              );
+            } else if (el.type === 'circle') {
+              return (
+                <Circle
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  onClick={() => handleSelectElement('to', el.id)}
+                />
+              );
+            }
+            return null;
+          })}
+          {connections.map((conn) => {
+            const from = elements.find((el) => el.id === conn.from);
+            const to = elements.find((el) => el.id === conn.to);
+
+            if (from && to) {
+              return (
+                <Line
+                  key={conn.id}
+                  points={[
+                    from.x + (from.width || 0) / 2,
+                    from.y + (from.height || 0) / 2,
+                    to.x + (to.width || 0) / 2,
+                    to.y + (to.height || 0) / 2,
+                  ]}
+                  stroke="black"
+                />
+              );
+            }
+            return null;
+          })}
+        </Layer>
+      </Stage>
+    </Box>
+  );
+};
+
+export default ConnectionAnalyzer;
+```
+
+---
+
+### **Пояснення Коду**
+
+1. **Вибір Елементів**:
+   - Через `TextField` або кліки на `Konva` елементи (`Rect` та `Circle`).
+   - `selectedElements` зберігає `id` вибраних елементів.
+
+2. **Побудова Графа**:
+   - Граф будується на основі з’єднань (`connections`).
+   - Використовуються сусідні вузли для створення зв'язків.
+
+3. **Алгоритм BFS**:
+   - Пошук усіх вузлів між початковим (`from`) і кінцевим (`to`) елементами.
+   - BFS дозволяє знайти шлях з мінімальною кількістю з'єднань.
+
+4. **Візуалізація Шляху**:
+   - Усі знайдені елементи виводяться у вигляді списку.
+
+5. **Konva Рендеринг**:
+   - Елементи та з’єднання візуалізуються на полотні.
+
+---
+
+### **Результат**
+
+1. **Форма для вибору елементів:**
+   - Поля для вибору початкового та кінцевого елементів.
+   - Кнопка "Знайти шлях" для запуску аналізу.
+
+2. **Список елементів між двома вузлами:**
+   - Після пошуку виводиться список `id` елементів, які лежать на шляху.
+
+3. **Гнучкість:**
+   - Код інтегрується з існуючою логікою з’єднань без змін в основному функціоналі.

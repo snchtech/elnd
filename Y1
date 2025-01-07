@@ -1,0 +1,21 @@
+CREATE OR REPLACE PROCEDURE process_user_update (
+    p_json IN CLOB
+) AS
+    v_username VARCHAR2(100);
+    v_new_password VARCHAR2(100);
+BEGIN
+    -- Extract values from the JSON body
+    v_username := JSON_VALUE(p_json, '$.User.username');
+    v_new_password := JSON_VALUE(p_json, '$.User.new_password');
+
+    -- Output the values for demonstration purposes
+    DBMS_OUTPUT.PUT_LINE('Username: ' || v_username);
+    DBMS_OUTPUT.PUT_LINE('New Password: ' || v_new_password);
+
+    -- Here you can proceed with logic to handle the username and new password (e.g., update in database)
+
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/

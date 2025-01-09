@@ -1,0 +1,238 @@
+На основі вашого опису і популярних практик **Next.js** я пропоную оптимізувати структуру проєкту так, щоб компоненти, обробники і сторінки були чітко розділені. Це спростить підтримку, перевикористання коду і масштабування проєкту.
+
+---
+
+### **Пропонована структура**
+
+```
+project-root/
+├── app/
+│   ├── components/
+│   │   ├── pagesComponent/
+│   │   │   ├── Creator/
+│   │   │   │   ├── Creator.js
+│   │   │   │   ├── CreatorCanvas.js
+│   │   │   │   ├── CreatorSidebar.js
+│   │   │   │   └── CreatorToolbar.js
+│   │   │   ├── Editor/
+│   │   │   │   ├── Editor.js
+│   │   │   │   ├── EditorCanvas.js
+│   │   │   │   ├── EditorSidebar.js
+│   │   │   │   └── EditorToolbar.js
+│   │   ├── shared/
+│   │   │   ├── GraphLibrary.js
+│   │   │   ├── TopNavBar.js
+│   │   │   └── ToolPanel.js
+│   ├── handlers/
+│   │   ├── editorHandlers/
+│   │   │   ├── handleElementActions.js
+│   │   │   ├── handleSchemeActions.js
+│   │   │   └── handleCanvasActions.js
+│   │   ├── creatorHandlers/
+│   │   │   ├── handleElementActions.js
+│   │   │   ├── handleSchemeActions.js
+│   │   │   └── handleCanvasActions.js
+│   ├── pages/
+│   │   ├── editor/
+│   │   │   └── index.js
+│   │   ├── creator/
+│   │   │   └── index.js
+│   │   └── api/
+│   │       ├── savescheme.js
+│   │       ├── updatescheme.js
+│   │       └── schemeslist.js
+├── public/
+├── styles/
+└── utils/
+```
+
+---
+
+### **Опис структури**
+
+#### **1. Каталог `pagesComponent`**
+Компоненти сторінок `Creator` та `Editor` розбиті на три основні частини:
+- `Canvas`: Полотно, де розташовуються елементи.
+- `Sidebar`: Бічна панель для налаштувань.
+- `Toolbar`: Верхній або бічний інструментальний блок для взаємодії.
+
+#### **2. Каталог `shared`**
+Містить загальні компоненти, які перевикористовуються між сторінками:
+- `GraphLibrary`: Бібліотека графічних елементів.
+- `TopNavBar`: Верхнє меню навігації.
+- `ToolPanel`: Панель інструментів.
+
+#### **3. Каталог `handlers`**
+Обробники розділені за функціональністю для `Editor` і `Creator`. Це дозволяє ізолювати логіку:
+- `handleElementActions.js`: Операції з елементами (додавання, видалення, обертання, переміщення).
+- `handleSchemeActions.js`: Операції зі схемами (збереження, оновлення).
+- `handleCanvasActions.js`: Дії з полотном (масштабування, формат).
+
+#### **4. Каталог `pages`**
+Містить сторінки `Editor` та `Creator`. Вони імпортують відповідні компоненти з `pagesComponent` і логіку з `handlers`.
+
+---
+
+### **Розбиття коду**
+
+#### **1. Creator.js**
+```javascript
+'use client';
+import React, { useState } from 'react';
+import CreatorCanvas from './CreatorCanvas';
+import CreatorSidebar from './CreatorSidebar';
+import CreatorToolbar from './CreatorToolbar';
+import TopNavBar from '../../shared/TopNavBar';
+
+const Creator = () => {
+  const [elements, setElements] = useState([]);
+  const [selectedElId, setSelectedElId] = useState(null);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <TopNavBar />
+      <CreatorToolbar />
+      <div style={{ display: 'flex', flex: 1 }}>
+        <CreatorCanvas elements={elements} setElements={setElements} selectedElId={selectedElId} setSelectedElId={setSelectedElId} />
+        <CreatorSidebar elements={elements} selectedElId={selectedElId} setElements={setElements} />
+      </div>
+    </div>
+  );
+};
+
+export default Creator;
+```
+
+---
+
+#### **2. CreatorCanvas.js**
+```javascript
+import React, { useRef } from 'react';
+import { Stage, Layer } from 'react-konva';
+import GraphLibrary from '../../shared/GraphLibrary';
+
+const CreatorCanvas = ({ elements, setElements, selectedElId, setSelectedElId }) => {
+  const stageRef = useRef(null);
+
+  const handleDragEnd = (id, e) => {
+    setElements((prev) =>
+      prev.map((el) =>
+        el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+      )
+    );
+  };
+
+  return (
+    <Stage width={window.innerWidth - 300} height={window.innerHeight} ref={stageRef} style={{ border: '1px solid black' }}>
+      <Layer>
+        {elements.map((el) => {
+          const ElementComponent = GraphLibrary[el.type];
+          if (!ElementComponent) return null;
+          return (
+            <ElementComponent
+              key={el.id}
+              el={el}
+              onDragEnd={(e) => handleDragEnd(el.id, e)}
+              onClickEl={() => setSelectedElId(el.id)}
+            />
+          );
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+
+export default CreatorCanvas;
+```
+
+---
+
+#### **3. CreatorSidebar.js**
+```javascript
+import React from 'react';
+
+const CreatorSidebar = ({ elements, selectedElId, setElements }) => {
+  const deleteElement = () => {
+    setElements((prev) => prev.filter((el) => el.id !== selectedElId));
+  };
+
+  return (
+    <div style={{ width: '300px', background: '#f4f4f4', padding: '20px' }}>
+      <h3>Element Options</h3>
+      {selectedElId && (
+        <>
+          <p>Selected Element ID: {selectedElId}</p>
+          <button onClick={deleteElement}>Delete</button>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default CreatorSidebar;
+```
+
+---
+
+#### **4. CreatorToolbar.js**
+```javascript
+import React from 'react';
+
+const CreatorToolbar = () => {
+  return (
+    <div style={{ padding: '10px', background: '#007bff', color: 'white' }}>
+      <h3>Creator Toolbar</h3>
+    </div>
+  );
+};
+
+export default CreatorToolbar;
+```
+
+---
+
+#### **5. handlers/creatorHandlers/handleElementActions.js**
+```javascript
+export const addElement = (type, setElements) => {
+  const newElement = {
+    id: `el_${Date.now()}`,
+    type,
+    x: Math.random() * 300,
+    y: Math.random() * 300,
+    width: 100,
+    height: 100,
+    draggable: true,
+  };
+  setElements((prev) => [...prev, newElement]);
+};
+```
+
+---
+
+### **Сторінка Creator**
+
+```javascript
+'use client';
+import dynamic from 'next/dynamic';
+
+const Creator = dynamic(() => import('../../app/components/pagesComponent/Creator/Creator'), {
+  ssr: false,
+});
+
+export default function Index() {
+  return <Creator />;
+}
+```
+
+---
+
+### **Переваги підходу**
+
+1. **Чистота коду**:
+   - Компоненти ізольовані за функціональністю.
+2. **Масштабованість**:
+   - Логіку та UI можна змінювати незалежно.
+3. **Перевикористання**:
+   - `handlers` можна використовувати в інших сторінках.
+4. **Зручність тестування**:
+   - Окремі модулі легко тестувати.

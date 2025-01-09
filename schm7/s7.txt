@@ -1,0 +1,219 @@
+### Рефакторинг і оптимізація структури коду
+
+Для того, щоб полегшити підтримку коду, можна розділити його на кілька модулів відповідно до функціоналу. У вашому випадку доцільно розділити код на такі частини:
+
+1. **Обробка елементів (`ElementHandlers.js`)**: Функції для додавання, видалення, переміщення, обертання елементів.
+2. **Обробка схем (`SchemeHandlers.js`)**: Завантаження, оновлення та збереження схем.
+3. **Компоненти для UI (`ToolPanel.js`, `TopNavBar.js`)**: Відповідають за інтерфейс.
+4. **Основний редактор (`Editor.js`)**: Відповідає за інтеграцію функціоналу та рендеринг.
+
+---
+
+### 1. **Файл: `ElementHandlers.js`**
+
+Цей файл міститиме функції для роботи з елементами.
+
+```javascript
+import { v4 as uuidv4 } from 'uuid';
+
+// Додавання нового елемента
+export const addElement = (type, setElements, setIsUpdated) => {
+  const newElement = {
+    id: uuidv4(),
+    type,
+    x: Math.random() * 300,
+    y: Math.random() * 300,
+    width: 100,
+    height: 100,
+    radius: 50,
+    text: 'Text',
+    points: [0, 0, 100, 100],
+    fill: 'gray',
+    draggable: true,
+    rotation: 0,
+  };
+  setIsUpdated(true);
+  setElements((prev) => [...prev, newElement]);
+};
+
+// Видалення елемента
+export const deleteElement = (selectedElId, setElements, setSelectedElId) => {
+  if (selectedElId === null) {
+    alert('No element selected to delete.');
+    return;
+  }
+  setElements((prev) => prev.filter((el) => el.id !== selectedElId));
+  setSelectedElId(null);
+};
+
+// Переміщення елемента
+export const handleDragEnd = (id, e, setElements, setIsUpdated) => {
+  setElements((prev) =>
+    prev.map((el) => (el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el))
+  );
+  setIsUpdated(true);
+};
+
+// Обертання елемента
+export const handleRotate = (id, angle, setElements, setIsUpdated) => {
+  setElements((prev) =>
+    prev.map((el) =>
+      el.id === id ? { ...el, rotation: (el.rotation + angle) % 360 } : el
+    )
+  );
+  setIsUpdated(true);
+};
+```
+
+---
+
+### 2. **Файл: `SchemeHandlers.js`**
+
+Цей файл відповідає за роботу зі схемами.
+
+```javascript
+// Завантаження схем
+export const fetchSchemes = async (setOptions) => {
+  try {
+    const response = await fetch('/api/schemeslist');
+    const data = await response.json();
+    if (data.success) {
+      const transformedOptions = data.data.map((scheme) => ({
+        value: scheme.scheme_id,
+        label: scheme.scheme_name,
+        scheme_format: scheme.scheme_format,
+        data: scheme.scheme_data,
+        department: scheme.department,
+      }));
+      setOptions(transformedOptions);
+    } else {
+      console.error('Failed to fetch schemes:', data.error);
+    }
+  } catch (error) {
+    console.error('Error fetching schemes:', error);
+  }
+};
+
+// Оновлення схеми
+export const handleUpdateScheme = async (selectedScheme, elements, schemeName, schemeDepartment, selectedFormat, fetchSchemes, setIsUpdated) => {
+  if (!selectedScheme) return;
+
+  const updatedScheme = {
+    scheme_id: selectedScheme.value,
+    scheme_name: schemeName,
+    department: schemeDepartment,
+    scheme_format: selectedFormat,
+    scheme_data: elements,
+  };
+
+  try {
+    const response = await fetch(`/api/updatescheme/${selectedScheme.value}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedScheme),
+    });
+
+    if (response.ok) {
+      alert('Scheme updated successfully!');
+      fetchSchemes();
+      setIsUpdated(false);
+    } else {
+      alert('Failed to update scheme.');
+    }
+  } catch (error) {
+    console.error('Error updating scheme:', error);
+  }
+};
+```
+
+---
+
+### 3. **Файл: `Editor.js`**
+
+Основний компонент тепер буде інтегрувати модулі.
+
+```javascript
+'use client';
+import React, { useRef, useState, useEffect } from 'react';
+import { Stage, Layer, Transformer } from 'react-konva';
+import ToolPanel from '../interface/ToolPanel';
+import TopNavBar from '../interface/headerLine/TopHeaderLine';
+import GraphLibrary from '../../components/graph';
+import { addElement, deleteElement, handleDragEnd, handleRotate } from './ElementHandlers';
+import { fetchSchemes, handleUpdateScheme } from './SchemeHandlers';
+
+const pageFormats = {
+  A4: { width: 1123, height: 794 },
+  A3: { width: 1587, height: 1123 },
+  A2: { width: 2245, height: 1587 },
+  A1: { width: 3179, height: 2245 },
+  AO: { width: 4494, height: 3179 },
+};
+
+const Editor = () => {
+  const stageRef = useRef(null);
+  const [elements, setElements] = useState([]);
+  const [selectedElId, setSelectedElId] = useState(null);
+  const [options, setOptions] = useState([]);
+  const [schemeName, setSchemeName] = useState('');
+  const [schemeDepartment, setSchemeDepartment] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('A4');
+  const [canvasSize, setCanvasSize] = useState(pageFormats.A4);
+  const [selectedScheme, setSelectedScheme] = useState(null);
+  const [isUpdated, setIsUpdated] = useState(false);
+
+  useEffect(() => {
+    setCanvasSize(pageFormats[selectedFormat]);
+  }, [selectedFormat]);
+
+  useEffect(() => {
+    fetchSchemes(setOptions);
+  }, []);
+
+  return (
+    <div>
+      <TopNavBar />
+      <ToolPanel addElement={(type) => addElement(type, setElements, setIsUpdated)} />
+      <Stage width={canvasSize.width} height={canvasSize.height} ref={stageRef}>
+        <Layer>
+          {elements.map((el) => {
+            const ElementComponent = GraphLibrary[el.type];
+            if (!ElementComponent) return null;
+            return (
+              <ElementComponent
+                key={el.id}
+                el={el}
+                onDragEnd={(e) => handleDragEnd(el.id, e, setElements, setIsUpdated)}
+                onClickEl={() => setSelectedElId(el.id)}
+              />
+            );
+          })}
+        </Layer>
+      </Stage>
+      {selectedElId && (
+        <button onClick={() => deleteElement(selectedElId, setElements, setSelectedElId)}>
+          Delete Selected
+        </button>
+      )}
+      <button onClick={() => handleUpdateScheme(selectedScheme, elements, schemeName, schemeDepartment, selectedFormat, fetchSchemes, setIsUpdated)}>
+        Save Scheme
+      </button>
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+---
+
+### Переваги структури:
+
+1. **Зручність підтримки**:
+   - Код розбитий на логічні модулі, що легко тестуються і оновлюються окремо.
+
+2. **Перевикористання функцій**:
+   - Функції для роботи з елементами чи схемами можна використовувати в інших компонентах.
+
+3. **Масштабованість**:
+   - Додавати новий функціонал легше, бо модулі ізольовані.

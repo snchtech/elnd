@@ -1,0 +1,287 @@
+Ось приклад того, як реалізувати компоненти для сторінки **Editor** на основі описаної структури. Сторінка **Editor** має подібну структуру до **Creator**, але з урахуванням додаткового функціоналу (збереження, завантаження схем, обробка форматів тощо).
+
+---
+
+### **Структура компонентів для Editor**
+```
+project-root/
+├── app/
+│   ├── components/
+│   │   ├── pagesComponent/
+│   │   │   ├── Editor/
+│   │   │   │   ├── Editor.js
+│   │   │   │   ├── EditorCanvas.js
+│   │   │   │   ├── EditorSidebar.js
+│   │   │   │   ├── EditorToolbar.js
+│   │   │   │   └── EditorSettings.js
+```
+
+---
+
+### **1. Editor.js**
+Це головний компонент сторінки, який збирає всі частини редактора.
+
+```javascript
+'use client';
+import React, { useState } from 'react';
+import EditorCanvas from './EditorCanvas';
+import EditorSidebar from './EditorSidebar';
+import EditorToolbar from './EditorToolbar';
+import EditorSettings from './EditorSettings';
+import TopNavBar from '../../shared/TopNavBar';
+
+const Editor = () => {
+  const [elements, setElements] = useState([]);
+  const [selectedElId, setSelectedElId] = useState(null);
+  const [schemeName, setSchemeName] = useState('');
+  const [schemeDepartment, setSchemeDepartment] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('A4');
+  const [isUpdated, setIsUpdated] = useState(false);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <TopNavBar />
+      <EditorToolbar
+        schemeName={schemeName}
+        setSchemeName={setSchemeName}
+        schemeDepartment={schemeDepartment}
+        setSchemeDepartment={setSchemeDepartment}
+        selectedFormat={selectedFormat}
+        setSelectedFormat={setSelectedFormat}
+      />
+      <div style={{ display: 'flex', flex: 1 }}>
+        <EditorCanvas
+          elements={elements}
+          setElements={setElements}
+          selectedElId={selectedElId}
+          setSelectedElId={setSelectedElId}
+        />
+        <EditorSidebar
+          elements={elements}
+          selectedElId={selectedElId}
+          setElements={setElements}
+        />
+      </div>
+      <EditorSettings
+        elements={elements}
+        schemeName={schemeName}
+        schemeDepartment={schemeDepartment}
+        selectedFormat={selectedFormat}
+        isUpdated={isUpdated}
+        setIsUpdated={setIsUpdated}
+      />
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+---
+
+### **2. EditorCanvas.js**
+Компонент для відображення полотна схеми.
+
+```javascript
+import React, { useRef } from 'react';
+import { Stage, Layer } from 'react-konva';
+import GraphLibrary from '../../shared/GraphLibrary';
+
+const EditorCanvas = ({ elements, setElements, selectedElId, setSelectedElId }) => {
+  const stageRef = useRef(null);
+
+  const handleDragEnd = (id, e) => {
+    setElements((prev) =>
+      prev.map((el) =>
+        el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+      )
+    );
+  };
+
+  return (
+    <Stage
+      width={window.innerWidth - 300}
+      height={window.innerHeight}
+      ref={stageRef}
+      style={{ border: '1px solid black', background: '#fff' }}
+    >
+      <Layer>
+        {elements.map((el) => {
+          const ElementComponent = GraphLibrary[el.type];
+          if (!ElementComponent) return null;
+          return (
+            <ElementComponent
+              key={el.id}
+              el={el}
+              onDragEnd={(e) => handleDragEnd(el.id, e)}
+              onClickEl={() => setSelectedElId(el.id)}
+            />
+          );
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+
+export default EditorCanvas;
+```
+
+---
+
+### **3. EditorSidebar.js**
+Бічна панель для відображення параметрів вибраного елемента.
+
+```javascript
+import React from 'react';
+
+const EditorSidebar = ({ elements, selectedElId, setElements }) => {
+  const selectedElement = elements.find((el) => el.id === selectedElId);
+
+  const deleteElement = () => {
+    setElements((prev) => prev.filter((el) => el.id !== selectedElId));
+  };
+
+  return (
+    <div style={{ width: '300px', background: '#f4f4f4', padding: '20px' }}>
+      <h3>Element Options</h3>
+      {selectedElement ? (
+        <>
+          <p>Element ID: {selectedElId}</p>
+          <button onClick={deleteElement}>Delete</button>
+        </>
+      ) : (
+        <p>No element selected</p>
+      )}
+    </div>
+  );
+};
+
+export default EditorSidebar;
+```
+
+---
+
+### **4. EditorToolbar.js**
+Панель інструментів для керування схемою.
+
+```javascript
+import React from 'react';
+
+const EditorToolbar = ({
+  schemeName,
+  setSchemeName,
+  schemeDepartment,
+  setSchemeDepartment,
+  selectedFormat,
+  setSelectedFormat,
+}) => {
+  const formats = ['A4', 'A3', 'A2', 'A1', 'A0'];
+
+  return (
+    <div style={{ padding: '10px', background: '#007bff', color: 'white', display: 'flex', justifyContent: 'space-between' }}>
+      <div>
+        <label>Scheme Name:</label>
+        <input
+          type="text"
+          value={schemeName}
+          onChange={(e) => setSchemeName(e.target.value)}
+          style={{ marginLeft: '10px' }}
+        />
+      </div>
+      <div>
+        <label>Department:</label>
+        <select
+          value={schemeDepartment}
+          onChange={(e) => setSchemeDepartment(e.target.value)}
+          style={{ marginLeft: '10px' }}
+        >
+          <option value="">Select</option>
+          <option value="ТЦ">ТЦ</option>
+          <option value="РЦ">РЦ</option>
+        </select>
+      </div>
+      <div>
+        <label>Format:</label>
+        <select
+          value={selectedFormat}
+          onChange={(e) => setSelectedFormat(e.target.value)}
+          style={{ marginLeft: '10px' }}
+        >
+          {formats.map((format) => (
+            <option key={format} value={format}>
+              {format}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+};
+
+export default EditorToolbar;
+```
+
+---
+
+### **5. EditorSettings.js**
+Блок для збереження та інших дій із схемою.
+
+```javascript
+import React from 'react';
+
+const EditorSettings = ({
+  elements,
+  schemeName,
+  schemeDepartment,
+  selectedFormat,
+  isUpdated,
+  setIsUpdated,
+}) => {
+  const saveScheme = async () => {
+    try {
+      const response = await fetch('/api/updatescheme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          elements,
+          schemeName,
+          schemeDepartment,
+          selectedFormat,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert('Scheme saved successfully!');
+        setIsUpdated(false);
+      } else {
+        alert('Error saving scheme.');
+      }
+    } catch (error) {
+      console.error('Error saving scheme:', error);
+    }
+  };
+
+  return (
+    <div style={{ position: 'absolute', bottom: '10px', right: '10px' }}>
+      <button onClick={saveScheme} style={{ padding: '10px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '4px' }}>
+        Save Scheme
+      </button>
+    </div>
+  );
+};
+
+export default EditorSettings;
+```
+
+---
+
+### **Висновок**
+
+Ця структура дозволяє чітко розділити функціонал:
+1. **`EditorCanvas.js`** відповідає за відображення схеми.
+2. **`EditorSidebar.js`** надає функції для редагування вибраного елемента.
+3. **`EditorToolbar.js`** містить параметри схеми.
+4. **`EditorSettings.js`** реалізує дії збереження.
+
+Це полегшить розширення функціоналу, тестування й підтримку.

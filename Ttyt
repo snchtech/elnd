@@ -1,0 +1,7 @@
+SELECT
+    REPLACE(REPLACE(REPLACE(
+        REGEXP_REPLACE(your_column, '"errorcode":\s*"([^"]*)"', '"errorcode": ''' || REPLACE(REGEXP_SUBSTR(your_column, '"errorcode":\s*"([^"]*)"', 1, 1, NULL, 1), '"', '''') || ''''), 
+        CHR(10), ' '), 
+    CHR(9), ' '), 
+    CHR(13), ' ') AS clean_string
+FROM your_table;

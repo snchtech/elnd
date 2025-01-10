@@ -1,0 +1,17 @@
+SELECT 
+    REPLACE(
+        REPLACE(
+            REPLACE(
+                REPLACE(
+                    REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                TRANSLATE(your_column, 
+                                          '''"','', ''), -- Remove single and double quotes
+                                ',', ''),       -- Remove commas
+                            '.', ''),         -- Remove dots
+                        CHR(10), ' '),       -- Replace line breaks with spaces
+                    CHR(9), ' '),         -- Replace tabs with spaces
+                CHR(13), ' ')           -- Replace carriage returns with spaces
+AS cleaned_string
+FROM your_table;

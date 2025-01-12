@@ -1,0 +1,19 @@
+SELECT
+    REPLACE(REPLACE(REPLACE(
+        REGEXP_REPLACE(your_column, '"errorcode":\s*"([^"]*)"', '"errorcode": ''' || REPLACE(REGEXP_SUBSTR(your_column, '"errorcode":\s*"([^"]*)"', 1, 1, NULL, 1), '"', '''') || ''''), 
+        CHR(10), ' '), 
+    CHR(9), ' '), 
+    CHR(13), ' ') AS clean_string
+FROM your_table;
+SELECT 
+    REPLACE(
+        REPLACE(
+            REPLACE(
+                TRANSLATE(your_column, 
+                          '''"','''', 
+                          '""'), -- Replace double quotes with single quotes
+                CHR(10), ' '),  -- Replace line breaks with spaces
+            CHR(9), ' '),     -- Replace tabs with spaces
+        CHR(13), ' ')       -- Replace carriage returns with spaces
+AS cleaned_string
+FROM your_table;

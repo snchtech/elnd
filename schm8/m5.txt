@@ -1,0 +1,229 @@
+Давай реалізуємо сторінку **Creator** для створення нової схеми. Ми використаємо **Material UI** для інтерфейсу, забезпечимо **валідацію** форми, а також реалізуємо логіку збереження схеми в базу даних **Oracle** та перенаправлення на сторінку **Editor**.
+
+---
+
+### 📂 **Структура проекту**
+
+```
+components/
+├── Creator/
+│   ├── CreatorForm.js      // Форма створення схеми
+│   └── CreatorPage.js      // Основна сторінка Creator
+api/
+├── createScheme.js         // API для збереження схеми в БД
+pages/
+├── creator/
+│   └── index.js            // Next.js сторінка Creator
+```
+
+---
+
+## 1️⃣ **CreatorForm.js** (Форма створення схеми)
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import {
+  Box, Button, TextField, Select, MenuItem, InputLabel,
+  FormControl, Typography, Snackbar, Alert
+} from '@mui/material';
+import { useRouter } from 'next/navigation';
+
+const CreatorForm = () => {
+  const router = useRouter();
+
+  // Стан форми
+  const [formData, setFormData] = useState({
+    album: '',
+    schemeName: '',
+    department: '',
+    unit: '',
+    format: '',
+    description: ''
+  });
+
+  // Стан для селектів (поки порожні)
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [formats, setFormats] = useState(['A4', 'A3', 'A2', 'A1', 'A0']);
+
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Завантаження даних для селектів
+  useEffect(() => {
+    // Поки дані фіктивні, пізніше будуть з БД
+    setAlbums([{ id: 1, name: 'Альбом 1' }, { id: 2, name: 'Альбом 2' }]);
+    setDepartments([{ id: 1, name: 'ТЦ' }, { id: 2, name: 'РЦ' }]);
+    setUnits([{ id: 1, name: 'Пункт 1' }, { id: 2, name: 'Пункт 2' }]);
+  }, []);
+
+  // Обробник зміни полів
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Валідація форми
+  const validateForm = () => {
+    const { album, schemeName, department, unit, format } = formData;
+    if (!album || !schemeName || !department || !unit || !format) {
+      setError('Всі поля (крім опису) обовʼязкові для заповнення.');
+      return false;
+    }
+    return true;
+  };
+
+  // Обробка сабміту форми
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!validateForm()) return;
+
+    try {
+      const response = await fetch('/api/createScheme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSuccess('Схему створено успішно!');
+        router.push(`/editor?id=${result.scheme_id}`);
+      } else {
+        setError(result.message || 'Помилка при створенні схеми.');
+      }
+    } catch (err) {
+      setError('Помилка під час збереження.');
+    }
+  };
+
+  return (
+    <Box sx={{ width: '500px', margin: 'auto', padding: 4, boxShadow: 3, borderRadius: 2 }}>
+      <Typography variant="h5" gutterBottom>Створення нової схеми</Typography>
+      
+      <form onSubmit={handleSubmit}>
+        {/* Альбом */}
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Альбом</InputLabel>
+          <Select name="album" value={formData.album} onChange={handleChange}>
+            {albums.map((album) => (
+              <MenuItem key={album.id} value={album.id}>{album.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Назва схеми */}
+        <TextField
+          label="Назва схеми"
+          name="schemeName"
+          value={formData.schemeName}
+          onChange={handleChange}
+          fullWidth
+          margin="normal"
+          required
+        />
+
+        {/* Відділ */}
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Відділ</InputLabel>
+          <Select name="department" value={formData.department} onChange={handleChange}>
+            {departments.map((dep) => (
+              <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Пункт */}
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Пункт</InputLabel>
+          <Select name="unit" value={formData.unit} onChange={handleChange}>
+            {units.map((unit) => (
+              <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Формат */}
+        <FormControl fullWidth margin="normal">
+          <InputLabel>Формат</InputLabel>
+          <Select name="format" value={formData.format} onChange={handleChange}>
+            {formats.map((fmt) => (
+              <MenuItem key={fmt} value={fmt}>{fmt}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Опис */}
+        <TextField
+          label="Опис"
+          name="description"
+          value={formData.description}
+          onChange={handleChange}
+          fullWidth
+          multiline
+          rows={3}
+          margin="normal"
+        />
+
+        {/* Кнопка створення */}
+        <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
+          Створити
+        </Button>
+      </form>
+
+      {/* Вивід помилок або успіху */}
+      {error && <Snackbar open autoHideDuration={6000}><Alert severity="error">{error}</Alert></Snackbar>}
+      {success && <Snackbar open autoHideDuration={6000}><Alert severity="success">{success}</Alert></Snackbar>}
+    </Box>
+  );
+};
+
+export default CreatorForm;
+```
+
+---
+
+## 2️⃣ **API: createScheme.js**
+
+```javascript
+import oracledb from 'oracledb';
+import dbConfig from '../../config/dbConfig';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Метод не підтримується' });
+  }
+
+  const { album, schemeName, department, unit, format, description } = req.body;
+
+  try {
+    const connection = await oracledb.getConnection(dbConfig);
+
+    const result = await connection.execute(
+      `INSERT INTO scheme (scheme_album_id, scheme_name, scheme_department, scheme_unit, scheme_format, scheme_description)
+       VALUES (:album, :schemeName, :department, :unit, :format, :description)
+       RETURNING id INTO :id`,
+      { album, schemeName, department, unit, format, description, id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } }
+    );
+
+    await connection.commit();
+    res.status(200).json({ scheme_id: result.outBinds.id[0] });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+```
+
+---
+
+## ✅ **Функціонал**
+
+1. **Валідація полів** форми.  
+2. **Запис схеми** в БД Oracle.  
+3. **Перенаправлення** на сторінку **Editor** після створення.
+
+Якщо потрібні доповнення — скажи! 😉

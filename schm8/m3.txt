@@ -1,0 +1,255 @@
+Ні, у попередньому рішенні блоки були розташовані вертикально. Давай виправимо це і зробимо верхню панель **горизонтальною**, щоб усі елементи були в один ряд. Це зробить панель компактною і зручною для використання.
+
+---
+
+## 🔄 **Оновлена Горизонтальна Верхня Панель**
+
+### 1️⃣ **Оновлений TopToolbar.js**
+
+```javascript
+import React from 'react';
+import { AppBar, Toolbar, Box, Divider } from '@mui/material';
+import ScaleControl from './TopToolbar/ScaleControl';
+import BindingsControl from './TopToolbar/BindingsControl';
+import CheckSchemeControl from './TopToolbar/CheckSchemeControl';
+import RefreshControl from './TopToolbar/RefreshControl';
+
+const TopToolbar = ({ onZoomIn, onZoomOut, onDelete, onRefresh }) => {
+  return (
+    <AppBar position="static" sx={{ backgroundColor: '#ffffff', boxShadow: 1 }}>
+      <Toolbar sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 2 }}>
+        
+        {/* Масштабування */}
+        <ScaleControl onZoomIn={onZoomIn} onZoomOut={onZoomOut} onDelete={onDelete} />
+        
+        <Divider orientation="vertical" flexItem />
+
+        {/* Прив'язки */}
+        <BindingsControl />
+
+        <Divider orientation="vertical" flexItem />
+
+        {/* Перевірка схеми */}
+        <CheckSchemeControl />
+
+        <Divider orientation="vertical" flexItem />
+
+        {/* Оновити */}
+        <RefreshControl onRefresh={onRefresh} />
+      </Toolbar>
+    </AppBar>
+  );
+};
+
+export default TopToolbar;
+```
+
+---
+
+### 2️⃣ **Оновлений ScaleControl.js**
+
+```javascript
+import React from 'react';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+const ScaleControl = ({ onZoomIn, onZoomOut, onDelete }) => {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Tooltip title="Збільшити">
+        <IconButton color="primary" onClick={onZoomIn}>
+          <AddIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Зменшити">
+        <IconButton color="primary" onClick={onZoomOut}>
+          <RemoveIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Видалити елемент">
+        <IconButton color="error" onClick={onDelete}>
+          <DeleteIcon />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+};
+
+export default ScaleControl;
+```
+
+---
+
+### 3️⃣ **Оновлений BindingsControl.js**
+
+```javascript
+import React, { useState } from 'react';
+import { Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent } from '@mui/material';
+import LinkIcon from '@mui/icons-material/Link';
+import DeviceHubIcon from '@mui/icons-material/DeviceHub';
+import MapIcon from '@mui/icons-material/Map';
+
+const BindingsControl = () => {
+  const [openDialog, setOpenDialog] = useState(null);
+
+  const handleOpenDialog = (type) => setOpenDialog(type);
+  const handleCloseDialog = () => setOpenDialog(null);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Tooltip title="Додати ЗВТ">
+        <IconButton onClick={() => handleOpenDialog('zvt')}>
+          <DeviceHubIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Додати зв'язок між аркушами">
+        <IconButton onClick={() => handleOpenDialog('link')}>
+          <LinkIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Додати просторову схему">
+        <IconButton onClick={() => handleOpenDialog('spatial')}>
+          <MapIcon />
+        </IconButton>
+      </Tooltip>
+
+      {/* Модальні вікна */}
+      <Dialog open={openDialog === 'zvt'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати ЗВТ</DialogTitle>
+        <DialogContent>Елементи форми для додавання ЗВТ</DialogContent>
+      </Dialog>
+
+      <Dialog open={openDialog === 'link'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати зв'язок між аркушами</DialogTitle>
+        <DialogContent>Елементи форми для додавання зв'язку</DialogContent>
+      </Dialog>
+
+      <Dialog open={openDialog === 'spatial'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати просторову схему</DialogTitle>
+        <DialogContent>Елементи форми для додавання просторової схеми</DialogContent>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default BindingsControl;
+```
+
+---
+
+### 4️⃣ **Оновлений CheckSchemeControl.js**
+
+```javascript
+import React, { useState } from 'react';
+import { IconButton, Tooltip, Dialog, DialogTitle, DialogContent } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+
+const CheckSchemeControl = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Tooltip title="Перевірка тракту">
+        <IconButton color="success" onClick={() => setOpen(true)}>
+          <CheckCircleIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Dialog open={open} onClose={() => setOpen(false)}>
+        <DialogTitle>Перевірка тракту</DialogTitle>
+        <DialogContent>Елементи форми для перевірки тракту</DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+export default CheckSchemeControl;
+```
+
+---
+
+### 5️⃣ **Оновлений RefreshControl.js**
+
+```javascript
+import React, { useState } from 'react';
+import { IconButton, Tooltip, Typography, Box } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+
+const RefreshControl = ({ onRefresh }) => {
+  const [lastUpdated, setLastUpdated] = useState(new Date().toLocaleString());
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Tooltip title="Оновити">
+        <IconButton
+          color="primary"
+          onClick={() => {
+            onRefresh();
+            setLastUpdated(new Date().toLocaleString());
+          }}
+        >
+          <RefreshIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Typography variant="caption">Оновлено: {lastUpdated}</Typography>
+    </Box>
+  );
+};
+
+export default RefreshControl;
+```
+
+---
+
+### 6️⃣ **Оновлений index.js (Editor Page)**
+
+```javascript
+'use client';
+import dynamic from 'next/dynamic';
+import LeftSidebar from '../../components/Editor/LeftSidebar';
+import TopToolbar from '../../components/Editor/TopToolbar';
+
+const EditorCanvas = dynamic(() => import('../../components/Editor/EditorCanvas'), {
+  ssr: false,
+});
+
+export default function EditorPage() {
+  const handleZoomIn = () => console.log('Zoom In');
+  const handleZoomOut = () => console.log('Zoom Out');
+  const handleDelete = () => console.log('Delete Element');
+  const handleRefresh = () => console.log('Refresh Data');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <TopToolbar
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onDelete={handleDelete}
+        onRefresh={handleRefresh}
+      />
+      <div style={{ display: 'flex', flex: 1 }}>
+        <LeftSidebar />
+        <EditorCanvas />
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## ✅ **Результат:**
+
+- Верхня панель **горизонтальна**, елементи розташовані в один ряд.  
+- **Іконки з підказками** (`Tooltip`) для зручності.  
+- **Модальні вікна** для прив’язок і перевірки.  
+- **Кнопка Оновити** з відображенням дати.
+
+Тепер інтерфейс виглядає компактно і зручно. Якщо потрібно ще щось вдосконалити — дай знати! 😉

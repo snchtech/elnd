@@ -1,0 +1,229 @@
+Так, у **Next.js** із використанням **React** і **Konva** можна реалізувати відкриття кількох схем в табах на сторінці **Editor**. Це дуже зручно, оскільки дозволяє працювати з декількома схемами одночасно.
+
+### 📌 **Загальна логіка роботи**
+1. **Таби** для відкритих схем.  
+2. **Динамічне завантаження даних** для кожної схеми.  
+3. **Редагування** кожної схеми окремо в табах.  
+4. Можливість **закривати** таби.
+
+---
+
+## 1️⃣ **Структура компонентів**
+
+```
+components/
+├── Editor/
+│   ├── EditorTabs.js        // Таб-контейнер для схем
+│   └── EditorTabContent.js  // Вміст конкретної схеми
+```
+
+---
+
+## 2️⃣ **EditorTabs.js** (Таби для схем)
+
+```javascript
+import React, { useState } from 'react';
+import { Tabs, Tab, Box, IconButton } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import EditorTabContent from './EditorTabContent';
+
+const EditorTabs = () => {
+  const [openTabs, setOpenTabs] = useState([]);
+  const [activeTab, setActiveTab] = useState(0);
+
+  // Додати нову схему в таб
+  const handleAddTab = (scheme) => {
+    const exists = openTabs.find((tab) => tab.scheme_id === scheme.scheme_id);
+    if (!exists) {
+      setOpenTabs([...openTabs, scheme]);
+      setActiveTab(openTabs.length); // Переходимо на новий таб
+    } else {
+      setActiveTab(openTabs.indexOf(exists)); // Якщо вже відкрита, перемикаємось
+    }
+  };
+
+  // Закрити таб
+  const handleCloseTab = (index) => {
+    const newTabs = openTabs.filter((_, i) => i !== index);
+    setOpenTabs(newTabs);
+    if (index === activeTab) setActiveTab(0);
+  };
+
+  return (
+    <Box sx={{ width: '100%' }}>
+      <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
+        {openTabs.map((tab, index) => (
+          <Tab
+            key={tab.scheme_id}
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                {tab.scheme_name}
+                <IconButton size="small" onClick={() => handleCloseTab(index)}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            }
+          />
+        ))}
+      </Tabs>
+
+      {openTabs.map((tab, index) => (
+        <Box key={tab.scheme_id} hidden={activeTab !== index} sx={{ p: 2 }}>
+          <EditorTabContent schemeId={tab.scheme_id} />
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
+export default EditorTabs;
+```
+
+---
+
+## 3️⃣ **EditorTabContent.js** (Вміст таба)
+
+```javascript
+import React, { useEffect, useState, useRef } from 'react';
+import { Stage, Layer } from 'react-konva';
+import { CircularProgress, Box, Typography } from '@mui/material';
+
+const EditorTabContent = ({ schemeId }) => {
+  const [loading, setLoading] = useState(true);
+  const [schemeData, setSchemeData] = useState(null);
+  const stageRef = useRef();
+
+  useEffect(() => {
+    const fetchScheme = async () => {
+      try {
+        const response = await fetch(`/api/scheme/${schemeId}`);
+        const data = await response.json();
+        setSchemeData(data);
+      } catch (error) {
+        console.error('Error fetching scheme:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchScheme();
+  }, [schemeId]);
+
+  if (loading) {
+    return <CircularProgress />;
+  }
+
+  if (!schemeData) {
+    return <Typography>Схему не знайдено.</Typography>;
+  }
+
+  return (
+    <Stage
+      width={window.innerWidth - 250}
+      height={window.innerHeight - 100}
+      ref={stageRef}
+      style={{ backgroundColor: '#f0f0f0', border: '1px solid black' }}
+    >
+      <Layer>
+        {schemeData.scheme_data.map((el) => {
+          switch (el.type) {
+            case 'rect':
+              return (
+                <Rect
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  width={el.width}
+                  height={el.height}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            case 'circle':
+              return (
+                <Circle
+                  key={el.id}
+                  x={el.x}
+                  y={el.y}
+                  radius={el.radius}
+                  fill={el.fill}
+                  draggable
+                />
+              );
+            default:
+              return null;
+          }
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+
+export default EditorTabContent;
+```
+
+---
+
+## 4️⃣ **API для завантаження схеми** (`/api/scheme/[id].js`)
+
+```javascript
+import oracledb from 'oracledb';
+import dbConfig from '../../../config/dbConfig';
+
+export default async function handler(req, res) {
+  const { id } = req.query;
+
+  try {
+    const connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT * FROM scheme WHERE scheme_id = :id`,
+      [id],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Схема не знайдена' });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error('DB Error:', error);
+    res.status(500).json({ message: 'Помилка сервера' });
+  }
+}
+```
+
+---
+
+## 5️⃣ **Editor.js** (Основна сторінка)
+
+```javascript
+import React from 'react';
+import EditorTabs from '../../components/Editor/EditorTabs';
+import TopNavBar from '../../components/interface/headerLine/TopHeaderLine';
+
+const Editor = () => {
+  return (
+    <div>
+      <TopNavBar />
+      <EditorTabs />
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+---
+
+## ✅ **Пояснення**
+
+1. **Таби** динамічно додаються при відкритті схем.  
+2. **EditorTabContent** підтягує дані конкретної схеми через API.  
+3. **Konva** використовується для відображення схеми.  
+4. **Закриття табів** видаляє схему з інтерфейсу, але не з БД.  
+5. Дані підтягуються **асинхронно** без перезавантаження сторінки.
+
+---
+
+❓ Якщо потрібно додати більше функціоналу або інтегрувати ще щось — скажи, і я допоможу!

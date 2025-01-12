@@ -1,0 +1,236 @@
+Давай реалізуємо основну частину редактора з усіма зазначеними функціональними блоками. Ми використаємо **Material UI** для інтерфейсу і **React-Konva** для роботи з графікою.
+
+---
+
+### 📦 **Оновлена структура компонентів**
+
+```
+components/
+├── Editor/
+│   ├── CanvasArea/
+│   │   ├── CanvasHeader.js         // Підписи до схеми (Шифр альбому, Пункт тощо)
+│   │   ├── KonvaStage.js           // Головна канва Konva
+│   │   ├── SchemeTable.js          // Таблиця для позицій
+│   │   └── NotesBlock.js           // Блок для примітки
+│   ├── Modals/
+│   │   ├── AddTableModal.js        // Модальне вікно для додавання таблиці
+│   │   └── AddNoteModal.js         // Модальне вікно для додавання примітки
+│   └── CanvasArea.js               // Основний контейнер для канви
+```
+
+---
+
+## 1️⃣ **CanvasHeader.js** (Підписи до схеми)
+
+```javascript
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+
+const CanvasHeader = ({ albumCode, point, system, schemeName, sheetNumber }) => {
+  return (
+    <Box sx={{ position: 'absolute', top: 10, left: 10 }}>
+      <Typography variant="subtitle2">Шифр альбому: {albumCode}</Typography>
+      <Typography variant="subtitle2">Пункт: {point}</Typography>
+      <Typography variant="subtitle2">Система: {system}</Typography>
+      <Typography variant="subtitle2">Назва схеми: {schemeName}</Typography>
+      <Typography variant="subtitle2">Аркуш: {sheetNumber}</Typography>
+    </Box>
+  );
+};
+
+export default CanvasHeader;
+```
+
+---
+
+## 2️⃣ **KonvaStage.js** (Основна канва)
+
+```javascript
+import React, { useRef } from 'react';
+import { Stage, Layer } from 'react-konva';
+
+const KonvaStage = ({ width, height, elements, onSelectElement }) => {
+  const stageRef = useRef();
+
+  return (
+    <Stage
+      width={width}
+      height={height}
+      style={{ border: '1px solid black', backgroundColor: '#fff' }}
+      ref={stageRef}
+    >
+      <Layer>
+        {elements.map((el) => {
+          const ElementComponent = el.component;
+          return (
+            <ElementComponent
+              key={el.id}
+              {...el.props}
+              onClick={() => onSelectElement(el.id)}
+            />
+          );
+        })}
+      </Layer>
+    </Stage>
+  );
+};
+
+export default KonvaStage;
+```
+
+---
+
+## 3️⃣ **SchemeTable.js** (Таблиця позицій)
+
+```javascript
+import React from 'react';
+import { Table, TableBody, TableCell, TableHead, TableRow, IconButton, Box, Button } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+
+const SchemeTable = ({ rows, onAddRow }) => {
+  return (
+    <Box sx={{ position: 'absolute', bottom: 10, right: 10 }}>
+      <Table size="small" sx={{ border: '1px solid black' }}>
+        <TableHead>
+          <TableRow>
+            <TableCell>Позиція</TableCell>
+            <TableCell>Позначення</TableCell>
+            <TableCell>Найменування</TableCell>
+            <TableCell>Кількість</TableCell>
+            <TableCell>Примітка</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, index) => (
+            <TableRow key={index}>
+              <TableCell>{row.position}</TableCell>
+              <TableCell>{row.designation}</TableCell>
+              <TableCell>{row.name}</TableCell>
+              <TableCell>{row.quantity}</TableCell>
+              <TableCell>{row.note}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <Button
+        variant="outlined"
+        startIcon={<AddIcon />}
+        onClick={onAddRow}
+        sx={{ mt: 1 }}
+      >
+        Додати рядок
+      </Button>
+    </Box>
+  );
+};
+
+export default SchemeTable;
+```
+
+---
+
+## 4️⃣ **NotesBlock.js** (Блок примітки)
+
+```javascript
+import React from 'react';
+import { Box, Typography } from '@mui/material';
+
+const NotesBlock = ({ note }) => {
+  return (
+    <Box sx={{ position: 'absolute', bottom: 120, right: 10, border: '1px dashed gray', padding: 1 }}>
+      <Typography variant="caption">Примітка:</Typography>
+      <Typography variant="body2">{note}</Typography>
+    </Box>
+  );
+};
+
+export default NotesBlock;
+```
+
+---
+
+## 5️⃣ **AddTableModal.js** (Модальне вікно для таблиці)
+
+```javascript
+import React, { useState } from 'react';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from '@mui/material';
+
+const AddTableModal = ({ open, onClose, onAddRow }) => {
+  const [row, setRow] = useState({ position: '', designation: '', name: '', quantity: '', note: '' });
+
+  const handleChange = (field) => (e) => {
+    setRow({ ...row, [field]: e.target.value });
+  };
+
+  const handleSubmit = () => {
+    onAddRow(row);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>Додати рядок до таблиці</DialogTitle>
+      <DialogContent>
+        <TextField label="Позиція" fullWidth margin="dense" onChange={handleChange('position')} />
+        <TextField label="Позначення" fullWidth margin="dense" onChange={handleChange('designation')} />
+        <TextField label="Найменування" fullWidth margin="dense" onChange={handleChange('name')} />
+        <TextField label="Кількість" fullWidth margin="dense" onChange={handleChange('quantity')} />
+        <TextField label="Примітка" fullWidth margin="dense" onChange={handleChange('note')} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Скасувати</Button>
+        <Button onClick={handleSubmit}>Додати</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export default AddTableModal;
+```
+
+---
+
+## 6️⃣ **CanvasArea.js** (Основний блок)
+
+```javascript
+import React, { useState } from 'react';
+import KonvaStage from './CanvasArea/KonvaStage';
+import CanvasHeader from './CanvasArea/CanvasHeader';
+import SchemeTable from './CanvasArea/SchemeTable';
+import NotesBlock from './CanvasArea/NotesBlock';
+import AddTableModal from './Modals/AddTableModal';
+
+const CanvasArea = () => {
+  const [elements, setElements] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [note, setNote] = useState('');
+  const [isTableModalOpen, setTableModalOpen] = useState(false);
+
+  const handleAddRow = (row) => {
+    setRows([...rows, row]);
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '1123px', height: '794px', margin: 'auto', border: '1px solid black' }}>
+      <CanvasHeader albumCode="3.ТТ.000-СШ" point="55" system="С1" schemeName="Схема розміщення системи С1" sheetNumber="3" />
+      <KonvaStage width={1123} height={794} elements={elements} />
+      <SchemeTable rows={rows} onAddRow={() => setTableModalOpen(true)} />
+      <NotesBlock note={note} />
+      <AddTableModal open={isTableModalOpen} onClose={() => setTableModalOpen(false)} onAddRow={handleAddRow} />
+    </div>
+  );
+};
+
+export default CanvasArea;
+```
+
+---
+
+## ✅ **Функціонал**
+
+- **Рамка** 1px і підписи згори.  
+- **Таблиця** з додаванням рядків.  
+- **Примітка** над таблицею.
+
+Готовий додати більше функціоналу! 😉

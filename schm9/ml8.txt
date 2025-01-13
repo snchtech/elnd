@@ -1,0 +1,286 @@
+Щоб підтягнути дані з таблиці **відділів** та **пунктів** у випадаючі списки (**`Select`**) в інформаційній картці схеми, потрібно реалізувати API на **Node.js + Express** для роботи з базою даних Oracle і підключити цей API у фронтенді (React/Next.js).
+
+---
+
+### 📦 **1. API для отримання відділів і пунктів**
+
+**🔹 Структура папок:**
+
+```
+/backend
+  ├── /routes
+  │     ├── departments.js
+  │     └── units.js
+  ├── /controllers
+  │     ├── departmentController.js
+  │     └── unitController.js
+  ├── /db
+  │     └── oracle.js
+  └── server.js
+```
+
+---
+
+### 🚀 **Node.js (Express) API для відділів та пунктів**
+
+#### 🔹 **1. Підключення до Oracle (db/oracle.js)**
+
+```javascript
+const oracledb = require('oracledb');
+
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+
+const dbConfig = {
+  user: 'your_db_user',
+  password: 'your_db_password',
+  connectString: 'localhost/XEPDB1', // або свій connection string
+};
+
+async function initialize() {
+  try {
+    await oracledb.createPool(dbConfig);
+    console.log('✅ Oracle DB Connected');
+  } catch (err) {
+    console.error('❌ Error connecting to Oracle DB:', err);
+  }
+}
+
+async function close() {
+  try {
+    await oracledb.getPool().close(0);
+    console.log('🔌 Oracle DB Disconnected');
+  } catch (err) {
+    console.error('❌ Error closing Oracle DB connection:', err);
+  }
+}
+
+async function executeQuery(sql, binds = []) {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const result = await connection.execute(sql, binds);
+    return result.rows;
+  } catch (err) {
+    console.error('❌ Query Error:', err);
+    throw err;
+  } finally {
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('❌ Error closing connection:', err);
+      }
+    }
+  }
+}
+
+module.exports = { initialize, close, executeQuery };
+```
+
+---
+
+#### 🔹 **2. Роут для отримання відділів (routes/departments.js)**
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const { getDepartments } = require('../controllers/departmentController');
+
+router.get('/departments', getDepartments);
+
+module.exports = router;
+```
+
+#### 🔹 **3. Контролер для відділів (controllers/departmentController.js)**
+
+```javascript
+const { executeQuery } = require('../db/oracle');
+
+async function getDepartments(req, res) {
+  try {
+    const sql = `SELECT id, short_name, name FROM department`;
+    const departments = await executeQuery(sql);
+    res.status(200).json(departments);
+  } catch (error) {
+    res.status(500).json({ error: 'Не вдалося отримати список відділів' });
+  }
+}
+
+module.exports = { getDepartments };
+```
+
+---
+
+#### 🔹 **4. Роут і контролер для пунктів**
+
+**`routes/units.js`**
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const { getUnits } = require('../controllers/unitController');
+
+router.get('/units', getUnits);
+
+module.exports = router;
+```
+
+**`controllers/unitController.js`**
+
+```javascript
+const { executeQuery } = require('../db/oracle');
+
+async function getUnits(req, res) {
+  try {
+    const sql = `SELECT id, name FROM unit`;
+    const units = await executeQuery(sql);
+    res.status(200).json(units);
+  } catch (error) {
+    res.status(500).json({ error: 'Не вдалося отримати список пунктів' });
+  }
+}
+
+module.exports = { getUnits };
+```
+
+---
+
+#### 🔹 **5. Сервер (server.js)**
+
+```javascript
+const express = require('express');
+const cors = require('cors');
+const { initialize, close } = require('./db/oracle');
+const departmentRoutes = require('./routes/departments');
+const unitRoutes = require('./routes/units');
+
+const app = express();
+const PORT = 5000;
+
+app.use(cors());
+app.use(express.json());
+
+// API Routes
+app.use('/api', departmentRoutes);
+app.use('/api', unitRoutes);
+
+initialize().then(() => {
+  app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+});
+
+process.on('SIGINT', async () => {
+  await close();
+  process.exit(0);
+});
+```
+
+---
+
+### 📦 **2. Підключення API на фронтенді**
+
+#### 🔹 **Оновлення SchemeInfoCard.js**
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Box, TextField, Select, MenuItem, Typography, InputLabel, FormControl } from '@mui/material';
+
+const SchemeInfoCard = ({
+  album, setAlbum,
+  sheetNumber, setSheetNumber,
+  schemeName, setSchemeName,
+  department, setDepartment,
+  point, setPoint,
+  format, setFormat
+}) => {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const formats = ['A4', 'A3', 'A2', 'A1', 'A0'];
+
+  // Завантаження відділів
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/departments');
+        const data = await res.json();
+        setDepartments(data);
+      } catch (error) {
+        console.error('Помилка завантаження відділів:', error);
+      }
+    };
+
+    const fetchUnits = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/units');
+        const data = await res.json();
+        setUnits(data);
+      } catch (error) {
+        console.error('Помилка завантаження пунктів:', error);
+      }
+    };
+
+    fetchDepartments();
+    fetchUnits();
+  }, []);
+
+  return (
+    <Box>
+      {/* Відділ */}
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Відділ</InputLabel>
+        <Select value={department} onChange={(e) => setDepartment(e.target.value)}>
+          {departments.map((dep) => (
+            <MenuItem key={dep.ID} value={dep.ID}>
+              {dep.NAME}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {/* Пункт */}
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Пункт</InputLabel>
+        <Select value={point} onChange={(e) => setPoint(e.target.value)}>
+          {units.map((unit) => (
+            <MenuItem key={unit.ID} value={unit.ID}>
+              {unit.NAME}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {/* Назва схеми */}
+      <TextField
+        fullWidth
+        label="Назва схеми"
+        value={schemeName}
+        onChange={(e) => setSchemeName(e.target.value)}
+        sx={{ mb: 2 }}
+      />
+
+      {/* Формат */}
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Формат</InputLabel>
+        <Select value={format} onChange={(e) => setFormat(e.target.value)}>
+          {formats.map((fmt) => (
+            <MenuItem key={fmt} value={fmt}>{fmt}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <Typography variant="body2">Час останнього оновлення: {new Date().toLocaleString()}</Typography>
+    </Box>
+  );
+};
+
+export default SchemeInfoCard;
+```
+
+---
+
+### ✅ **Що ми отримали:**
+
+1. **API** для отримання відділів та пунктів з Oracle.  
+2. **Фронтенд** інтеграцію для динамічного підтягування даних у `Select`.  
+3. **Розширення** гнучкості додатку для роботи з базою.
+
+🌟 Тепер відділи та пункти динамічно підтягуються з бази даних!

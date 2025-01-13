@@ -1,0 +1,89 @@
+Щоб зробити заголовок схеми у вигляді **таблиці**, де всі дані будуть розташовані горизонтально з відступами та межами, використаємо **Material UI Table**. Це дозволить зробити чітке вирівнювання елементів у комірках із рамками.
+
+---
+
+### 🔥 **Оновлений компонент CanvasHeader**
+
+```javascript
+import React from 'react';
+import { Box, Table, TableBody, TableCell, TableContainer, TableRow, Paper } from '@mui/material';
+
+const CanvasHeader = ({ albumCode, point, system, schemeName, sheetNumber }) => {
+  return (
+    <Box sx={{ position: 'absolute', top: 5, left: 0, right: 0, width: '100%' }}>
+      <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid black' }}>
+        <Table size="small">
+          <TableBody>
+            <TableRow>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Шифр альбому</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{albumCode}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Пункт</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{point}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Система</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{system}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Назва схеми</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{schemeName}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Аркуш</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{sheetNumber}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
+export default CanvasHeader;
+```
+
+---
+
+### 📝 **Що було змінено:**
+
+1. **Використана таблиця (`Table`) для розміщення даних**  
+   - Кожна пара **назва + значення** знаходиться в окремих комірках.
+
+2. **Додано рамки (`border`) для кожної комірки**  
+   - Це дозволяє зробити вигляд таблиці акуратним і структурованим.
+
+3. **Розміщення таблиці на всю ширину канвасу**  
+   - Вирівняно по горизонталі з використанням `left: 0, right: 0`.
+
+4. **Шапка розташована біля верхньої рамки схеми**  
+   - Відступ зверху (`top: 5`) для зручності.
+
+---
+
+### ✅ **Як використовувати:**
+
+Додай компонент **CanvasHeader** до канвасу схеми:
+
+```javascript
+<Stage width={canvasSize.width} height={canvasSize.height} ref={stageRef}>
+  <Layer>
+    {/* Заголовок */}
+    <CanvasHeader
+      albumCode="3.ТТ.000-СШ"
+      point="55"
+      system="С1"
+      schemeName="Схема розміщення системи С1"
+      sheetNumber="3"
+    />
+
+    {/* Інші елементи схеми */}
+  </Layer>
+</Stage>
+```
+
+---
+
+### 💡 **Подальші покращення:**
+
+- Додати можливість редагування заголовка напряму на канвасі.  
+- Автоматично підлаштовувати ширину шапки під формат сторінки.
+
+Готовий допомогти з реалізацією наступних кроків! 😉

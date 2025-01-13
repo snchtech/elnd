@@ -1,0 +1,190 @@
+Щоб зробити **двосторонню зв'язок** між полями в **SchemeInfoCard** та відображенням даних у **CanvasHeader**, потрібно підняти стан (state) до батьківського компонента й передавати дані як пропси.
+
+### 🔥 **Рішення:**  
+1. **Підняти стан (state)** до батьківського компонента (наприклад, `Editor`).  
+2. **Передати функції зміни стану** у `SchemeInfoCard`.  
+3. **Передати дані** у `CanvasHeader`.
+
+---
+
+### 📦 **1. Оновлений батьківський компонент (Editor.js)**
+
+```javascript
+import React, { useState } from 'react';
+import { Box } from '@mui/material';
+import SchemeInfoCard from './SchemeInfoCard';
+import CanvasHeader from './CanvasHeader';
+
+const Editor = () => {
+  const [album, setAlbum] = useState('');
+  const [sheetNumber, setSheetNumber] = useState('');
+  const [schemeName, setSchemeName] = useState('');
+  const [department, setDepartment] = useState('');
+  const [point, setPoint] = useState('');
+  const [format, setFormat] = useState('');
+
+  return (
+    <Box sx={{ display: 'flex' }}>
+      {/* Ліва панель */}
+      <Box sx={{ width: '300px', padding: '10px', backgroundColor: '#f4f4f4' }}>
+        <SchemeInfoCard
+          album={album}
+          setAlbum={setAlbum}
+          sheetNumber={sheetNumber}
+          setSheetNumber={setSheetNumber}
+          schemeName={schemeName}
+          setSchemeName={setSchemeName}
+          department={department}
+          setDepartment={setDepartment}
+          point={point}
+          setPoint={setPoint}
+          format={format}
+          setFormat={setFormat}
+        />
+      </Box>
+
+      {/* Основний блок */}
+      <Box sx={{ flexGrow: 1, position: 'relative' }}>
+        <CanvasHeader
+          albumCode={album}
+          point={point}
+          system={department}
+          schemeName={schemeName}
+          sheetNumber={sheetNumber}
+        />
+      </Box>
+    </Box>
+  );
+};
+
+export default Editor;
+```
+
+---
+
+### 📦 **2. Оновлений компонент SchemeInfoCard.js**
+
+```javascript
+import React from 'react';
+import { Box, TextField, Select, MenuItem, Typography, InputLabel, FormControl } from '@mui/material';
+
+const SchemeInfoCard = ({
+  album, setAlbum,
+  sheetNumber, setSheetNumber,
+  schemeName, setSchemeName,
+  department, setDepartment,
+  point, setPoint,
+  format, setFormat
+}) => {
+  const formats = ['A4', 'A3', 'A2', 'A1', 'A0'];
+  const departments = ['IT', 'HR', 'Finance'];
+
+  return (
+    <Box>
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Альбом</InputLabel>
+        <Select value={album} onChange={(e) => setAlbum(e.target.value)}>
+          <MenuItem value="">Не вибрано</MenuItem>
+          <MenuItem value="Альбом 1">Альбом 1</MenuItem>
+          <MenuItem value="Альбом 2">Альбом 2</MenuItem>
+        </Select>
+      </FormControl>
+
+      <TextField
+        fullWidth
+        label="Номер аркуша"
+        value={sheetNumber}
+        onChange={(e) => setSheetNumber(e.target.value)}
+        sx={{ mb: 2 }}
+      />
+
+      <TextField
+        fullWidth
+        label="Назва схеми"
+        value={schemeName}
+        onChange={(e) => setSchemeName(e.target.value)}
+        sx={{ mb: 2 }}
+      />
+
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Відділ</InputLabel>
+        <Select value={department} onChange={(e) => setDepartment(e.target.value)}>
+          {departments.map((dep) => (
+            <MenuItem key={dep} value={dep}>{dep}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <TextField
+        fullWidth
+        label="Пункт"
+        value={point}
+        onChange={(e) => setPoint(e.target.value)}
+        sx={{ mb: 2 }}
+      />
+
+      <FormControl fullWidth sx={{ mb: 2 }}>
+        <InputLabel>Формат</InputLabel>
+        <Select value={format} onChange={(e) => setFormat(e.target.value)}>
+          {formats.map((fmt) => (
+            <MenuItem key={fmt} value={fmt}>{fmt}</MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <Typography variant="body2">Час останнього оновлення: {new Date().toLocaleString()}</Typography>
+    </Box>
+  );
+};
+
+export default SchemeInfoCard;
+```
+
+---
+
+### 📦 **3. Оновлений компонент CanvasHeader.js**
+
+```javascript
+import React from 'react';
+import { Box, Table, TableBody, TableCell, TableContainer, TableRow, Paper } from '@mui/material';
+
+const CanvasHeader = ({ albumCode, point, system, schemeName, sheetNumber }) => {
+  return (
+    <Box sx={{ position: 'absolute', top: 5, left: 0, right: 0, width: '100%' }}>
+      <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid black' }}>
+        <Table size="small">
+          <TableBody>
+            <TableRow>
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Шифр альбому</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{albumCode}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Пункт</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{point}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Система</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{system}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Назва схеми</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{schemeName}</TableCell>
+
+              <TableCell sx={{ border: '1px solid black', fontWeight: 'bold' }}>Аркуш</TableCell>
+              <TableCell sx={{ border: '1px solid black' }}>{sheetNumber}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
+
+export default CanvasHeader;
+```
+
+---
+
+### ✅ **Що ми отримали:**
+
+1. **Зв'язок між полями інформаційної картки та шапкою схеми.**  
+2. При зміні полів у **SchemeInfoCard**, ці значення миттєво оновлюються у **CanvasHeader**.
+
+💡 Тепер при будь-якій зміні даних у формі інформаційної картки шапка схеми автоматично оновлюється!

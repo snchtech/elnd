@@ -1,0 +1,146 @@
+Додамо повноцінний функціонал для блоку **Примітки**, який дозволяє додавати, редагувати та зберігати примітку.
+
+---
+
+### ✅ **Оновлений компонент NotesBlock.js**
+
+```javascript
+import React, { useState } from 'react';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, TextField, DialogActions, IconButton, Tooltip } from '@mui/material';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import EditIcon from '@mui/icons-material/Edit';
+
+const NotesBlock = () => {
+  const [note, setNote] = useState('');           // Збережена примітка
+  const [tempNote, setTempNote] = useState('');   // Проміжний текст під час редагування
+  const [isDialogOpen, setIsDialogOpen] = useState(false); // Стан модального вікна
+
+  // Відкрити модальне вікно
+  const handleOpenDialog = () => {
+    setTempNote(note); // Підставляємо поточну примітку
+    setIsDialogOpen(true);
+  };
+
+  // Закрити модальне вікно
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+  };
+
+  // Додати/Оновити примітку
+  const handleSaveNote = () => {
+    setNote(tempNote);
+    setIsDialogOpen(false);
+  };
+
+  return (
+    <>
+      {/* Кнопка для додавання або редагування примітки */}
+      <Tooltip title={note ? "Редагувати примітку" : "Додати примітку"}>
+        <IconButton
+          color="primary"
+          onClick={handleOpenDialog}
+          sx={{ position: 'absolute', bottom: 180, right: 10 }}
+        >
+          {note ? <EditIcon /> : <NoteAddIcon />}
+        </IconButton>
+      </Tooltip>
+
+      {/* Відображення примітки на схемі */}
+      {note && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 120,
+            right: 10,
+            border: '1px dashed gray',
+            padding: 1,
+            backgroundColor: '#f9f9f9',
+            maxWidth: 200,
+            borderRadius: 1,
+          }}
+        >
+          <Typography variant="caption" fontWeight="bold">
+            Примітка:
+          </Typography>
+          <Typography variant="body2">{note}</Typography>
+        </Box>
+      )}
+
+      {/* Модальне вікно для додавання/редагування примітки */}
+      <Dialog open={isDialogOpen} onClose={handleCloseDialog}>
+        <DialogTitle>{note ? 'Редагувати примітку' : 'Додати примітку'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Введіть текст примітки"
+            type="text"
+            fullWidth
+            multiline
+            minRows={3}
+            value={tempNote}
+            onChange={(e) => setTempNote(e.target.value)}
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} color="secondary">
+            Скасувати
+          </Button>
+          <Button onClick={handleSaveNote} variant="contained" color="primary">
+            {note ? 'Оновити' : 'Додати'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default NotesBlock;
+```
+
+---
+
+### 📝 **Що змінилося:**
+
+1. **Додано кнопку** з іконкою для додавання/редагування примітки (використано іконки `NoteAddIcon` і `EditIcon`).
+2. **Модальне вікно** із текстовим полем для введення або редагування тексту примітки.
+3. **Відображення примітки** на схемі в окремому блоці з сірим фоном і пунктирною рамкою.
+
+---
+
+### ✅ **Як використовувати NotesBlock**
+
+Додай цей компонент у свою сторінку, наприклад, у **Editor**:
+
+```javascript
+import NotesBlock from '../interface/NotesBlock';
+
+const EditorPage = () => {
+  return (
+    <div style={{ position: 'relative', height: '100vh' }}>
+      {/* Інші компоненти */}
+      <NotesBlock />
+    </div>
+  );
+};
+
+export default EditorPage;
+```
+
+---
+
+### 🔥 **Подальші покращення:**
+
+1. **Збереження в базі даних**:  
+   Після натискання кнопки **"Додати"** або **"Оновити"** можна додати API-запит для збереження примітки в БД.
+
+2. **Динамічне позиціонування**:  
+   Додати можливість перетягування примітки по схемі.
+
+3. **Кілька приміток**:  
+   Додати підтримку кількох приміток із можливістю їх редагування та видалення.
+
+---
+
+💡 **Якщо хочеш додати ще якісь можливості або вдосконалити функціонал — скажи, і я допоможу!**

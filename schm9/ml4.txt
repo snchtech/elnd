@@ -1,0 +1,232 @@
+Додамо повноцінний функціонал для роботи з таблицею:  
+1. **Редагування рядків**  
+2. **Видалення рядків**  
+3. **Оновлення розміщення блоку примітки** (над таблицею)
+
+---
+
+### ✅ **Оновлений компонент таблиці з можливістю редагування і видалення**
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Button,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Tooltip
+} from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
+
+const AddTableModal = ({ open, onClose, onAddRow, editableRow }) => {
+  const [row, setRow] = useState({
+    position: '',
+    designation: '',
+    name: '',
+    quantity: '',
+    note: ''
+  });
+
+  // Якщо редагуємо рядок - підставляємо дані
+  useEffect(() => {
+    if (editableRow) {
+      setRow(editableRow);
+    } else {
+      setRow({ position: '', designation: '', name: '', quantity: '', note: '' });
+    }
+  }, [editableRow]);
+
+  const handleChange = (field) => (e) => {
+    setRow({ ...row, [field]: e.target.value });
+  };
+
+  const handleSubmit = () => {
+    onAddRow(row);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>{editableRow ? 'Редагувати рядок' : 'Додати рядок до таблиці'}</DialogTitle>
+      <DialogContent>
+        <TextField label="Позиція" fullWidth margin="dense" value={row.position} onChange={handleChange('position')} />
+        <TextField label="Позначення" fullWidth margin="dense" value={row.designation} onChange={handleChange('designation')} />
+        <TextField label="Найменування" fullWidth margin="dense" value={row.name} onChange={handleChange('name')} />
+        <TextField label="Кількість" fullWidth margin="dense" value={row.quantity} onChange={handleChange('quantity')} />
+        <TextField label="Примітка" fullWidth margin="dense" value={row.note} onChange={handleChange('note')} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Скасувати</Button>
+        <Button onClick={handleSubmit} variant="contained" color="primary">
+          {editableRow ? 'Оновити' : 'Додати'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const SchemeTable = ({ onNotePositionUpdate }) => {
+  const [rows, setRows] = useState([]);                // Дані таблиці
+  const [openModal, setOpenModal] = useState(false);   // Стан модального вікна
+  const [editableRow, setEditableRow] = useState(null); // Рядок для редагування
+
+  // Додавання або оновлення рядка
+  const handleAddRow = (newRow) => {
+    if (editableRow) {
+      setRows((prev) =>
+        prev.map((row) => (row === editableRow ? newRow : row))
+      );
+      setEditableRow(null);
+    } else {
+      setRows([...rows, newRow]);
+    }
+  };
+
+  // Видалення рядка
+  const handleDeleteRow = (index) => {
+    setRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Відкрити модальне вікно для додавання
+  const handleOpenModal = () => {
+    setEditableRow(null);
+    setOpenModal(true);
+  };
+
+  // Відкрити модальне вікно для редагування
+  const handleEditRow = (row) => {
+    setEditableRow(row);
+    setOpenModal(true);
+  };
+
+  // Оновлення позиції примітки при зміні таблиці
+  useEffect(() => {
+    if (onNotePositionUpdate) {
+      onNotePositionUpdate(rows.length);
+    }
+  }, [rows, onNotePositionUpdate]);
+
+  return (
+    <Box sx={{ position: 'absolute', bottom: 10, right: 10 }}>
+      <Button
+        variant="contained"
+        startIcon={<AddIcon />}
+        onClick={handleOpenModal}
+      >
+        Додати таблицю
+      </Button>
+
+      {/* Таблиця */}
+      {rows.length > 0 && (
+        <TableContainer component={Paper} sx={{ marginTop: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Позиція</TableCell>
+                <TableCell>Позначення</TableCell>
+                <TableCell>Найменування</TableCell>
+                <TableCell>Кількість</TableCell>
+                <TableCell>Примітка</TableCell>
+                <TableCell align="center">Дії</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((row, index) => (
+                <TableRow key={index}>
+                  <TableCell>{row.position}</TableCell>
+                  <TableCell>{row.designation}</TableCell>
+                  <TableCell>{row.name}</TableCell>
+                  <TableCell>{row.quantity}</TableCell>
+                  <TableCell>{row.note}</TableCell>
+                  <TableCell align="center">
+                    <Tooltip title="Редагувати">
+                      <IconButton onClick={() => handleEditRow(row)}>
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Видалити">
+                      <IconButton onClick={() => handleDeleteRow(index)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Модальне вікно */}
+      <AddTableModal
+        open={openModal}
+        onClose={() => setOpenModal(false)}
+        onAddRow={handleAddRow}
+        editableRow={editableRow}
+      />
+    </Box>
+  );
+};
+
+export default SchemeTable;
+```
+
+---
+
+### 📝 **Що було додано:**
+
+1. **Редагування рядків**  
+   - Кнопка з іконкою ✏️ (`EditIcon`) для редагування рядка.  
+   - При натисканні відкривається модальне вікно із заповненими даними.
+
+2. **Видалення рядків**  
+   - Кнопка з іконкою 🗑️ (`DeleteIcon`) для видалення рядка.
+
+3. **Оновлення позиції примітки**  
+   - Додано **`onNotePositionUpdate`**, яка оновлює позицію примітки залежно від кількості рядків у таблиці.
+
+4. **Кнопка "Додати таблицю"**  
+   - Таблиця з'являється лише після додавання даних.
+
+---
+
+### ✅ **Як використовувати в Editor**
+
+```javascript
+import SchemeTable from '../interface/SchemeTable';
+import NotesBlock from '../interface/NotesBlock';
+
+const EditorPage = () => {
+  const [noteOffset, setNoteOffset] = useState(0);
+
+  return (
+    <div style={{ position: 'relative', height: '100vh' }}>
+      <SchemeTable onNotePositionUpdate={(count) => setNoteOffset(count * 30)} />
+      <NotesBlock noteOffset={noteOffset} />
+    </div>
+  );
+};
+
+export default EditorPage;
+```
+
+---
+
+💡 **Покращення:**  
+- Додати API-запити для збереження/оновлення таблиці в БД.  
+- Додати можливість перетягування таблиці.
+
+Готовий розширювати функціонал! 😉

@@ -1,0 +1,158 @@
+Оновимо компоненти, додавши **Label** перед групами кнопок.
+
+---
+
+### ✅ **Оновлений компонент ScaleControl з Label "Масштаб"**
+
+```javascript
+import React from 'react';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+const ScaleControl = ({ onZoomIn, onZoomOut, onDelete }) => {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="subtitle1" sx={{ mr: 1 }}>
+        Масштаб:
+      </Typography>
+
+      <Tooltip title="Збільшити">
+        <IconButton color="primary" onClick={onZoomIn}>
+          <AddIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Зменшити">
+        <IconButton color="primary" onClick={onZoomOut}>
+          <RemoveIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Видалити елемент">
+        <IconButton color="error" onClick={onDelete}>
+          <DeleteIcon />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+};
+
+export default ScaleControl;
+```
+
+---
+
+### ✅ **Оновлений компонент BindingsControl з Label "Прив'язки"**
+
+```javascript
+import React, { useState } from 'react';
+import { Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, Typography } from '@mui/material';
+import LinkIcon from '@mui/icons-material/Link';
+import DeviceHubIcon from '@mui/icons-material/DeviceHub';
+import MapIcon from '@mui/icons-material/Map';
+
+const BindingsControl = () => {
+  const [openDialog, setOpenDialog] = useState(null);
+
+  const handleOpenDialog = (type) => setOpenDialog(type);
+  const handleCloseDialog = () => setOpenDialog(null);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="subtitle1" sx={{ mr: 1 }}>
+        Прив'язки:
+      </Typography>
+
+      <Tooltip title="Додати ЗВТ">
+        <IconButton onClick={() => handleOpenDialog('zvt')}>
+          <DeviceHubIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Додати зв'язок між аркушами">
+        <IconButton onClick={() => handleOpenDialog('link')}>
+          <LinkIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Tooltip title="Додати просторову схему">
+        <IconButton onClick={() => handleOpenDialog('spatial')}>
+          <MapIcon />
+        </IconButton>
+      </Tooltip>
+
+      {/* Модальні вікна */}
+      <Dialog open={openDialog === 'zvt'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати ЗВТ</DialogTitle>
+        <DialogContent>Елементи форми для додавання ЗВТ</DialogContent>
+      </Dialog>
+
+      <Dialog open={openDialog === 'link'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати зв'язок між аркушами</DialogTitle>
+        <DialogContent>Елементи форми для додавання зв'язку</DialogContent>
+      </Dialog>
+
+      <Dialog open={openDialog === 'spatial'} onClose={handleCloseDialog}>
+        <DialogTitle>Додати просторову схему</DialogTitle>
+        <DialogContent>Елементи форми для додавання просторової схеми</DialogContent>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default BindingsControl;
+```
+
+---
+
+### ✅ **Оновлений компонент CheckSchemeControl з Label "Перевірка тракту"**
+
+```javascript
+import React, { useState } from 'react';
+import { Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, Typography } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+
+const CheckSchemeControl = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Typography variant="subtitle1" sx={{ mr: 1 }}>
+        Перевірка тракту:
+      </Typography>
+
+      <Tooltip title="Перевірка тракту">
+        <IconButton color="success" onClick={() => setOpen(true)}>
+          <CheckCircleIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Dialog open={open} onClose={() => setOpen(false)}>
+        <DialogTitle>Перевірка тракту</DialogTitle>
+        <DialogContent>Елементи форми для перевірки тракту</DialogContent>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default CheckSchemeControl;
+```
+
+---
+
+### 📝 **Пояснення змін**
+
+1. Додано **`Typography`** для підписів:
+   - `"Масштаб:"` для **ScaleControl**  
+   - `"Прив'язки:"` для **BindingsControl**  
+   - `"Перевірка тракту:"` для **CheckSchemeControl**
+
+2. Використано **`sx={{ mr: 1 }}`** для відступів.
+
+3. Групи кнопок виглядають логічно та зрозуміло.
+
+---
+
+💡 Якщо потрібно додати ще якусь функціональність або покращити вигляд — скажи, і я допоможу!

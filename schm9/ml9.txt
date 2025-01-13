@@ -1,0 +1,284 @@
+Щоб покращити організацію коду, ми впровадимо окрему **графічну бібліотеку** для роботи з елементами Konva. Це зробить проект масштабованим, гнучким і зручним для додавання нових елементів.
+
+---
+
+### 📂 **Рекомендована структура проєкту**
+
+```
+/components
+  ├── GraphLibrary
+  │     ├── GraphLibrary.js
+  │     ├── elements
+  │     │     ├── RectElement.js
+  │     │     ├── CircleElement.js
+  │     │     ├── LineElement.js
+  │     │     └── TextElement.js
+  ├── Canvas
+  │     └── KonvaCanvas.js
+  ├── LeftSidebar
+  │     └── StandardElements.js
+  └── Editor
+        └── EditorPage.js
+```
+
+---
+
+## 🔥 **1. GraphLibrary: Бібліотека графічних елементів**
+
+### 📄 **GraphLibrary.js**
+
+```javascript
+import RectElement from './elements/RectElement';
+import CircleElement from './elements/CircleElement';
+import TextElement from './elements/TextElement';
+import LineElement from './elements/LineElement';
+
+const GraphLibrary = {
+  rect: RectElement,
+  circle: CircleElement,
+  text: TextElement,
+  line: LineElement,
+};
+
+export default GraphLibrary;
+```
+
+---
+
+## 🎨 **2. Компоненти елементів**
+
+### 📄 **RectElement.js**
+
+```javascript
+import React from 'react';
+import { Rect } from 'react-konva';
+
+const RectElement = ({ el, onDragEnd, onClickEl, onTransformEnd }) => {
+  return (
+    <Rect
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      width={el.width}
+      height={el.height}
+      fill={el.fill}
+      draggable
+      rotation={el.rotation}
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+      onClick={() => onClickEl(el.id)}
+      onTransformEnd={(e) => onTransformEnd(el.id, e)}
+    />
+  );
+};
+
+export default RectElement;
+```
+
+### 📄 **CircleElement.js**
+
+```javascript
+import React from 'react';
+import { Circle } from 'react-konva';
+
+const CircleElement = ({ el, onDragEnd, onClickEl, onTransformEnd }) => {
+  return (
+    <Circle
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      radius={el.radius}
+      fill={el.fill}
+      draggable
+      rotation={el.rotation}
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+      onClick={() => onClickEl(el.id)}
+      onTransformEnd={(e) => onTransformEnd(el.id, e)}
+    />
+  );
+};
+
+export default CircleElement;
+```
+
+### 📄 **LineElement.js**
+
+```javascript
+import React from 'react';
+import { Line } from 'react-konva';
+
+const LineElement = ({ el, onDragEnd, onClickEl, onTransformEnd }) => {
+  return (
+    <Line
+      key={el.id}
+      points={el.points}
+      stroke="black"
+      strokeWidth={2}
+      draggable
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+      onClick={() => onClickEl(el.id)}
+      onTransformEnd={(e) => onTransformEnd(el.id, e)}
+    />
+  );
+};
+
+export default LineElement;
+```
+
+### 📄 **TextElement.js**
+
+```javascript
+import React from 'react';
+import { Text } from 'react-konva';
+
+const TextElement = ({ el, onDragEnd, onClickEl, onTransformEnd }) => {
+  return (
+    <Text
+      key={el.id}
+      x={el.x}
+      y={el.y}
+      text={el.text}
+      fontSize={20}
+      fill={el.fill}
+      draggable
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+      onClick={() => onClickEl(el.id)}
+      onTransformEnd={(e) => onTransformEnd(el.id, e)}
+    />
+  );
+};
+
+export default TextElement;
+```
+
+---
+
+## 📌 **3. Робоча область Konva Canvas**
+
+### 📄 **KonvaCanvas.js**
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer } from 'react-konva';
+import { v4 as uuidv4 } from 'uuid';
+import GraphLibrary from '../GraphLibrary/GraphLibrary';
+import StandardElements from '../LeftSidebar/StandardElements';
+
+const KonvaCanvas = () => {
+  const stageRef = useRef(null);
+  const [elements, setElements] = useState([]);
+  const [selectedElId, setSelectedElId] = useState(null);
+
+  const handleAddElement = (type) => {
+    const newElement = {
+      id: uuidv4(),
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      fill: 'gray',
+      draggable: true,
+      rotation: 0,
+      points: [0, 0, 100, 100],
+    };
+    setElements((prev) => [...prev, newElement]);
+  };
+
+  const handleDragEnd = (id, e) => {
+    setElements((prev) =>
+      prev.map((el) =>
+        el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+      )
+    );
+  };
+
+  const handleSelectElement = (id) => {
+    setSelectedElId(id);
+  };
+
+  return (
+    <div style={{ display: 'flex' }}>
+      <StandardElements onAddElement={handleAddElement} />
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth - 250}
+        height={window.innerHeight}
+        style={{ backgroundColor: '#f0f0f0', border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el) => {
+            const ElementComponent = GraphLibrary[el.type];
+            if (!ElementComponent) return null;
+            return (
+              <ElementComponent
+                key={el.id}
+                el={el}
+                onDragEnd={handleDragEnd}
+                onClickEl={handleSelectElement}
+              />
+            );
+          })}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default KonvaCanvas;
+```
+
+---
+
+## 🔹 **4. Панель додавання елементів**
+
+### 📄 **StandardElements.js**
+
+```javascript
+import React from 'react';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import CropSquareIcon from '@mui/icons-material/CropSquare';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import TitleIcon from '@mui/icons-material/Title';
+
+const StandardElements = ({ onAddElement }) => {
+  return (
+    <Box sx={{ width: 250, p: 2, borderRight: '1px solid #ccc' }}>
+      <h3>Стандартні елементи</h3>
+      <Tooltip title="Прямокутник">
+        <IconButton onClick={() => onAddElement('rect')}>
+          <CropSquareIcon />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Коло">
+        <IconButton onClick={() => onAddElement('circle')}>
+          <RadioButtonUncheckedIcon />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Лінія">
+        <IconButton onClick={() => onAddElement('line')}>
+          <ShowChartIcon />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Текст">
+        <IconButton onClick={() => onAddElement('text')}>
+          <TitleIcon />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+};
+
+export default StandardElements;
+```
+
+---
+
+## 🎉 **Підсумок**
+
+1. **Гнучка структура** для додавання нових графічних елементів.  
+2. **Розділення логіки** між елементами та основним `Stage`.  
+3. **Зручне масштабування** та підтримка коду.  
+
+Додати нові елементи дуже просто — лише потрібно створити новий компонент і додати його до `GraphLibrary.js`.

@@ -1,0 +1,218 @@
+Щоб реалізувати **виділення графічних елементів** із рамкою та можливістю масштабування, повороту і переміщення, використаємо компонент **`Transformer`** з бібліотеки **`react-konva`**. Це дозволить нам досягти такого ж ефекту, як у графічних редакторах (Visio, Figma, AutoCAD).
+
+---
+
+## 🔥 **1. Що ми реалізуємо**
+- Виділення елемента з рамкою при кліку.  
+- Можливість **масштабувати** і **обертати** елемент.  
+- Виділення **одного** або **декількох** елементів.  
+- **Зняття виділення** при кліку на порожню область.
+
+---
+
+## 📦 **Оновлена структура проекту**
+
+```
+/components
+  ├── GraphLibrary
+  │     ├── GraphLibrary.js
+  │     ├── elements
+  │     │     ├── RectElement.js
+  │     │     ├── CircleElement.js
+  │     │     ├── LineElement.js
+  │     │     └── TextElement.js
+  ├── Canvas
+  │     ├── KonvaCanvas.js
+  │     └── TransformerComponent.js
+  └── LeftSidebar
+        └── StandardElements.js
+```
+
+---
+
+## 🔧 **2. Компонент для виділення — Transformer**
+
+### 📄 **TransformerComponent.js**
+
+```javascript
+import React, { useEffect } from 'react';
+import { Transformer } from 'react-konva';
+
+const TransformerComponent = ({ selectedShape, stageRef }) => {
+  const trRef = React.useRef();
+
+  useEffect(() => {
+    if (selectedShape && trRef.current) {
+      trRef.current.nodes([selectedShape]);
+      trRef.current.getLayer().batchDraw();
+    }
+  }, [selectedShape]);
+
+  return (
+    <Transformer
+      ref={trRef}
+      rotateEnabled={true}
+      enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+      boundBoxFunc={(oldBox, newBox) => {
+        // Обмеження мінімального розміру елемента
+        if (newBox.width < 20 || newBox.height < 20) {
+          return oldBox;
+        }
+        return newBox;
+      }}
+    />
+  );
+};
+
+export default TransformerComponent;
+```
+
+**🔑 Пояснення:**  
+- **`Transformer`** обгортає елемент рамкою з можливістю масштабування і повороту.  
+- Виділення відбувається через переданий **`selectedShape`**.
+
+---
+
+## 🖼 **3. Оновлена Canvas з виділенням**
+
+### 📄 **KonvaCanvas.js**
+
+```javascript
+import React, { useRef, useState } from 'react';
+import { Stage, Layer } from 'react-konva';
+import { v4 as uuidv4 } from 'uuid';
+import GraphLibrary from '../GraphLibrary/GraphLibrary';
+import StandardElements from '../LeftSidebar/StandardElements';
+import TransformerComponent from './TransformerComponent';
+
+const KonvaCanvas = () => {
+  const stageRef = useRef(null);
+  const [elements, setElements] = useState([]);
+  const [selectedElId, setSelectedElId] = useState(null);
+
+  // Додаємо новий елемент
+  const handleAddElement = (type) => {
+    const newElement = {
+      id: uuidv4(),
+      type,
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      radius: 50,
+      fill: 'gray',
+      draggable: true,
+      rotation: 0,
+      points: [0, 0, 100, 100],
+    };
+    setElements((prev) => [...prev, newElement]);
+  };
+
+  // Обробник переміщення
+  const handleDragEnd = (id, e) => {
+    setElements((prev) =>
+      prev.map((el) =>
+        el.id === id ? { ...el, x: e.target.x(), y: e.target.y() } : el
+      )
+    );
+  };
+
+  // Виділення елемента
+  const handleSelectElement = (id) => {
+    setSelectedElId(id);
+  };
+
+  // Зняття виділення при кліку на порожню область
+  const handleStageClick = (e) => {
+    if (e.target === e.target.getStage()) {
+      setSelectedElId(null);
+    }
+  };
+
+  // Пошук виділеного елемента
+  const selectedShape = elements.find((el) => el.id === selectedElId);
+
+  return (
+    <div style={{ display: 'flex' }}>
+      <StandardElements onAddElement={handleAddElement} />
+      <Stage
+        ref={stageRef}
+        width={window.innerWidth - 250}
+        height={window.innerHeight}
+        onMouseDown={handleStageClick}
+        style={{ backgroundColor: '#f0f0f0', border: '1px solid black' }}
+      >
+        <Layer>
+          {elements.map((el) => {
+            const ElementComponent = GraphLibrary[el.type];
+            if (!ElementComponent) return null;
+
+            return (
+              <ElementComponent
+                key={el.id}
+                el={el}
+                isSelected={el.id === selectedElId}
+                onDragEnd={handleDragEnd}
+                onClickEl={() => handleSelectElement(el.id)}
+              />
+            );
+          })}
+
+          {/* Додаємо Transformer */}
+          {selectedShape && (
+            <TransformerComponent
+              selectedShape={stageRef.current.findOne(`#${selectedElId}`)}
+              stageRef={stageRef}
+            />
+          )}
+        </Layer>
+      </Stage>
+    </div>
+  );
+};
+
+export default KonvaCanvas;
+```
+
+---
+
+## 🎨 **4. Оновлений графічний елемент (наприклад, прямокутник)**
+
+### 📄 **RectElement.js**
+
+```javascript
+import React from 'react';
+import { Rect } from 'react-konva';
+
+const RectElement = ({ el, onDragEnd, onClickEl }) => {
+  return (
+    <Rect
+      id={el.id}
+      x={el.x}
+      y={el.y}
+      width={el.width}
+      height={el.height}
+      fill={el.fill}
+      draggable
+      rotation={el.rotation}
+      onDragEnd={(e) => onDragEnd(el.id, e)}
+      onClick={onClickEl}
+      stroke={el.isSelected ? 'blue' : 'transparent'}
+      strokeWidth={el.isSelected ? 2 : 0}
+    />
+  );
+};
+
+export default RectElement;
+```
+
+---
+
+## ✅ **Що ми отримали**
+
+1. **Виділення елемента** з рамкою.  
+2. **Масштабування** і **обертання** через `Transformer`.  
+3. **Зняття виділення** при кліку на порожню область.  
+4. **Готову основу** для роботи з кількома об'єктами.
+
+Це робить взаємодію з елементами зручною і інтуїтивно зрозумілою!

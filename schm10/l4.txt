@@ -1,0 +1,251 @@
+### 📦 **Структура проекту Next.js**
+
+```
+/frontend
+  ├── /components
+  │     └── Auth
+  │           └── LoginForm.js   // Форма логіну
+  ├── /pages
+  │     ├── index.js             // Головна сторінка
+  │     └── login.js             // Сторінка логіну
+  ├── /utils
+  │     └── auth.js              // Обробка авторизації
+  ├── /context
+  │     └── AuthContext.js       // Контекст для збереження користувача
+  ├── /middleware
+  │     └── withAuth.js          // Middleware для захисту сторінок
+  ├── package.json
+  └── next.config.js
+```
+
+---
+
+## 🔑 **1. Налаштування Context для авторизації (`/context/AuthContext.js`)**
+
+```javascript
+'use client';
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));  // Зберігаємо в LocalStorage
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+## 📋 **2. Сторінка логіну (`/pages/login.js`)**
+
+```javascript
+'use client';
+import React, { useState } from 'react';
+import { TextField, Button, Box, Typography, Alert } from '@mui/material';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+
+const LoginPage = () => {
+  const { login } = useAuth();
+  const router = useRouter();
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [capsLock, setCapsLock] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!username || !password) {
+      setError('Заповніть всі поля');
+      return;
+    }
+
+    if (/[а-яА-ЯЁё]/.test(password)) {
+      setError('Пароль не може містити кириличні символи');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'validated') {
+        login(data.user);
+        router.push('/editor');
+      } else {
+        setError('Невірний логін або пароль');
+      }
+    } catch (error) {
+      setError('Помилка сервера');
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    setCapsLock(e.getModifierState('CapsLock'));
+  };
+
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      height="100vh"
+    >
+      <Typography variant="h4" gutterBottom>Вхід в систему</Typography>
+
+      {error && <Alert severity="error">{error}</Alert>}
+      {capsLock && <Alert severity="warning">Увімкнено CapsLock!</Alert>}
+
+      <Box component="form" onSubmit={handleSubmit} sx={{ width: 300 }}>
+        <TextField
+          fullWidth
+          label="Логін"
+          margin="normal"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+
+        <TextField
+          fullWidth
+          label="Пароль"
+          type="password"
+          margin="normal"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKeyPress}
+          required
+        />
+
+        <Button
+          type="submit"
+          fullWidth
+          variant="contained"
+          sx={{ mt: 2 }}
+        >
+          Увійти
+        </Button>
+      </Box>
+    </Box>
+  );
+};
+
+export default LoginPage;
+```
+
+---
+
+## 🛡 **3. Middleware для захисту сторінок (`/middleware/withAuth.js`)**
+
+```javascript
+'use client';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent, requiredRole) => {
+  return (props) => {
+    const { user } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (!user) {
+        router.push('/login');
+      } else if (requiredRole && !user.roles.includes(requiredRole)) {
+        router.push('/');
+      }
+    }, [user]);
+
+    if (!user || (requiredRole && !user.roles.includes(requiredRole))) {
+      return null;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+};
+
+export default withAuth;
+```
+
+---
+
+## ✏ **4. Сторінка Editor із перевіркою ролі (`/pages/editor.js`)**
+
+```javascript
+'use client';
+import React from 'react';
+import withAuth from '../middleware/withAuth';
+import { Box, Typography } from '@mui/material';
+
+const EditorPage = () => {
+  return (
+    <Box sx={{ padding: 4 }}>
+      <Typography variant="h4">Редактор схем</Typography>
+      <Typography>Ласкаво просимо до редактора схем!</Typography>
+    </Box>
+  );
+};
+
+export default withAuth(EditorPage, 'Editor');
+```
+
+---
+
+## 🔄 **5. Підключення AuthContext в `_app.js`**
+
+```javascript
+'use client';
+import { AuthProvider } from '../context/AuthContext';
+
+export default function App({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+```
+
+---
+
+## 🚀 **Робота функціоналу**
+
+1. **Валідація логіна/пароля** — поля не можуть бути порожні, пароль не містить кирилицю.
+2. **CapsLock** — попередження при натисканні.
+3. **Запит до API** — перевірка логіна і пароля.
+4. **JWT токен** або **локальне збереження** — зберігання інформації про користувача в `localStorage`.
+5. **Перевірка ролей** — доступ на сторінку `Editor` тільки для ролі `"Editor"`.  
+
+Таким чином ми реалізували сучасну і безпечну авторизацію з ролями для Next.js.

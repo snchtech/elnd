@@ -1,0 +1,275 @@
+Ось оновлена версія сервера на **Express** із підключенням до **Oracle** з використанням синтаксису `import/export` (ES6):
+
+---
+
+### 📁 **Оновлена структура проєкту**
+
+```
+/backend
+├── /controllers
+│   ├── departmentController.js
+│   ├── schemeController.js
+│   └── unitController.js
+├── /db
+│   └── oracle.js
+├── /routes
+│   ├── departments.js
+│   ├── schemes.js
+│   └── units.js
+├── /middleware
+│   └── errorHandler.js
+├── /utils
+│   └── fileManager.js
+├── server.js
+└── package.json
+```
+
+---
+
+### 🔌 **1. Налаштування підключення до Oracle (`db/oracle.js`)**
+
+```javascript
+import oracledb from 'oracledb';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+
+const dbConfig = {
+  user: process.env.ORACLE_USER,
+  password: process.env.ORACLE_PASSWORD,
+  connectString: process.env.ORACLE_CONNECTION_STRING,
+};
+
+export async function initialize() {
+  try {
+    await oracledb.createPool(dbConfig);
+    console.log('✅ Oracle DB Connected');
+  } catch (err) {
+    console.error('❌ Error connecting to Oracle DB:', err);
+  }
+}
+
+export async function close() {
+  try {
+    await oracledb.getPool().close(0);
+    console.log('🔌 Oracle DB Disconnected');
+  } catch (err) {
+    console.error('❌ Error closing Oracle DB connection:', err);
+  }
+}
+
+export async function executeQuery(sql, binds = [], options = {}) {
+  let connection;
+  try {
+    connection = await oracledb.getConnection();
+    const result = await connection.execute(sql, binds, options);
+    return result.rows;
+  } catch (err) {
+    console.error('❌ Query Error:', err);
+    throw err;
+  } finally {
+    if (connection) {
+      await connection.close();
+    }
+  }
+}
+```
+
+---
+
+### 📚 **2. Контролери (controllers/)**
+
+#### **`controllers/departmentController.js`**
+
+```javascript
+import { executeQuery } from '../db/oracle.js';
+
+export async function getDepartments(req, res) {
+  try {
+    const sql = `SELECT id, short_name, name FROM department`;
+    const departments = await executeQuery(sql);
+    res.status(200).json(departments);
+  } catch (error) {
+    console.error('❌ Error fetching departments:', error);
+    res.status(500).json({ error: 'Не вдалося отримати список відділів' });
+  }
+}
+```
+
+#### **`controllers/schemeController.js`**
+
+```javascript
+import { executeQuery } from '../db/oracle.js';
+import { v4 as uuidv4 } from 'uuid';
+
+export async function getSchemes(req, res) {
+  try {
+    const sql = `SELECT * FROM scheme`;
+    const schemes = await executeQuery(sql);
+    res.status(200).json(schemes);
+  } catch (error) {
+    console.error('❌ Error fetching schemes:', error);
+    res.status(500).json({ error: 'Не вдалося отримати список схем' });
+  }
+}
+
+export async function createScheme(req, res) {
+  const { scheme_name, scheme_album_id, scheme_department, scheme_unit, scheme_format, scheme_description } = req.body;
+  const scheme_id = uuidv4();
+
+  try {
+    const sql = `
+      INSERT INTO scheme (id, album_id, name, depart_id, unit_id, format, description, date_created)
+      VALUES (:id, :album_id, :name, :depart_id, :unit_id, :format, :description, SYSDATE)
+    `;
+    await executeQuery(sql, [scheme_id, scheme_album_id, scheme_name, scheme_department, scheme_unit, scheme_format, scheme_description]);
+    res.status(201).json({ message: 'Схему успішно створено', id: scheme_id });
+  } catch (error) {
+    console.error('❌ Error creating scheme:', error);
+    res.status(500).json({ error: 'Не вдалося створити схему' });
+  }
+}
+```
+
+---
+
+### 🛣️ **3. Роути (routes/)**
+
+#### **`routes/departments.js`**
+
+```javascript
+import express from 'express';
+import { getDepartments } from '../controllers/departmentController.js';
+
+const router = express.Router();
+
+router.get('/', getDepartments);
+
+export default router;
+```
+
+#### **`routes/schemes.js`**
+
+```javascript
+import express from 'express';
+import { getSchemes, createScheme } from '../controllers/schemeController.js';
+
+const router = express.Router();
+
+router.get('/', getSchemes);
+router.post('/create', createScheme);
+
+export default router;
+```
+
+---
+
+### 🖥 **4. Сервер (`server.js`)**
+
+```javascript
+import express from 'express';
+import cors from 'cors';
+import compression from 'compression';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import { initialize, close } from './db/oracle.js';
+import departmentRoutes from './routes/departments.js';
+import schemeRoutes from './routes/schemes.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+
+app.use(cors());
+app.use(express.json());
+app.use(compression());
+app.use(morgan('dev'));
+
+// Роути
+app.use('/api/departments', departmentRoutes);
+app.use('/api/schemes', schemeRoutes);
+
+// Запуск сервера
+async function startServer() {
+  try {
+    await initialize();
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+
+    process.on('SIGINT', async () => {
+      await close();
+      process.exit(0);
+    });
+  } catch (error) {
+    console.error('❌ Error starting server:', error);
+  }
+}
+
+startServer();
+```
+
+---
+
+### ✅ **5. Запуск серверу**
+
+Додайте у **`package.json`**:
+
+```json
+"type": "module"
+```
+
+Запуск сервера:
+
+```bash
+node server.js
+```
+
+---
+
+### 🔗 **6. Підключення Next.js до API**
+
+#### **Отримання відділів**
+
+```javascript
+useEffect(() => {
+  fetch('http://localhost:4000/api/departments')
+    .then((res) => res.json())
+    .then((data) => setDepartments(data))
+    .catch((err) => console.error(err));
+}, []);
+```
+
+#### **Створення схеми**
+
+```javascript
+const handleCreateScheme = async () => {
+  await fetch('http://localhost:4000/api/schemes/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scheme_name: 'Нова схема',
+      scheme_album_id: '1',
+      scheme_department: 'IT',
+      scheme_unit: 'Цех 1',
+      scheme_format: 'A4',
+      scheme_description: 'Опис схеми',
+    }),
+  });
+};
+```
+
+---
+
+## 🔥 **Що ми отримали:**
+
+1. **Повністю відокремлений сервер Express.**  
+2. **Чисту структуру за допомогою `import/export`.**  
+3. **Гнучке підключення до Oracle з розширюваною логікою.**  
+4. **Зручну взаємодію між Next.js і API сервером.**
+
+Таке рішення дозволяє легко масштабувати проект і додавати новий функціонал. 🚀

@@ -1,0 +1,239 @@
+Зберігання токена на сервері — це **безпечніший підхід** у порівнянні з клієнтським зберіганням (наприклад, в `localStorage`). Один із способів — використання **файлової БД** як **LowDB** для зберігання токенів.
+
+Однак найкращою практикою є використання **Redis** або **Memory Store** для зберігання токенів, оскільки ці інструменти забезпечують високу швидкодію та автоматичне очищення токенів.
+
+### 🔥 **Рішення 1: Зберігання токена в LowDB**
+
+---
+
+### 📦 **1. Встановлення LowDB**
+
+```bash
+npm install lowdb
+```
+
+### 📂 **2. Налаштування LowDB**
+
+🔹 **`db/tokenDb.js`** (Файл для роботи з токенами)
+
+```javascript
+import { Low } from 'lowdb';
+import { JSONFile } from 'lowdb/node';
+
+const file = new JSONFile('./db/tokens.json');
+const db = new Low(file);
+
+// Ініціалізація бази даних
+await db.read();
+db.data ||= { tokens: [] }; // Якщо токенів немає — створюємо масив
+
+/**
+ * Додати токен користувача
+ */
+export const addToken = async (username, token) => {
+  await db.read();
+  db.data.tokens.push({ username, token, createdAt: new Date().toISOString() });
+  await db.write();
+};
+
+/**
+ * Перевірка токена
+ */
+export const isValidToken = async (token) => {
+  await db.read();
+  return db.data.tokens.some((t) => t.token === token);
+};
+
+/**
+ * Видалити токен при логауті
+ */
+export const removeToken = async (token) => {
+  await db.read();
+  db.data.tokens = db.data.tokens.filter((t) => t.token !== token);
+  await db.write();
+};
+```
+
+---
+
+### 🚀 **3. Оновлення контролера авторизації**
+
+🔹 **`controllers/authController.js`**
+
+```javascript
+import { testUserConnection, executeQuery } from '../db/oracle.js';
+import { generateToken } from '../utils/jwt.js';
+import { addToken, removeToken } from '../db/tokenDb.js';
+
+export async function login(req, res) {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ status: 'error', error: 'Логін та пароль обовʼязкові' });
+  }
+
+  const connectionResult = await testUserConnection(username, password);
+
+  if (!connectionResult.success) {
+    return res.status(401).json({ status: 'error', error: connectionResult.error || 'Невірний логін або пароль' });
+  }
+
+  try {
+    const payload = { username, roles: ['auth', 'scheme_user'] };
+    const token = generateToken(payload);
+
+    await addToken(username, token); // ✅ Зберігаємо токен у LowDB
+
+    res.status(200).json({
+      status: 'validated',
+      token,
+      user: payload,
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', error: 'Помилка при обробці запиту' });
+  }
+}
+
+/**
+ * Логаут користувача
+ */
+export async function logout(req, res) {
+  const token = req.headers['authorization']?.split(' ')[1];
+
+  if (!token) {
+    return res.status(400).json({ status: 'error', error: 'Токен відсутній' });
+  }
+
+  await removeToken(token); // ✅ Видаляємо токен із LowDB
+  res.status(200).json({ status: 'success', message: 'Вихід виконано успішно' });
+}
+```
+
+---
+
+### 🔒 **4. Middleware для перевірки токена**
+
+🔹 **`middlewares/authMiddleware.js`**
+
+```javascript
+import { isValidToken } from '../db/tokenDb.js';
+import { verifyToken } from '../utils/jwt.js';
+
+export const authenticateToken = async (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ status: 'error', error: 'Токен відсутній або недійсний' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  const isTokenStored = await isValidToken(token);
+
+  if (!isTokenStored) {
+    return res.status(403).json({ status: 'error', error: 'Токен недійсний або прострочений' });
+  }
+
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    return res.status(403).json({ status: 'error', error: 'Невірний токен' });
+  }
+
+  req.user = decoded;
+  next();
+};
+```
+
+---
+
+### 🟢 **5. Використання Middleware**
+
+🔹 **`routes/protectedRoutes.js`**
+
+```javascript
+import express from 'express';
+import { authenticateToken } from '../middlewares/authMiddleware.js';
+
+const router = express.Router();
+
+router.get('/secure-data', authenticateToken, (req, res) => {
+  res.json({ message: `Вітаю, ${req.user.username}! Це захищений контент.` });
+});
+
+export default router;
+```
+
+---
+
+## 🔄 **Переваги і Недоліки підходу з LowDB**
+
+### ✅ **Переваги**
+1. **Простота** — легко реалізувати.
+2. **Локальне зберігання** — зручно для невеликих проектів або тестування.
+3. **Гнучкість** — можна зберігати будь-яку додаткову інформацію.
+
+### ⚠️ **Недоліки**
+1. **Низька масштабованість** — для великих проектів краще Redis або бази даних.
+2. **Повільний доступ** — зчитування/запис в файл може сповільнюватися з часом.
+3. **Ризик втрати даних** — якщо сервер зупиниться, дані не збережуться.
+
+---
+
+## 🔥 **Рішення 2: Зберігання токена в Redis (Рекомендовано)**
+
+Якщо потрібна **швидкість** і **масштабованість**, краще використовувати **Redis**.
+
+### 📦 Встановлення Redis:
+
+```bash
+npm install redis
+```
+
+🔹 **`db/redisClient.js`**
+
+```javascript
+import { createClient } from 'redis';
+
+const redisClient = createClient();
+
+redisClient.on('connect', () => {
+  console.log('✅ Redis Connected');
+});
+
+redisClient.on('error', (err) => {
+  console.error('❌ Redis Error:', err);
+});
+
+await redisClient.connect();
+
+export default redisClient;
+```
+
+🔹 **Збереження токена в Redis**
+
+```javascript
+import redisClient from '../db/redisClient.js';
+
+export const addToken = async (username, token) => {
+  await redisClient.set(token, username, { EX: 60 * 60 * 24 }); // ⏳ Токен зберігається 1 добу
+};
+
+export const removeToken = async (token) => {
+  await redisClient.del(token);
+};
+
+export const isValidToken = async (token) => {
+  const result = await redisClient.exists(token);
+  return result === 1;
+};
+```
+
+---
+
+## ✅ **Що краще обрати?**
+
+1. **Для невеликих проектів/тестування** → **LowDB**  
+2. **Для продакшн-систем** → **Redis** (швидко, безпечно, масштабовано)
+
+Такі підходи забезпечують **контроль** за токенами та дозволяють **логувати активність** користувачів.

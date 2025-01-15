@@ -1,0 +1,211 @@
+Щоб автоматично додавати **JWT токен** до всіх запитів до API, найкраще створити **універсальний HTTP-клієнт**. Це спростить керування токеном і запитами.
+
+### 🔥 **Рішення: Створення універсального HTTP-клієнта**
+
+---
+
+### 📂 **1. Створення файлу API клієнта**
+
+🔹 **`utils/apiClient.js`**
+
+```javascript
+const API_URL = 'http://localhost:5000/api';
+
+/**
+ * Отримання токена з localStorage
+ */
+const getToken = () => {
+  return localStorage.getItem('token');
+};
+
+/**
+ * Універсальна функція для GET-запитів
+ */
+export const apiGet = async (endpoint) => {
+  const token = getToken();
+
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,  // ✅ Додаємо токен до заголовка
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('❌ API GET Error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Універсальна функція для POST-запитів
+ */
+export const apiPost = async (endpoint, body) => {
+  const token = getToken();
+
+  try {
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,  // ✅ Додаємо токен до заголовка
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('❌ API POST Error:', error);
+    throw error;
+  }
+};
+```
+
+---
+
+### 🔄 **2. Використання API клієнта в компоненті**
+
+Тепер спростимо запити на фронтенді.
+
+🔹 **Використання в `useEffect`:**
+
+```javascript
+import { useEffect, useState } from 'react';
+import { apiGet } from '../utils/apiClient';
+
+const DepartmentUnitLoader = () => {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const departmentsData = await apiGet('/departments');
+        setDepartments(departmentsData);
+
+        const unitsData = await apiGet('/units');
+        setUnits(unitsData);
+      } catch (error) {
+        console.error('❌ Помилка завантаження даних:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      <h2>Відділи</h2>
+      <ul>
+        {departments.map((dep) => (
+          <li key={dep.id}>{dep.name}</li>
+        ))}
+      </ul>
+
+      <h2>Пункти</h2>
+      <ul>
+        {units.map((unit) => (
+          <li key={unit.id}>{unit.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default DepartmentUnitLoader;
+```
+
+---
+
+### 🔑 **3. Зберігання токена після логіну**
+
+Після успішної авторизації потрібно зберегти токен у **`localStorage`**.
+
+🔹 **Логіка логіну:**
+
+```javascript
+import { useState } from 'react';
+
+const LoginPage = () => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'validated') {
+        localStorage.setItem('token', data.token);  // ✅ Зберігаємо токен
+        alert('✅ Авторизація успішна!');
+      } else {
+        alert('❌ Помилка авторизації');
+      }
+    } catch (error) {
+      console.error('❌ Логін помилка:', error);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Логін</h2>
+      <input
+        type="text"
+        placeholder="Логін"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <input
+        type="password"
+        placeholder="Пароль"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button onClick={handleLogin}>Вхід</button>
+    </div>
+  );
+};
+
+export default LoginPage;
+```
+
+---
+
+### 🔍 **4. Важливі моменти**
+
+1. **🛡 Безпека**  
+   - У реальному проекті краще зберігати токен в **HTTP-only cookie**, а не в **`localStorage`**, щоб уникнути XSS-атак.
+
+2. **📤 Автоматичне оновлення токена**  
+   - Якщо є **refresh токен**, його можна використати для автоматичного оновлення **access токена**.
+
+3. **🛠 Масштабованість**  
+   - Якщо запитів багато, варто використовувати бібліотеки, як-от **Axios**, яка дозволяє налаштувати інтерсептори для додавання токенів.
+
+---
+
+### ✅ **Переваги такого підходу**
+
+- **Єдиний механізм** додавання токена до всіх запитів.  
+- **Простота** масштабування (легко додати PUT, DELETE).  
+- **Гнучкість** (можна додати обробку помилок, оновлення токена).
+
+Тепер кожен запит до **API** автоматично отримує **JWT токен**!

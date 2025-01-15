@@ -1,0 +1,24 @@
+module.exports = {
+   // Other configs here
+   async headers() {
+       return [
+           {
+               source: '/api',
+               headers: [
+                   {
+                       key: 'Access-Control-Allow-Origin',
+                       value: 'http://localhost:3000', // Allow requests from this origin
+                   },
+                   {
+                       key: 'Access-Control-Allow-Methods',
+                       value: 'GET, OPTIONS',
+                   },
+                   {
+                       key: 'Access-Control-Allow-Headers',
+                       value: 'Content-Type',
+                   },
+               ],
+           },
+       ];
+   },
+};

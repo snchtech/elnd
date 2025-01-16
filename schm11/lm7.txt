@@ -1,0 +1,231 @@
+### 🔧 **1. Виправлення помилки `component definition is missing display name`**
+
+Ця помилка виникає, коли анонімна функція використовується як React-компонент. React рекомендує задавати **displayName** для зручності в дебагінгу.
+
+### ✅ **Виправлений код `withAuth.js`**
+
+```javascript
+'use client';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent, requiredRole) => {
+  const ComponentWithAuth = (props) => {
+    const { user } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (!user) {
+        router.push('/login');  // Перенаправлення на сторінку логіну
+      } else if (requiredRole && !user.roles.includes(requiredRole)) {
+        router.push('/');  // Перенаправлення на головну, якщо немає доступу
+      }
+    }, [user]);
+
+    if (!user || (requiredRole && !user.roles.includes(requiredRole))) {
+      return null;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+
+  ComponentWithAuth.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
+
+  return ComponentWithAuth;
+};
+
+export default withAuth;
+```
+
+🔎 **Що змінилось?**
+- Додано ім'я компонента `ComponentWithAuth` замість анонімної функції.  
+- Встановлено **displayName** для кращого дебагінгу.
+
+---
+
+### 🔒 **2. Як працює `<AuthProvider>` і де його використовувати?**
+
+📦 **`AuthProvider`** — це контекст, який зберігає дані про автентифікацію користувача (токен, ролі, дані користувача).
+
+### 📌 **Приклад структури проекту:**
+
+```
+/app
+  ├── /components
+  │     ├── ProtectedPage.js
+  │     └── Navbar.js
+  ├── /context
+  │     └── AuthContext.js
+  ├── /pages
+  │     ├── _app.js
+  │     ├── index.js
+  │     └── login.js
+```
+
+### 📥 **`AuthContext.js`**
+
+```javascript
+'use client';
+import { createContext, useContext, useEffect, useState } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    if (storedUser) {
+      setUser(storedUser);
+    }
+  }, []);
+
+  const login = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+🔑 **Що тут відбувається?**
+- **user** зберігає інформацію про поточного користувача.  
+- **login(userData)** зберігає користувача в `localStorage` і оновлює стан.  
+- **logout()** очищає сесію.  
+
+---
+
+### 🛠 **3. Де і як використовувати `<AuthProvider>`**
+
+### 📄 **`_app.js` (Глобальне застосування)**
+
+```javascript
+'use client';
+import { AuthProvider } from '../context/AuthContext';
+
+export default function App({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+```
+
+📌 **Що це дає?**  
+Тепер **усі** сторінки автоматично отримують доступ до контексту автентифікації через `useAuth()`.
+
+---
+
+### 🔗 **4. Як використовувати для захищених сторінок**
+
+### 📄 **Приклад захищеної сторінки `pages/protected.js`**
+
+```javascript
+'use client';
+import withAuth from '../middleware/withAuth';
+
+const ProtectedPage = () => {
+  return <h1>Це захищена сторінка для ролі Editor</h1>;
+};
+
+export default withAuth(ProtectedPage, 'Editor');
+```
+
+📌 **Що тут відбувається?**  
+- **`withAuth`** перевіряє роль користувача.  
+- Якщо роль **Editor** є → доступ дозволений.  
+- Якщо ні → редірект на головну сторінку.
+
+---
+
+### 🌐 **5. Як використовувати токен у fetch-запитах**
+
+### 📥 **Глобальний fetch із токеном (`utils/fetchWithAuth.js`)**
+
+```javascript
+'use client';
+
+export const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem('accessToken');
+
+  const headers = {
+    ...options.headers,
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    console.warn('Unauthorized. Перенаправлення на сторінку логіну.');
+    window.location.href = '/login';
+  }
+
+  return res.json();
+};
+```
+
+---
+
+### 📄 **Приклад використання fetch**
+
+```javascript
+'use client';
+import { useEffect, useState } from 'react';
+import { fetchWithAuth } from '../utils/fetchWithAuth';
+
+const Departments = () => {
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const data = await fetchWithAuth('http://localhost:5000/api/departments');
+        setDepartments(data);
+      } catch (error) {
+        console.error('Помилка завантаження:', error);
+      }
+    };
+
+    loadDepartments();
+  }, []);
+
+  return (
+    <div>
+      <h2>Відділи</h2>
+      <ul>
+        {departments.map(dep => (
+          <li key={dep.id}>{dep.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default Departments;
+```
+
+---
+
+### 📦 **Висновок**
+
+1. **Помилку `displayName`** ми виправили, зробивши компонент іменованим.  
+2. **`<AuthProvider>`** додано в `_app.js`, що дозволяє працювати з авторизацією у всіх компонентах.  
+3. **Запити `fetch`** тепер автоматично додають **JWT Token** до заголовків.  
+4. **Захищені сторінки** обмежують доступ за ролями.
+
+Такий підхід є безпечним і зручним для масштабованого додатку.

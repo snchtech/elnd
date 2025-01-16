@@ -1,0 +1,255 @@
+Для безпечного зберігання **JWT токена** краще використовувати **HTTP-only cookies**. Це унеможливлює доступ до токена через JavaScript, що захищає від атак типу **XSS**.
+
+## 🔒 **Реалізація зчитування токена з HTTP-only Cookies**
+
+---
+
+### 📦 **1. Загальна структура**
+
+```
+/my-nextjs-app
+  ├── /pages
+  │     ├── api
+  │     │     ├── login.js         // API для логіну
+  │     │     └── user.js          // API для отримання даних користувача
+  │     ├── index.js
+  │     └── dashboard.js           // Захищена сторінка
+  ├── /utils
+  │     └── jwtHelper.js           // Робота з токенами
+  └── package.json
+```
+
+---
+
+### 📌 **2. Функції для роботи з токенами (`/utils/jwtHelper.js`)**
+
+```javascript
+import jwt from 'jsonwebtoken';
+
+const SECRET_KEY = process.env.JWT_SECRET || 'your_secret_key';
+
+// Генерація токена
+export const generateToken = (payload, expiresIn = '5m') => {
+  return jwt.sign(payload, SECRET_KEY, { expiresIn });
+};
+
+// Перевірка токена
+export const verifyToken = (token) => {
+  try {
+    return jwt.verify(token, SECRET_KEY);
+  } catch (err) {
+    return null;
+  }
+};
+```
+
+---
+
+### 🔑 **3. Логін та встановлення HTTP-only cookie (`/pages/api/login.js`)**
+
+```javascript
+import { generateToken } from '../../utils/jwtHelper';
+import cookie from 'cookie';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+
+  const { username, password } = req.body;
+
+  // 🔐 Перевірка логіна і пароля (замінити на справжню перевірку)
+  if (username === 'admin' && password === 'password') {
+    const payload = {
+      username: 'admin',
+      department: 'Технологічний відділ',
+      unit: 'Підрозділ 1',
+      position: 'Інженер',
+    };
+
+    const token = generateToken(payload, '5m'); // Acess Token на 5 хв
+
+    res.setHeader('Set-Cookie', cookie.serialize('accessToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 5, // 5 хвилин
+      path: '/',
+    }));
+
+    return res.status(200).json({ message: 'Логін успішний' });
+  }
+
+  res.status(401).json({ message: 'Невірний логін або пароль' });
+}
+```
+
+---
+
+### 📥 **4. Отримання інформації про користувача (`/pages/api/user.js`)**
+
+```javascript
+import { verifyToken } from '../../utils/jwtHelper';
+import cookie from 'cookie';
+
+export default async function handler(req, res) {
+  const { accessToken } = cookie.parse(req.headers.cookie || '');
+
+  if (!accessToken) {
+    return res.status(401).json({ message: 'Не авторизовано' });
+  }
+
+  const decoded = verifyToken(accessToken);
+
+  if (!decoded) {
+    return res.status(401).json({ message: 'Токен недійсний або прострочений' });
+  }
+
+  return res.status(200).json({
+    username: decoded.username,
+    department: decoded.department,
+    unit: decoded.unit,
+    position: decoded.position,
+  });
+}
+```
+
+---
+
+### 🔒 **5. Middleware для захисту сторінок (`/middleware/withAuth.js`)**
+
+```javascript
+'use client';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+const withAuth = (WrappedComponent) => {
+  return (props) => {
+    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(null);
+    const router = useRouter();
+
+    useEffect(() => {
+      const fetchUser = async () => {
+        try {
+          const res = await fetch('/api/user');
+          if (res.status === 200) {
+            const data = await res.json();
+            setUser(data);
+          } else {
+            router.push('/login');
+          }
+        } catch (err) {
+          console.error('Помилка авторизації:', err);
+          router.push('/login');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchUser();
+    }, []);
+
+    if (loading) return <p>Завантаження...</p>;
+    if (!user) return null;
+
+    return <WrappedComponent {...props} user={user} />;
+  };
+};
+
+export default withAuth;
+```
+
+---
+
+### 🔐 **6. Захищена сторінка (`/pages/dashboard.js`)**
+
+```javascript
+import withAuth from '../middleware/withAuth';
+
+const Dashboard = ({ user }) => {
+  return (
+    <div>
+      <h1>Вітаємо, {user.username}!</h1>
+      <p>Відділ: {user.department}</p>
+      <p>Підрозділ: {user.unit}</p>
+      <p>Посада: {user.position}</p>
+    </div>
+  );
+};
+
+export default withAuth(Dashboard);
+```
+
+---
+
+### 🚀 **7. Форма логіну (`/pages/login.js`)**
+
+```javascript
+'use client';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+export default function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const router = useRouter();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (res.ok) {
+        router.push('/dashboard');
+      } else {
+        alert('Невірний логін або пароль');
+      }
+    } catch (err) {
+      console.error('Помилка логіну:', err);
+    }
+  };
+
+  return (
+    <form onSubmit={handleLogin}>
+      <input
+        type="text"
+        placeholder="Логін"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        required
+      />
+      <input
+        type="password"
+        placeholder="Пароль"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+      <button type="submit">Вхід</button>
+    </form>
+  );
+}
+```
+
+---
+
+## 🛡 **8. Безпека HTTP-only Cookies**
+
+1. **`httpOnly: true`** — забороняє доступ до куків через JavaScript (захист від XSS).
+2. **`secure: true`** — передача тільки по HTTPS.
+3. **`sameSite: 'strict'`** — захист від CSRF атак.
+
+---
+
+## ⚙️ **9. Висновок**
+
+- **Access Token** зберігається у **HTTP-only Cookies** і використовується для аутентифікації.  
+- **Дані користувача** (позиція, відділ, підрозділ) зчитуються із **JWT токена**.  
+- **Middleware** перевіряє токен і обмежує доступ до сторінок.  
+
+Це безпечний і ефективний підхід для авторизації в Next.js.

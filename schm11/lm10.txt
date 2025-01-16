@@ -1,0 +1,140 @@
+Помилка:
+
+```
+Type error: cannot destructure property 'login' of (0, _context_AuthContext_Webpack_imported_module_2__.useAuth) (...) as it is undefined.
+```
+
+### 📌 **Причина помилки:**
+Ця помилка виникає, коли хук `useAuth()` повертає **`undefined`**. Це означає, що **`AuthProvider`** не обгортає компонент **LoginPage**, і контекст **`AuthContext`** недоступний.
+
+### ✅ **Рішення:**
+
+---
+
+### 1️⃣ **Перевірка обгортання додатку в `AuthProvider`**
+
+У файлі **`_app.js`** (або **`layout.js`** для Next.js 13+), переконайся, що твій додаток обгорнутий у **`AuthProvider`**:
+
+#### **Для Next.js 12:**
+```javascript
+// pages/_app.js
+'use client';
+import { AuthProvider } from '../context/AuthContext';
+
+export default function MyApp({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+```
+
+#### **Для Next.js 13+ (App Router):**
+```javascript
+// app/layout.js
+'use client';
+import { AuthProvider } from '../context/AuthContext';
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+---
+
+### 2️⃣ **Перевірка шляху імпорту `AuthContext`**
+
+Переконайся, що імпорт **`useAuth`** у **LoginPage** правильний.
+
+```javascript
+import { useAuth } from '../context/AuthContext'; 
+```
+
+🔎 Якщо файл **`AuthContext.js`** знаходиться в іншій директорії, виправ шлях до нього.
+
+---
+
+### 3️⃣ **Додати перевірку в `useAuth`**
+
+Додай перевірку, щоб уникнути помилки, якщо контекст не підключено:
+
+```javascript
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth повинен бути використаний всередині AuthProvider');
+  }
+  return context;
+};
+```
+
+---
+
+### 4️⃣ **Оновлений `AuthProvider`**
+
+Додай логування для відстеження помилки:
+
+```javascript
+'use client';
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    console.error('❗ useAuth викликається поза AuthProvider');
+  }
+  return context;
+};
+```
+
+---
+
+### 🏆 **Що перевірити, якщо помилка залишилась:**
+
+1. **Правильний імпорт** `useAuth` у LoginPage.  
+2. **`AuthProvider` обгортає** усі сторінки в `_app.js` або `layout.js`.  
+3. **Видалити кеш** Next.js:  
+   ```
+   npm run build
+   npm run dev
+   ```
+
+🔎 **Перевір після цього ще раз.**

@@ -1,0 +1,185 @@
+Ось приклад створення тестової сторінки для проєкту **Next.js**, яка використовує **`apiGet`** замість **`fetch`** для отримання списку відділів через API. Дані відображаються у **`select`** і логуються в **console**.
+
+---
+
+### 📂 **Структура проєкту**
+
+```
+/my-next-app
+  ├── /pages
+  │     └── departments.js  // Наша тестова сторінка
+  ├── /utils
+  │     └── api.js          // Функція apiGet
+  ├── /context
+  │     └── AuthContext.js  // (якщо потрібна авторизація)
+  ├── package.json
+  └── ...
+```
+
+---
+
+### 🔹 **1. `utils/api.js` — Реалізація `apiGet`**
+
+```javascript
+'use client';
+import { useAuth } from '../context/AuthContext';
+
+export const apiGet = async (url) => {
+  try {
+    const token = localStorage.getItem('accessToken'); // Отримуємо токен із LocalStorage
+
+    const response = await fetch(`http://localhost:5000${url}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`, // Додаємо токен до заголовка
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Помилка отримання даних');
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('❌ API Error:', error);
+    throw error;
+  }
+};
+```
+
+---
+
+### 🔹 **2. `pages/departments.js` — Тестова сторінка**
+
+```javascript
+'use client';
+import React, { useState, useEffect } from 'react';
+import { Box, Select, MenuItem, InputLabel, FormControl, Typography } from '@mui/material';
+import { apiGet } from '../utils/api';
+
+const DepartmentsPage = () => {
+  const [departments, setDepartments] = useState([]);
+  const [selectedDept, setSelectedDept] = useState('');
+
+  // Завантаження списку відділів
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const data = await apiGet('/api/departments');
+        setDepartments(data);  // Зберігаємо отримані відділи
+        console.log('✅ Отримані відділи:', data);
+      } catch (error) {
+        console.error('❌ Помилка завантаження відділів:', error);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
+
+  const handleSelectChange = (event) => {
+    setSelectedDept(event.target.value);
+    console.log('🔎 Обраний відділ:', event.target.value);
+  };
+
+  return (
+    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100vh">
+      <Typography variant="h4" gutterBottom>Виберіть відділ</Typography>
+
+      <FormControl sx={{ minWidth: 300 }}>
+        <InputLabel id="department-select-label">Відділ</InputLabel>
+        <Select
+          labelId="department-select-label"
+          value={selectedDept}
+          label="Відділ"
+          onChange={handleSelectChange}
+        >
+          {departments.length > 0 ? (
+            departments.map((dept) => (
+              <MenuItem key={dept.id} value={dept.id}>
+                {dept.name}
+              </MenuItem>
+            ))
+          ) : (
+            <MenuItem disabled>Немає доступних відділів</MenuItem>
+          )}
+        </Select>
+      </FormControl>
+    </Box>
+  );
+};
+
+export default DepartmentsPage;
+```
+
+---
+
+### 🔹 **3. (Необов'язково) `context/AuthContext.js` — Якщо потрібна авторизація**
+
+```javascript
+'use client';
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+### 🚀 **Як це працює?**
+
+1. **При завантаженні сторінки** запускається `fetchDepartments`, який викликає **`apiGet`** для отримання списку відділів із бекенда.  
+2. Дані зберігаються в стані `departments` і відображаються у **Select**.  
+3. При виборі відділу його **ID** логуються в **console**.  
+
+---
+
+### 📦 **Запуск проєкту**
+
+1. Переконайся, що бекенд працює і доступний за адресою `http://localhost:5000/api/departments`.  
+2. Запусти **Next.js** проєкт:
+   ```bash
+   npm run dev
+   ```
+3. Відкрий браузер і перейдіть на сторінку `http://localhost:3000/departments`.
+
+---
+
+### 📝 **Пояснення**
+
+- **`apiGet`** автоматично додає токен у заголовок `Authorization`.  
+- **`Select`** динамічно генерується з отриманих відділів.  
+- **`console.log`** використовується для перевірки отриманих даних.  
+
+---
+
+Цей підхід є універсальним для роботи з **API** і забезпечує безпечну передачу токенів!

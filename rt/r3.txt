@@ -1,0 +1,112 @@
+Так, об'єднання логіки в одному маршруті `/login` може бути кращим підходом для спрощення структури вашого коду, особливо якщо обидва типи автентифікації (форма логіна і токен) мають подібну кінцеву мету — автентифікувати користувача. 
+
+Ось як це можна зробити:
+
+---
+
+### Реалізація логіки в одному маршруті `/login`
+
+#### `routes/authRoute.js`
+```javascript
+const express = require('express');
+const router = express.Router();
+const { login } = require('../controllers/authController');
+
+// Логіка для обробки входу (форма + токен)
+router.post('/login', login);
+
+module.exports = router;
+```
+
+---
+
+#### `controllers/authController.js`
+```javascript
+const { authenticateUser, checkUserRole } = require('../services/oracleService');
+const { verifyJWT, generateToken } = require('../utils/jwtUtils');
+
+// Логіка автентифікації
+exports.login = async (req, res) => {
+  const authHeader = req.headers.authorization; // Для перевірки токена
+  const { username, password } = req.body; // Для форми логіна
+
+  try {
+    // 1. Вхід через токен
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded = verifyJWT(token); // Перевірка токена
+        const hasRole = await checkUserRole(decoded.username, 'schemeaccess');
+        if (!hasRole) {
+          return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+        }
+        return res.status(200).json({ message: 'Authenticated successfully via token' });
+      } catch (error) {
+        return res.status(401).json({ message: 'Invalid token' });
+      }
+    }
+
+    // 2. Вхід через форму логіна
+    if (username && password) {
+      const isAuthenticated = await authenticateUser(username, password);
+
+      if (!isAuthenticated) {
+        return res.status(401).json({ message: 'Invalid username or password' });
+      }
+
+      const hasRole = await checkUserRole(username, 'schemeaccess');
+      if (!hasRole) {
+        return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+      }
+
+      const token = generateToken({ username });
+      return res.status(200).json({ message: 'Login successful', token });
+    }
+
+    // Якщо ні токена, ні даних форми
+    return res.status(400).json({ message: 'Missing credentials or token' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+```
+
+---
+
+### Переваги такого підходу
+1. **Єдиний маршрут для автентифікації**:
+   Усі запити до `/login` обробляються в одному місці, що спрощує налагодження та обслуговування.
+   
+2. **Гнучкість**:
+   Один маршрут може автоматично визначити тип запиту (токен або форма) та обробити його відповідно.
+
+3. **Зручність для клієнта**:
+   Клієнтський додаток завжди надсилає запит на один і той самий маршрут, незалежно від типу автентифікації.
+
+4. **Менше коду**:
+   Уникаєш дублювання коду для перевірки ролей і обробки помилок.
+
+---
+
+### Рекомендації
+1. **Пріоритет токена**:
+   Починай із перевірки токена, якщо заголовок `Authorization` присутній. Це оптимізує роботу, бо токени зазвичай обробляються швидше, ніж перевірка з'єднання до бази.
+
+2. **Логування**:
+   Додай логування для розрізнення запитів (наприклад, "вхід через токен" або "вхід через форму").
+
+3. **Розширення**:
+   Якщо в майбутньому додасться новий тип автентифікації (наприклад, OAuth), ти зможеш легко інтегрувати його у цей маршрут.
+
+4. **Безпека**:
+   Переконайся, що помилки обробляються належним чином і не повертають чутливу інформацію (наприклад, повідомлення про тип помилки).
+
+---
+
+### Як це працює
+- Якщо в запиті є заголовок `Authorization` з Bearer токеном, обробляється логіка токенів.
+- Якщо передані `username` і `password`, обробляється логіка форми.
+- Якщо немає ні токена, ні даних форми, повертається відповідь про відсутність даних.
+
+Цей підхід дозволяє створити ефективну і зрозумілу систему автентифікації з мінімальним дублюванням коду.

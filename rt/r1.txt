@@ -1,0 +1,137 @@
+Ось приклад правильної структури додатку **Node.js + Express** із реалізацією маршрутів, наприклад, для **авторизації**. Також я додам рекомендації для налагодження маршрутів.
+
+---
+
+### 1. **Структура папок**
+```
+/project
+  /routes
+    authRoute.js
+  /controllers
+    authController.js
+  server.js
+  package.json
+```
+
+---
+
+### 2. **Код додатку**
+
+#### `server.js`
+```javascript
+const express = require('express');
+const app = express();
+const authRoute = require('./routes/authRoute');
+
+app.use(express.json()); // Для парсингу JSON
+app.use('/api/auth', authRoute); // Підключення маршруту для авторизації
+
+// Запуск сервера
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+```
+
+#### `routes/authRoute.js`
+```javascript
+const express = require('express');
+const router = express.Router();
+const { login, logout } = require('../controllers/authController');
+
+// POST: Login
+router.post('/login', login);
+
+// POST: Logout
+router.post('/logout', logout);
+
+module.exports = router;
+```
+
+#### `controllers/authController.js`
+```javascript
+exports.login = (req, res) => {
+  const { username, password } = req.body;
+
+  // Простий приклад логіки авторизації
+  if (username === 'admin' && password === 'password123') {
+    return res.status(200).json({ message: 'Login successful', token: 'exampleToken123' });
+  }
+  return res.status(401).json({ message: 'Invalid username or password' });
+};
+
+exports.logout = (req, res) => {
+  // Логіка для логауту
+  return res.status(200).json({ message: 'Logout successful' });
+};
+```
+
+---
+
+### 3. **Перевірка маршруту**
+Для перевірки можна використовувати **Postman** або **cURL**:
+1. Відправ запит POST на `http://localhost:3000/api/auth/login` з тілом:
+   ```json
+   {
+     "username": "admin",
+     "password": "password123"
+   }
+   ```
+
+2. Очікуваний результат:
+   ```json
+   {
+     "message": "Login successful",
+     "token": "exampleToken123"
+   }
+   ```
+
+---
+
+### 4. **Рекомендації для налагодження маршрутів**
+Щоб налагодити маршрути в **Express**, скористайся цими методами:
+
+#### 4.1. **Додати логування**
+Використовуй [morgan](https://www.npmjs.com/package/morgan) для логування запитів:
+```bash
+npm install morgan
+```
+
+Додай у `server.js`:
+```javascript
+const morgan = require('morgan');
+app.use(morgan('dev'));
+```
+
+#### 4.2. **Перевірити маршрути вручну**
+Додай проміжний логгер, щоб побачити, чи маршрут працює:
+```javascript
+router.use((req, res, next) => {
+  console.log(`Route accessed: ${req.method} ${req.url}`);
+  next();
+});
+```
+
+#### 4.3. **Використовувати інструменти для дебагу**
+- Вставляй `console.log()` у ключових місцях маршруту.
+- Перевіряй, чи запити доходять до обробника:
+  ```javascript
+  console.log('Login endpoint reached');
+  ```
+
+#### 4.4. **Використати Express Route Tester**
+Інструмент для перевірки маршрутів:
+[express-route-tester](https://www.npmjs.com/package/express-route-tester).
+
+#### 4.5. **Перевірити middleware**
+Якщо маршрути не працюють, перевір:
+- Чи правильно підключено `express.json()`:
+  ```javascript
+  app.use(express.json());
+  ```
+
+- Чи немає помилок у шляхах (`/api/auth` і `/login`).
+
+---
+
+Якщо дотримуватися цієї структури та рекомендацій, твої маршрути працюватимуть коректно, а проблеми буде легше знаходити.

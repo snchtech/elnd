@@ -1,0 +1,217 @@
+Ось приклад реалізації системи автентифікації користувачів на основі **JWT токенів** у Node.js + Express з використанням Oracle Database. Я також додам рекомендації.
+
+---
+
+### 1. **Структура проекту**
+```
+/project
+  /routes
+    authRoute.js
+  /controllers
+    authController.js
+  /middlewares
+    authMiddleware.js
+  /services
+    oracleService.js
+  /utils
+    jwtUtils.js
+  server.js
+  package.json
+```
+
+---
+
+### 2. **Код**
+
+#### `server.js`
+```javascript
+const express = require('express');
+const app = express();
+const authRoute = require('./routes/authRoute');
+
+app.use(express.json()); // Для парсингу JSON
+app.use('/api/auth', authRoute); // Підключення маршрутів авторизації
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+```
+
+---
+
+#### `routes/authRoute.js`
+```javascript
+const express = require('express');
+const router = express.Router();
+const { login, tokenLogin } = require('../controllers/authController');
+const { verifyToken } = require('../middlewares/authMiddleware');
+
+// Вхід через форму логіна
+router.post('/login', login);
+
+// Вхід через токен
+router.get('/token-login', verifyToken, tokenLogin);
+
+module.exports = router;
+```
+
+---
+
+#### `controllers/authController.js`
+```javascript
+const { authenticateUser, checkUserRole } = require('../services/oracleService');
+const { generateToken } = require('../utils/jwtUtils');
+
+// Логін через форму
+exports.login = async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const isAuthenticated = await authenticateUser(username, password);
+
+    if (!isAuthenticated) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    const hasRole = await checkUserRole(username, 'schemeaccess');
+    if (!hasRole) {
+      return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+    }
+
+    const token = generateToken({ username });
+    return res.status(200).json({ message: 'Login successful', token });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Логін через токен
+exports.tokenLogin = async (req, res) => {
+  const { username } = req.user; // Декодований токен додається в `req.user`
+
+  try {
+    const hasRole = await checkUserRole(username, 'schemeaccess');
+    if (!hasRole) {
+      return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+    }
+
+    return res.status(200).json({ message: 'Authenticated successfully' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+```
+
+---
+
+#### `middlewares/authMiddleware.js`
+```javascript
+const { verifyJWT } = require('../utils/jwtUtils');
+
+exports.verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Authentication token is missing or invalid' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = verifyJWT(token);
+    req.user = decoded; // Зберігаємо декодовані дані токена
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+```
+
+---
+
+#### `services/oracleService.js`
+```javascript
+const oracledb = require('oracledb');
+
+exports.authenticateUser = async (username, password) => {
+  try {
+    const connection = await oracledb.getConnection({
+      user: username,
+      password: password,
+      connectString: 'your_oracle_db_connection_string',
+    });
+
+    await connection.close();
+    return true; // Якщо з'єднання успішне, користувач існує
+  } catch (error) {
+    console.error('Authentication failed:', error.message);
+    return false; // Якщо помилка, користувач не існує
+  }
+};
+
+exports.checkUserRole = async (username, role) => {
+  try {
+    const connection = await oracledb.getConnection({
+      user: 'admin_user',
+      password: 'admin_password',
+      connectString: 'your_oracle_db_connection_string',
+    });
+
+    const result = await connection.execute(
+      `SELECT 1 FROM dba_role_privs WHERE grantee = :username AND granted_role = :role`,
+      [username.toUpperCase(), role.toUpperCase()]
+    );
+
+    await connection.close();
+    return result.rows.length > 0; // Якщо є результати, роль існує
+  } catch (error) {
+    console.error('Role check failed:', error.message);
+    return false;
+  }
+};
+```
+
+---
+
+#### `utils/jwtUtils.js`
+```javascript
+const jwt = require('jsonwebtoken');
+
+const SECRET_KEY = 'your_secret_key'; // Використовуй безпечний секретний ключ
+
+exports.generateToken = (payload) => {
+  return jwt.sign(payload, SECRET_KEY, { expiresIn: '1h' }); // Токен діє 1 годину
+};
+
+exports.verifyJWT = (token) => {
+  return jwt.verify(token, SECRET_KEY); // Верифікація токена
+};
+```
+
+---
+
+### 3. **Рекомендації**
+1. **Пріоритет перевірки токена**:
+   Завжди перевіряй токен перш ніж використовувати логін через форму. Це зменшить навантаження на сервер.
+   
+2. **Захист паролів**:
+   Ніколи не зберігай паролі у відкритому вигляді. Використовуй хешування (наприклад, `bcrypt`) для їх зберігання.
+
+3. **Обробка помилок**:
+   Переконайся, що всі помилки правильно обробляються і не повертають чутливу інформацію про сервер або базу даних.
+
+4. **Безпечний доступ до бази даних**:
+   Використовуй окремого адміністративного користувача для перевірки ролей.
+
+5. **Тестування**:
+   Використовуй **Postman** або **cURL** для тестування ручок `/login` і `/token-login`.
+
+6. **Масштабування**:
+   Якщо очікується багато запитів, оптимізуй підключення до бази даних через `connection pooling` в `oracledb`.
+
+---
+
+З цією архітектурою ти зможеш реалізувати безпечну та надійну автентифікацію користувачів із підтримкою як логіну через форму, так і через токен. 

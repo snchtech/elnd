@@ -1,0 +1,155 @@
+### Уточнення змін та пояснення
+
+#### **1. Перевірка валідності Access Token перед оновленням**
+Дійсно, перед зверненням до `/api/refresh`, потрібно перевіряти час життя `Access Token`. Можна використовувати функцію, яка витягує та перевіряє payload токена:
+
+```javascript
+// utils/tokenUtils.js
+export const isTokenValid = (token) => {
+  if (!token) return false;
+  const payload = JSON.parse(atob(token.split('.')[1]));
+  const currentTime = Math.floor(Date.now() / 1000);
+  return payload.exp > currentTime;
+};
+```
+
+Оновлений `checkAuthStatus` з урахуванням перевірки:
+
+```javascript
+import { isTokenValid } from '../utils/tokenUtils';
+
+const checkAuthStatus = async () => {
+  const storedToken = localStorage.getItem('accessToken');
+  if (isTokenValid(storedToken)) {
+    login(storedToken);
+    return;
+  }
+
+  // Access Token прострочений, пробуємо оновити через refresh token
+  try {
+    const res = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('accessToken', data.accessToken); // Зберігаємо новий токен
+      login(data.accessToken);
+    } else {
+      logout();
+    }
+  } catch (err) {
+    logout();
+  }
+};
+
+useEffect(() => {
+  checkAuthStatus();
+}, []);
+```
+
+---
+
+#### **2. Оновлення Access Token у localStorage**
+Додамо запис у `localStorage` після успішного оновлення токена:
+
+```javascript
+// utils/api.js
+export const apiFetch = async (url, options = {}) => {
+  const { accessToken, login, logout } = useAuth();
+
+  const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  const headers = { ...options.headers, ...authHeader };
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401 && options.method !== 'POST') {
+      // Token expired: try to refresh
+      const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        localStorage.setItem('accessToken', data.accessToken); // Зберігаємо новий токен
+        login(data.accessToken); // Оновлюємо контекст
+        headers.Authorization = `Bearer ${data.accessToken}`;
+        return fetch(url, { ...options, headers });
+      } else {
+        logout();
+        throw new Error('Authentication failed');
+      }
+    }
+    return res;
+  } catch (err) {
+    throw new Error('Request failed');
+  }
+};
+```
+
+---
+
+#### **3. Пояснення `const url = req.nextUrl.clone()`**
+`req.nextUrl.clone()` — це метод у Next.js Middleware API, який створює копію `nextUrl` (об’єкта, що представляє URL запиту). Його використовують для зміни шляху запиту без впливу на оригінальний `req`. У нашому випадку, ми перенаправляємо неавтентифікованого користувача на `/login`:
+
+```javascript
+const url = req.nextUrl.clone();
+url.pathname = '/login'; // Встановлюємо новий шлях
+return NextResponse.redirect(url); // Перенаправлення
+```
+
+Це забезпечує, що після успішної автентифікації користувач залишиться на сторінці, яку він хотів відвідати (якщо реалізувати логіку перенаправлення назад).
+
+---
+
+#### **4. Детальніше про HOC (Higher-Order Component)**
+
+HOC — це функція, яка приймає компонент і повертає новий компонент з додатковим функціоналом. У нашому випадку HOC забезпечує перевірку автентифікації для захисту сторінок.
+
+##### Як це працює:
+1. HOC приймає як аргумент ваш компонент (`WrappedComponent`).
+2. Додає логіку перевірки автентифікації (наприклад, через контекст).
+3. Якщо користувач автентифікований, рендерить оригінальний компонент.
+4. Якщо ні, перенаправляє його на сторінку `/login`.
+
+##### Код:
+
+```javascript
+// hoc/withAuth.js
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent) => {
+  return (props) => {
+    const { authStatus } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (authStatus === 'nobody') {
+        router.push('/login');
+      }
+    }, [authStatus]);
+
+    if (authStatus === 'nobody') return null; // або показати спінер
+    return <WrappedComponent {...props} />;
+  };
+};
+
+export default withAuth;
+```
+
+##### Як застосувати:
+Обгорніть сторінку HOC для автоматичного захисту.
+
+```javascript
+// pages/protected-page.js
+import withAuth from '../hoc/withAuth';
+
+const ProtectedPage = () => {
+  return <div>This is a protected page for authenticated users.</div>;
+};
+
+export default withAuth(ProtectedPage);
+```
+
+---
+
+Цей підхід:
+- Захищає сторінки від неавторизованих користувачів.
+- Мінімізує дублювання коду.
+- Залишає бізнес-логіку окремо від рендерингу компонентів.

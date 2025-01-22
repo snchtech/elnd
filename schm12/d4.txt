@@ -1,0 +1,140 @@
+Щоб вивести поточне значення контексту в консоль (наприклад, `authStatus`), можна скористатися хуком `useEffect` у будь-якому компоненті, який використовує цей контекст. Ось як це зробити:
+
+### Приклад: Виведення `authStatus` в консоль
+
+```javascript
+import { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+
+const AuthStatusLogger = () => {
+  const { authStatus, accessToken } = useAuth();
+
+  useEffect(() => {
+    console.log('Current authStatus:', authStatus);
+    console.log('Current accessToken:', accessToken);
+  }, [authStatus, accessToken]); // Спрацьовує, коли authStatus або accessToken змінюється
+
+  return null; // Компонент не рендерить нічого на сторінці
+};
+
+export default AuthStatusLogger;
+```
+
+### Використання
+1. Додайте компонент `AuthStatusLogger` до будь-якого місця у вашій програмі, наприклад, у `pages/_app.js`, щоб він слідкував за змінами в контексті:
+
+```javascript
+import '../styles/globals.css';
+import { AuthProvider } from '../context/AuthContext';
+import AuthStatusLogger from '../components/AuthStatusLogger';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <AuthStatusLogger /> {/* Слідкує за змінами в контексті */}
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+
+export default MyApp;
+```
+
+---
+
+### Додатковий спосіб: Використання в будь-якому компоненті
+Якщо потрібно вивести `authStatus` у конкретному компоненті:
+
+```javascript
+import { useAuth } from '../context/AuthContext';
+
+const MyComponent = () => {
+  const { authStatus } = useAuth();
+
+  console.log('Auth status:', authStatus);
+
+  return <div>Current Auth Status: {authStatus}</div>;
+};
+
+export default MyComponent;
+```
+
+---
+
+### Результат
+При кожній зміні `authStatus` або `accessToken`, значення буде автоматично виводитися в консоль, і ви зможете відстежувати стан контексту в реальному часі.
+
+
+Контекст у React зберігається у пам'яті браузера, всередині компонентів, які підключені до провайдера контексту (`<AuthProvider>` у нашому випадку). Технічно, контекст є глобальним об'єктом, доступним тільки у дереві компонентів, яке охоплене провайдером.
+
+---
+
+### Як працює контекст?
+
+1. **Створення контексту:**
+   Контекст створюється за допомогою `React.createContext()` і повертає об'єкт з двома ключовими компонентами:
+   - `Provider`: дозволяє надавати значення контексту всім дочірнім компонентам.
+   - `Consumer` (використовується рідко, оскільки `useContext` зручніший): отримує доступ до значень контексту.
+
+   ```javascript
+   const AuthContext = createContext();
+   ```
+
+2. **Провайдер контексту (`AuthProvider`):**
+   - Це компонент, який огортає всі дочірні елементи, забезпечуючи доступ до значення контексту.
+   - Контекст "зберігається" в станах провайдера (`useState`, `useReducer`) і змінюється відповідно до логіки.
+
+   ```javascript
+   export const AuthProvider = ({ children }) => {
+     const [authStatus, setAuthStatus] = useState('nobody');
+     const [accessToken, setAccessToken] = useState(null);
+
+     return (
+       <AuthContext.Provider value={{ authStatus, accessToken, setAuthStatus, setAccessToken }}>
+         {children}
+       </AuthContext.Provider>
+     );
+   };
+   ```
+
+3. **Споживання контексту:**
+   Дочірні компоненти, які використовують контекст через `useContext(AuthContext)`, отримують доступ до його значення. Це працює через React’s внутрішній механізм підписки, який оновлює всі компоненти, що використовують контекст, коли значення змінюється.
+
+---
+
+### Де саме зберігається контекст у пам’яті?
+
+- **У станах провайдера:**
+  Контекст зберігає дані у внутрішніх станах (`useState`, `useReducer`) провайдера. У прикладі `AuthProvider` значення `authStatus` і `accessToken` зберігаються в пам’яті компонента.
+
+  ```javascript
+  const [authStatus, setAuthStatus] = useState('nobody'); // Зберігання у стані компонента
+  ```
+
+- **У структурі React:**
+  React забезпечує доступ до контексту через `React.Context.Provider`. Це дозволяє дочірнім компонентам отримувати значення без передачі його через пропси.
+
+---
+
+### Чи зберігається контекст у локальному сховищі браузера?
+
+Ні, контекст сам по собі не зберігається у локальному сховищі (`localStorage`, `sessionStorage`, cookies). Він зберігається лише в пам’яті браузера (у станах React) і зникає при перезавантаженні сторінки. Для збереження контексту між перезавантаженнями:
+- **Використовуйте `localStorage` або `sessionStorage`:** зберігайте необхідні дані (наприклад, `accessToken`) і відновлюйте їх при завантаженні програми.
+- **Приклад:**
+
+  ```javascript
+  useEffect(() => {
+    const storedToken = localStorage.getItem('accessToken');
+    if (storedToken) {
+      setAccessToken(storedToken);
+      setAuthStatus('authenticated');
+    }
+  }, []);
+  ```
+
+---
+
+### Коротко:
+- Контекст зберігається у станах React провайдера (`useState`).
+- Він існує тільки в пам’яті браузера під час роботи програми.
+- Для збереження між сесіями використовуйте `localStorage`, `sessionStorage`, або cookies.

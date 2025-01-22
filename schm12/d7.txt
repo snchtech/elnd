@@ -1,0 +1,110 @@
+Ось як реалізувати кнопку "Logout" з використанням Material UI, яка:
+
+1. Відображає іконку.
+2. Очищує `localStorage`, `cookies`, та контекст.
+3. Перенаправляє користувача на сторінку `/login`.
+
+---
+
+### **Код компонента LogoutButton**
+
+```javascript
+import React from 'react';
+import { useAuth } from '../context/AuthContext'; // Імпортуємо контекст
+import { useRouter } from 'next/router'; // Для перенаправлення
+import Button from '@mui/material/Button'; // Кнопка Material UI
+import LogoutIcon from '@mui/icons-material/Logout'; // Іконка виходу
+
+const LogoutButton = () => {
+  const { logout } = useAuth(); // Отримуємо функцію logout із контексту
+  const router = useRouter();
+
+  const handleLogout = () => {
+    // Очищення контексту
+    logout();
+
+    // Очищення localStorage
+    localStorage.clear();
+
+    // Очищення cookies (видаляємо refreshToken)
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+
+    // Перенаправлення на сторінку /login
+    router.push('/login');
+  };
+
+  return (
+    <Button
+      variant="contained"
+      color="secondary"
+      startIcon={<LogoutIcon />}
+      onClick={handleLogout}
+    >
+      Logout
+    </Button>
+  );
+};
+
+export default LogoutButton;
+```
+
+---
+
+### **Що відбувається в цьому коді?**
+
+1. **Очистка контексту (`logout`):**
+   Функція `logout` з `AuthContext`:
+   - Встановлює `authStatus` на `"nobody"`.
+   - Очищує `accessToken` у контексті.
+
+   ```javascript
+   const logout = () => {
+     setAccessToken(null);
+     setAuthStatus('nobody');
+   };
+   ```
+
+2. **Очищення `localStorage`:**
+   ```javascript
+   localStorage.clear();
+   ```
+
+   Це видаляє всі збережені ключі, включаючи `accessToken`.
+
+3. **Очищення cookies:**
+   Використовується стандартна команда для видалення cookies шляхом встановлення `Max-Age=0`.
+
+4. **Перенаправлення на сторінку `/login`:**
+   За допомогою `useRouter` викликається метод `router.push('/login')`, який перенаправляє користувача.
+
+---
+
+### **Додатковий приклад використання кнопки**
+
+Ви можете додати цю кнопку в будь-який компонент, наприклад, у верхній панелі навігації:
+
+```javascript
+import LogoutButton from '../components/LogoutButton';
+
+const Navbar = () => {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px' }}>
+      <LogoutButton />
+    </div>
+  );
+};
+
+export default Navbar;
+```
+
+---
+
+### **Результат**
+
+1. При натисканні кнопки:
+   - `localStorage`, `cookies`, і контекст очищуються.
+   - Користувач перенаправляється на сторінку `/login`.
+
+2. Кнопка стилізована за допомогою Material UI та має іконку виходу. Ви також можете кастомізувати її вигляд через пропси `Button` або стилі.
+
+Це забезпечує зручний і безпечний вихід користувача з системи.

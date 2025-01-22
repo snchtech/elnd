@@ -1,0 +1,99 @@
+Так, у приведеному вище коді:
+
+1. **Оновлення контексту з `localStorage` при перезавантаженні сторінки:**
+   Це відбувається в функції `checkAuthStatus`, яка викликається в `useEffect` під час завантаження програми. Якщо в `localStorage` є валідний `accessToken`, він додається в контекст за допомогою функції `login`.
+
+2. **Оновлення контексту при оновленні `accessToken` у fetch-запиті:**
+   У функції `apiFetch`, якщо `accessToken` виявляється простроченим і успішно оновлюється через `/api/refresh`, ми:
+   - Оновлюємо значення в `localStorage`.
+   - Викликаємо `login` для оновлення значення в контексті.
+
+---
+
+### Ось детальна схема, як це працює:
+
+#### **1. Оновлення контексту з `localStorage` при перезавантаженні:**
+У `AuthProvider` є `checkAuthStatus`, яка виконує наступні кроки:
+- Читає `accessToken` з `localStorage`.
+- Перевіряє його валідність (за допомогою функції `isTokenValid`).
+- Якщо токен валідний, додає його до контексту (`login`).
+
+Код для цього:
+
+```javascript
+const checkAuthStatus = async () => {
+  const storedToken = localStorage.getItem('accessToken');
+  if (isTokenValid(storedToken)) {
+    login(storedToken); // Оновлюємо контекст
+    return;
+  }
+
+  // Якщо токен недійсний, намагаємося оновити через refresh token
+  try {
+    const res = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      localStorage.setItem('accessToken', data.accessToken); // Оновлюємо `localStorage`
+      login(data.accessToken); // Оновлюємо контекст
+    } else {
+      logout(); // Якщо refresh також не спрацював
+    }
+  } catch (err) {
+    logout(); // Вихід у разі помилки
+  }
+};
+
+useEffect(() => {
+  checkAuthStatus(); // Викликається при завантаженні програми
+}, []);
+```
+
+---
+
+#### **2. Оновлення контексту при оновленні `accessToken` через fetch-запит:**
+Коли токен оновлюється через функцію `apiFetch`, ми:
+- Зберігаємо новий `accessToken` у `localStorage`.
+- Викликаємо `login`, щоб оновити значення в контексті.
+
+Код для цього:
+
+```javascript
+if (res.status === 401 && options.method !== 'POST') {
+  // Якщо токен протермінований, намагаємося оновити
+  const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+
+  if (refreshRes.ok) {
+    const data = await refreshRes.json();
+    localStorage.setItem('accessToken', data.accessToken); // Оновлюємо `localStorage`
+    login(data.accessToken); // Оновлюємо контекст
+    headers.Authorization = `Bearer ${data.accessToken}`; // Оновлюємо заголовок
+    return fetch(url, { ...options, headers }); // Повторний запит із новим токеном
+  } else {
+    logout(); // Якщо refresh також не спрацював
+    throw new Error('Authentication failed');
+  }
+}
+```
+
+---
+
+### **Відповідь на запитання**
+
+1. **Чи оновлюємо ми контекст з `localStorage` при перезавантаженні сторінки?**
+   - Так, це виконується в `useEffect` функції `checkAuthStatus`, яка завантажує `accessToken` з `localStorage` і додає його до контексту через `login`.
+
+2. **Чи оновлюємо ми контекст при оновленні `accessToken` в fetch-запиті?**
+   - Так, коли новий токен отримується через `/api/refresh`, ми:
+     - Зберігаємо його в `localStorage`.
+     - Оновлюємо контекст через `login`, щоб токен був доступний у компонентах.
+
+---
+
+### Резюме:
+
+Ця система забезпечує:
+- **Синхронізацію між `localStorage` і контекстом.**
+- **Відновлення контексту після перезавантаження сторінки.**
+- **Оновлення контексту під час роботи програми при отриманні нового `accessToken`.**
+
+Це надійний і гнучкий підхід для автентифікації, який підтримує безперебійний доступ до токенів у вашій програмі.

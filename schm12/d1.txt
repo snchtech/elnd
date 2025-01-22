@@ -1,0 +1,214 @@
+Дякую за уточнення! Використання `fetch` також є відмінним вибором. Ось як можна реалізувати функціонал з урахуванням описаних задач.
+
+---
+
+### 1. **Глобальний контекст для управління автентифікацією**
+
+Створимо контекст для відстеження статусу автентифікації (`authenticated` або `nobody`).
+
+```javascript
+// context/AuthContext.js
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [authStatus, setAuthStatus] = useState('nobody'); // authenticated | nobody
+  const [accessToken, setAccessToken] = useState(null);
+
+  const login = (token) => {
+    setAccessToken(token);
+    setAuthStatus('authenticated');
+  };
+
+  const logout = () => {
+    setAccessToken(null);
+    setAuthStatus('nobody');
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+  };
+
+  const checkAuthStatus = async () => {
+    try {
+      const res = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        login(data.accessToken);
+      } else {
+        logout();
+      }
+    } catch (err) {
+      logout();
+    }
+  };
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ authStatus, accessToken, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+### 2. **Функції для `fetch` з авторизацією**
+
+Додамо обгортки для `fetch`, які автоматично додають `Bearer` токен.
+
+```javascript
+// utils/api.js
+import { useAuth } from '../context/AuthContext';
+
+export const apiFetch = async (url, options = {}) => {
+  const { accessToken, login, logout } = useAuth();
+
+  const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  const headers = { ...options.headers, ...authHeader };
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401 && options.method !== 'POST') {
+      // Token expired: try to refresh
+      const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        login(data.accessToken);
+        headers.Authorization = `Bearer ${data.accessToken}`;
+        return fetch(url, { ...options, headers });
+      } else {
+        logout();
+        throw new Error('Authentication failed');
+      }
+    }
+    return res;
+  } catch (err) {
+    throw new Error('Request failed');
+  }
+};
+```
+
+---
+
+### 3. **Middleware у Next.js для захисту сторінок**
+
+Додамо middleware для перенаправлення неавтентифікованих користувачів.
+
+```javascript
+// middleware.js
+import { NextResponse } from 'next/server';
+
+export function middleware(req) {
+  const refreshToken = req.cookies.get('refreshToken');
+  const url = req.nextUrl.clone();
+
+  if (!refreshToken) {
+    if (url.pathname !== '/login') {
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/', '/protected-page', '/another-protected-page'],
+};
+```
+
+---
+
+### 4. **HOC для захисту сторінок**
+
+Для клієнтського рендерингу використовуємо HOC.
+
+```javascript
+// hoc/withAuth.js
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent) => {
+  return (props) => {
+    const { authStatus } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (authStatus === 'nobody') {
+        router.push('/login');
+      }
+    }, [authStatus]);
+
+    if (authStatus === 'nobody') return null; // or loading spinner
+    return <WrappedComponent {...props} />;
+  };
+};
+
+export default withAuth;
+```
+
+---
+
+### 5. **Приклад API-запитів**
+
+Функції для реєстрації, логіну та оновлення токенів.
+
+```javascript
+// pages/api/auth.js
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    const { username, password } = req.body;
+
+    // Your logic for authentication
+    const isAuthenticated = username === 'user' && password === 'password';
+
+    if (isAuthenticated) {
+      const accessToken = 'access-token'; // generate JWT
+      const refreshToken = 'refresh-token'; // generate refresh token
+      res.setHeader('Set-Cookie', `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=28800`);
+      return res.status(200).json({ accessToken });
+    }
+
+    return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  if (req.method === 'POST' && req.url === '/refresh') {
+    const refreshToken = req.cookies.refreshToken;
+    if (refreshToken === 'refresh-token') {
+      const newAccessToken = 'new-access-token'; // generate new JWT
+      return res.status(200).json({ accessToken: newAccessToken });
+    }
+    return res.status(401).json({ message: 'Invalid refresh token' });
+  }
+
+  res.status(405).json({ message: 'Method not allowed' });
+}
+```
+
+---
+
+### 6. **Приватна сторінка**
+
+```javascript
+// pages/protected-page.js
+import withAuth from '../hoc/withAuth';
+
+const ProtectedPage = () => {
+  return <div>This is a protected page.</div>;
+};
+
+export default withAuth(ProtectedPage);
+```
+
+---
+
+З таким підходом система буде:
+1. Оновлювати токени автоматично.
+2. Захищати сторінки від неавторизованого доступу.
+3. Обробляти токени безпеки через cookies і `Authorization` заголовок.

@@ -1,0 +1,173 @@
+Ось як ви можете практично використовувати ваш `AuthContext` у поєднанні з функцією `apiFetch('/department')`.
+
+---
+
+### 1. **Підключення `AuthContext` до програми**
+
+Спочатку переконайтеся, що ваш `AuthProvider` обгортає всю програму (наприклад, у `pages/_app.js`):
+
+```javascript
+import '../styles/globals.css';
+import { AuthProvider } from '../context/AuthContext';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+
+export default MyApp;
+```
+
+Це забезпечує доступ до контексту в будь-якому компоненті вашого додатку.
+
+---
+
+### 2. **Використання `apiFetch`**
+
+#### Оновлена функція `apiFetch`
+
+Ось як виглядає функція `apiFetch`, яка автоматично:
+- Додає `Authorization` заголовок з `accessToken` з контексту.
+- Оновлює `accessToken`, якщо він прострочений (через `/api/refresh`).
+
+```javascript
+// utils/api.js
+import { useAuth } from '../context/AuthContext';
+
+export const apiFetch = async (url, options = {}) => {
+  const { accessToken, login, logout } = useAuth();
+
+  const authHeader = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+  const headers = { ...options.headers, ...authHeader };
+
+  try {
+    const res = await fetch(url, { ...options, headers });
+
+    if (res.status === 401 && options.method !== 'POST') {
+      // Token expired: attempt to refresh
+      const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+
+      if (refreshRes.ok) {
+        const data = await refreshRes.json();
+        localStorage.setItem('accessToken', data.accessToken); // Оновлюємо localStorage
+        login(data.accessToken); // Оновлюємо контекст
+        headers.Authorization = `Bearer ${data.accessToken}`;
+        return fetch(url, { ...options, headers }); // Повторний запит
+      } else {
+        logout(); // Вихід, якщо оновлення не вдалося
+        throw new Error('Authentication failed');
+      }
+    }
+
+    return res;
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
+};
+```
+
+---
+
+### 3. **Приклад використання `apiFetch` в компоненті**
+
+#### Сценарій:
+Ви хочете виконати GET-запит до API `/department`, отримати список відділів і показати їх у вигляді списку.
+
+```javascript
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../utils/api';
+
+const DepartmentList = () => {
+  const [departments, setDepartments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        setLoading(true);
+        const res = await apiFetch('/api/department');
+        if (!res.ok) {
+          throw new Error('Failed to fetch departments');
+        }
+        const data = await res.json();
+        setDepartments(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDepartments();
+  }, []);
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error}</p>;
+
+  return (
+    <ul>
+      {departments.map((dept) => (
+        <li key={dept.id}>{dept.name}</li>
+      ))}
+    </ul>
+  );
+};
+
+export default DepartmentList;
+```
+
+---
+
+### 4. **Як працює `AuthContext` у цьому процесі**
+
+1. **`AuthProvider`:**
+   - Зберігає `accessToken` у своєму стані.
+   - Надає функції `login` (для збереження нового токена) і `logout` (для виходу користувача).
+
+2. **`apiFetch`:**
+   - Автоматично бере `accessToken` із контексту.
+   - Додає його в заголовок `Authorization`.
+   - Якщо токен протермінований (`401 Unauthorized`), звертається до `/api/refresh` і отримує новий токен.
+   - Оновлює контекст через `login` з новим токеном.
+
+3. **Компонент:**
+   - Використовує `apiFetch` для отримання даних, не турбуючись про автентифікацію чи оновлення токенів.
+
+---
+
+### 5. **Додатковий функціонал: Вивід статусу авторизації**
+
+Якщо потрібно відобразити статус авторизації користувача на сторінці, це легко зробити через контекст.
+
+```javascript
+import { useAuth } from '../context/AuthContext';
+
+const AuthStatus = () => {
+  const { authStatus, logout } = useAuth();
+
+  return (
+    <div>
+      <p>Current Status: {authStatus}</p>
+      {authStatus === 'authenticated' && <button onClick={logout}>Logout</button>}
+    </div>
+  );
+};
+
+export default AuthStatus;
+```
+
+---
+
+### 6. **Висновок**
+
+Ваш `AuthContext` працює як глобальне сховище стану авторизації, яке:
+- Забезпечує легкий доступ до `accessToken` для будь-яких запитів.
+- Автоматично оновлює токени, коли вони протерміновані.
+- Забезпечує єдиний механізм для входу/виходу та перевірки статусу автентифікації.
+
+Тепер виклик `apiFetch('/department')` автоматично враховує всі аспекти автентифікації, включаючи додавання токенів і оновлення, що робить ваш код більш простим і зрозумілим.

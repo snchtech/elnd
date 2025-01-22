@@ -1,0 +1,153 @@
+У контексті (`AuthContext`) зберігається інформація, яка необхідна для управління станом автентифікації користувача та зручного доступу до токенів і функцій автентифікації. Ось приклад того, що може зберігатися в контексті:
+
+---
+
+### Значення в `AuthContext`
+
+#### **1. `authStatus`**
+- Тип: `string`
+- Можливі значення:
+  - `"authenticated"` — користувач авторизований.
+  - `"nobody"` — користувач не авторизований.
+- Використовується для перевірки статусу користувача на фронтенді, наприклад, для відображення захищених сторінок або обмеження доступу.
+
+#### **2. `accessToken`**
+- Тип: `string | null`
+- Значення:
+  - `null`, якщо токен недоступний (користувач не авторизований).
+  - Токен `JWT`, якщо користувач авторизований.
+- Використовується для додавання в `Authorization` заголовки при запитах до API.
+
+#### **3. `login`**
+- Тип: `function`
+- Опис:
+  - Функція для авторизації користувача, яка зберігає `accessToken` у контексті й змінює `authStatus` на `"authenticated"`.
+  - Аргумент: `token` (строка) — новий `Access Token`.
+
+```javascript
+const login = (token) => {
+  setAccessToken(token);
+  setAuthStatus('authenticated');
+};
+```
+
+#### **4. `logout`**
+- Тип: `function`
+- Опис:
+  - Функція для виходу користувача. Вона очищує `accessToken`, змінює `authStatus` на `"nobody"`, і видаляє `refreshToken` із cookie.
+
+```javascript
+const logout = () => {
+  setAccessToken(null);
+  setAuthStatus('nobody');
+  document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+};
+```
+
+#### **5. `checkAuthStatus`**
+- Тип: `function`
+- Опис:
+  - Функція для перевірки валідності `accessToken`. Якщо токен недійсний, намагається оновити токени через `/api/refresh`.
+  - Викликається при завантаженні програми або при зміні сторінок.
+
+---
+
+### Приклад `AuthContext`
+
+```javascript
+// context/AuthContext.js
+import { createContext, useContext, useState, useEffect } from 'react';
+import { isTokenValid } from '../utils/tokenUtils';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [authStatus, setAuthStatus] = useState('nobody'); // Default: not authenticated
+  const [accessToken, setAccessToken] = useState(null);
+
+  const login = (token) => {
+    setAccessToken(token);
+    setAuthStatus('authenticated');
+  };
+
+  const logout = () => {
+    setAccessToken(null);
+    setAuthStatus('nobody');
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+  };
+
+  const checkAuthStatus = async () => {
+    const storedToken = localStorage.getItem('accessToken');
+    if (isTokenValid(storedToken)) {
+      login(storedToken);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('accessToken', data.accessToken);
+        login(data.accessToken);
+      } else {
+        logout();
+      }
+    } catch (err) {
+      logout();
+    }
+  };
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ authStatus, accessToken, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+### Використання контексту
+
+#### **У компонентах**
+Компоненти можуть отримувати дані контексту через `useAuth`:
+
+```javascript
+import { useAuth } from '../context/AuthContext';
+
+const Dashboard = () => {
+  const { authStatus, accessToken, logout } = useAuth();
+
+  if (authStatus === 'nobody') {
+    return <div>Please log in to access this page.</div>;
+  }
+
+  return (
+    <div>
+      <h1>Welcome to the dashboard!</h1>
+      <button onClick={logout}>Logout</button>
+    </div>
+  );
+};
+
+export default Dashboard;
+```
+
+#### **Приклад динамічної перевірки**
+Можна використовувати `authStatus` для умовного рендерингу:
+
+```javascript
+if (authStatus === 'nobody') {
+  return <Redirect to="/login" />;
+}
+```
+
+---
+
+Цей підхід дозволяє централізовано управляти автентифікацією, роблячи код більш зручним і структурованим.

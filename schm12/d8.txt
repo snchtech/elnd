@@ -1,0 +1,90 @@
+Очищення cookies в браузері JavaScript виконується шляхом встановлення значення cookie з атрибутом `Max-Age=0` або з минулою датою (`Expires`).
+
+Ось як виглядає код для очищення cookies, включаючи `refreshToken`:
+
+---
+
+### **Очищення cookies**
+
+```javascript
+// Видалення cookies шляхом встановлення Max-Age=0
+document.cookie = 'refreshToken=; Max-Age=0; Path=/; Secure; SameSite=Strict';
+```
+
+#### **Пояснення:**
+- **`refreshToken`** — ім'я cookies, яке ми хочемо видалити.
+- **`Max-Age=0`** — встановлює тривалість життя cookies на 0 секунд, тобто вона буде негайно видалена.
+- **`Path=/`** — гарантує, що cookies видаляється для всього домену (не лише для поточного шляху).
+- **`Secure`** — обмежує використання cookies лише для HTTPS-з'єднань.
+- **`SameSite=Strict`** — додає захист від CSRF-атак, обмежуючи доступ до cookies тільки для вашого домену.
+
+---
+
+### **Оновлений код кнопки Logout**
+
+```javascript
+import React from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+import Button from '@mui/material/Button';
+import LogoutIcon from '@mui/icons-material/Logout';
+
+const LogoutButton = () => {
+  const { logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    // Очищення контексту
+    logout();
+
+    // Очищення localStorage
+    localStorage.clear();
+
+    // Очищення cookies
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; Secure; SameSite=Strict';
+
+    // Перенаправлення на сторінку /login
+    router.push('/login');
+  };
+
+  return (
+    <Button
+      variant="contained"
+      color="secondary"
+      startIcon={<LogoutIcon />}
+      onClick={handleLogout}
+    >
+      Logout
+    </Button>
+  );
+};
+
+export default LogoutButton;
+```
+
+---
+
+### **Що ще можна врахувати?**
+
+1. **Очистка декількох cookies:**
+   Якщо у вас є кілька cookies для видалення, повторіть цей процес для кожного cookie:
+
+   ```javascript
+   const clearCookies = () => {
+     document.cookie = 'refreshToken=; Max-Age=0; Path=/; Secure; SameSite=Strict';
+     document.cookie = 'anotherCookie=; Max-Age=0; Path=/; Secure; SameSite=Strict';
+   };
+   ```
+
+2. **Очищення cookies через сервер:**
+   Якщо cookies встановлюються на сервері (з опцією `HttpOnly`), їх не можна видалити через `document.cookie`. У такому випадку вам потрібно викликати спеціальний API-ендпойнт для очищення cookies на сервері.
+
+   ```javascript
+   await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+   ```
+
+---
+
+### **Висновок**
+
+Очищення cookies виконується через `document.cookie`, встановлюючи `Max-Age=0`. У випадках, коли cookies недоступні для JavaScript (через `HttpOnly`), їх потрібно видаляти на сервері. Цей підхід забезпечує безпечний вихід із системи.

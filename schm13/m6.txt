@@ -1,0 +1,115 @@
+Так, можна об'єднати логіку таким чином, щоб:
+1. **Перевіряти `exp`** перед виконанням запиту і, якщо токен протермінований, оновлювати його.
+2. Якщо `exp` ще актуальний, але сервер відповів `401 Unauthorized`, також виконувати оновлення.
+3. У випадку невдалого оновлення — виконувати `logout` і кидати помилку.
+
+Використання `exp` у `localStorage` дає змогу зменшити кількість зайвих запитів на `/refresh`, тому я рекомендую залишити його.
+
+---
+
+### Об'єднаний код `apiFetch`
+
+```javascript
+const apiFetch = async (url, options = {}) => {
+  const headers = { ...options.headers };
+  const accessToken = localStorage.getItem('accessToken');
+  const accessTokenExp = localStorage.getItem('accessTokenExp');
+
+  const isTokenExpired = () => {
+    const currentTime = Math.floor(Date.now() / 1000);
+    return Number(accessTokenExp) <= currentTime;
+  };
+
+  const refreshTokens = async () => {
+    const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+
+    if (refreshRes.ok) {
+      const data = await refreshRes.json();
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('accessTokenExp', data.exp);
+      return data.accessToken;
+    } else {
+      throw new Error('Authentication failed');
+    }
+  };
+
+  try {
+    // Перевірка валідності accessToken перед запитом
+    if (isTokenExpired()) {
+      const newAccessToken = await refreshTokens();
+      headers.Authorization = `Bearer ${newAccessToken}`;
+    } else if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    // Виконуємо основний запит
+    const res = await fetch(url, { ...options, headers });
+
+    // Якщо отримуємо 401 Unauthorized, намагаємося оновити токени
+    if (res.status === 401) {
+      try {
+        const newAccessToken = await refreshTokens();
+        headers.Authorization = `Bearer ${newAccessToken}`;
+        return fetch(url, { ...options, headers }); // Повторний запит із новим токеном
+      } catch (error) {
+        // Якщо оновлення токена не вдалося, виконуємо logout
+        localStorage.clear();
+        document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+
+    return res; // Повертаємо успішну відповідь
+  } catch (err) {
+    console.error('Request failed', err);
+    throw err;
+  }
+};
+```
+
+---
+
+### Як працює цей код?
+
+1. **Перевірка валідності `accessToken`:**
+   - Якщо токен протермінований (`isTokenExpired()`), виконується запит на `/refresh`.
+   - Якщо `accessToken` дійсний, додається в заголовок `Authorization`.
+
+2. **Обробка `401 Unauthorized`:**
+   - Якщо сервер повертає `401 Unauthorized`, відбувається спроба оновлення токена через `/refresh`.
+   - Якщо оновлення успішне, запит повторюється з новим токеном.
+
+3. **Логіка `refreshTokens`:**
+   - Запит до `/refresh` оновлює `accessToken` і його `exp` в `localStorage`.
+   - Якщо оновлення не вдалося, виконуються:
+     - Очищення `localStorage`.
+     - Видалення `refreshToken` із cookies.
+     - Кидання помилки про завершення сесії.
+
+4. **Повторний запит:**
+   - Якщо токен було успішно оновлено, виконується повторний запит із новим токеном.
+
+---
+
+### Чи залишати перевірку `exp`?
+
+Так, перевірка `exp` потрібна, тому що:
+- Це дозволяє клієнту уникати зайвих запитів на `/refresh`, якщо токен ще дійсний.
+- Використання `exp` знижує навантаження на сервер, оскільки клієнт може самостійно визначити, чи потрібно оновлювати токен.
+
+---
+
+### Що відбувається в разі проблем?
+
+1. **Якщо `accessToken` протермінований, а `/refresh` недоступний:**
+   - Користувач буде автоматично вилогінений (`localStorage` і cookies очищаються).
+
+2. **Якщо сервер повертає `401 Unauthorized` для дійсного `accessToken`:**
+   - Спочатку виконується оновлення токена через `/refresh`.
+   - Якщо оновлення не вдається, користувач також буде вилогінений.
+
+---
+
+### Рекомендації:
+- Використовуйте короткий час життя для `accessToken` (5–15 хвилин) і довгий час життя для `refreshToken` (8–24 години).
+- Логіка обробки `401 Unauthorized` і перевірка `exp` створюють стійку до помилок систему, яка плавно працює як для користувача, так і для сервера.

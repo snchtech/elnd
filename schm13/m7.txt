@@ -1,0 +1,173 @@
+Ось як можна реалізувати вашу задачу крок за кроком:
+
+### Серверна частина (Express)
+
+На сервері в Express налаштуйте ендпойнт для логіну та відповіді, яка надсилає `otherdb`:
+
+```javascript
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
+
+app.use(bodyParser.json());
+app.use(express.static('public'));
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    // Логіка перевірки користувача (наприклад, із базою даних)
+    if (username === 'admin' && password === 'password') {
+        res.json({ otherdb: 'Це ваше повідомлення від сервера.' });
+    } else {
+        res.status(401).json({ error: 'Неправильний логін або пароль' });
+    }
+});
+
+app.listen(3000, () => {
+    console.log('Сервер працює на http://localhost:3000');
+});
+```
+
+### HTML (Frontend)
+
+HTML для сторінок: логін і головна сторінка. Важливо, щоб notification мав кнопку закриття:
+
+```html
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Логін</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #notification {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 10px;
+            display: none;
+            max-width: 300px;
+        }
+
+        #notification button {
+            background: none;
+            border: none;
+            color: #721c24;
+            font-weight: bold;
+            cursor: pointer;
+            float: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>Головна сторінка</h1>
+    <div id="notification">
+        <button id="close-notification">×</button>
+        <span id="notification-message"></span>
+    </div>
+
+    <script>
+        // Читаємо значення з localStorage
+        const otherdb = localStorage.getItem('otherdb');
+        const notification = document.getElementById('notification');
+        const notificationMessage = document.getElementById('notification-message');
+        const closeNotification = document.getElementById('close-notification');
+
+        if (otherdb && otherdb.trim() !== '') {
+            notificationMessage.textContent = otherdb; // Додаємо повідомлення
+            notification.style.display = 'block'; // Показуємо блок
+        }
+
+        closeNotification.addEventListener('click', () => {
+            notification.style.display = 'none'; // Ховаємо блок
+            localStorage.removeItem('otherdb'); // Видаляємо значення з localStorage
+        });
+    </script>
+</body>
+</html>
+```
+
+### Логін (JavaScript для логіки логіну)
+
+Створіть просту форму для логіну і логіку автентифікації:
+
+```html
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Логін</title>
+</head>
+<body>
+    <h1>Сторінка логіну</h1>
+    <form id="login-form">
+        <label for="username">Логін:</label>
+        <input type="text" id="username" name="username" required>
+        <br>
+        <label for="password">Пароль:</label>
+        <input type="password" id="password" name="password" required>
+        <br>
+        <button type="submit">Увійти</button>
+    </form>
+
+    <script>
+        const form = document.getElementById('login-form');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('otherdb', data.otherdb); // Зберігаємо otherdb
+                    alert('Логін успішний!');
+                    window.location.href = '/main.html'; // Перенаправлення на головну сторінку
+                } else {
+                    alert('Неправильний логін або пароль.');
+                }
+            } catch (error) {
+                console.error('Помилка логіну:', error);
+                alert('Сталася помилка під час логіну.');
+            }
+        });
+    </script>
+</body>
+</html>
+```
+
+### Пояснення:
+
+1. **Серверна частина**: 
+   - Обробляє POST-запит на `/login`.
+   - Відправляє відповідь із даними `otherdb`, які зберігаються в `localStorage`.
+
+2. **Головна сторінка**:
+   - При завантаженні сторінки перевіряє `localStorage` на наявність `otherdb`.
+   - Якщо дані є, показує повідомлення у `notification`.
+   - Додає кнопку закриття для приховування повідомлення та видалення `otherdb` з `localStorage`.
+
+3. **Стили**:
+   - `notification` має червоний колір, оскільки це warning.
+
+4. **Логіка логіну**:
+   - Використовує fetch для надсилання даних на сервер і збереження результату в `localStorage`.
+   - Перенаправляє користувача на головну сторінку після успішного логіну. 
+
+Тепер ваш додаток готовий до використання!

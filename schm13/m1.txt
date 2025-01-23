@@ -1,0 +1,126 @@
+### Перейменування `middleware.js`
+
+Оскільки цей файл перевіряє наявність `refreshToken` і відповідає за перевірку автентифікації, його можна перейменувати на більш тематичну назву, наприклад:
+- `authMiddleware.js`
+- `checkAuthentication.js`
+- `validateSession.js`
+
+Я пропоную **`authMiddleware.js`**, оскільки це прямо вказує на те, що цей middleware пов'язаний із автентифікацією.
+
+---
+
+### Додаткові перевірки з використанням `exp`
+
+Передача `exp` (часу закінчення дії `refreshToken`) у cookies є хорошим рішенням для додаткової перевірки. Це дозволяє уникнути зайвих запитів до сервера, якщо `refreshToken` уже явно протермінований.
+
+---
+
+### Оновлений код `authMiddleware.js`
+
+Ось як ми можемо врахувати перевірку `exp`:
+
+```javascript
+import { NextResponse } from 'next/server';
+
+export function middleware(req) {
+  const refreshToken = req.cookies.get('refreshToken');
+  const refreshTokenExp = req.cookies.get('refreshTokenExp'); // Отримуємо exp з cookies
+  const url = req.nextUrl.clone();
+
+  // Якщо немає refreshToken або exp
+  if (!refreshToken || !refreshTokenExp) {
+    if (url.pathname !== '/login') {
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  // Перевірка, чи протермінований refreshToken
+  const currentTime = Math.floor(Date.now() / 1000); // Поточний час у секундах
+  if (Number(refreshTokenExp) <= currentTime) {
+    // Якщо протермінований, перенаправляємо на сторінку входу
+    if (url.pathname !== '/login') {
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  // Якщо все гаразд, пропускаємо запит далі
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/', '/protected-page', '/another-protected-page'], // Перевіряємо для захищених сторінок
+};
+```
+
+---
+
+### Як це працює:
+1. **Отримання `refreshToken` та `refreshTokenExp`:**
+   - `refreshToken` — сам токен для оновлення.
+   - `refreshTokenExp` — час закінчення його дії (у форматі Unix timestamp).
+
+2. **Перевірка наявності:**
+   - Якщо `refreshToken` або `refreshTokenExp` відсутній, користувач перенаправляється на `/login`.
+
+3. **Перевірка часу дії токена:**
+   - Поточний час порівнюється з `refreshTokenExp`.
+   - Якщо токен протермінований (`currentTime > refreshTokenExp`), користувач перенаправляється на `/login`.
+
+4. **Пропуск запиту:**
+   - Якщо обидві перевірки пройдені, запит передається далі (користувач вважається автентифікованим).
+
+---
+
+### Що потрібно змінити на сервері?
+
+Щоб цей код працював, сервер повинен додатково встановлювати час закінчення дії токена (`refreshTokenExp`) у cookies при кожній генерації `refreshToken`.
+
+Приклад серверного коду:
+
+```javascript
+const setRefreshTokenCookie = (res, refreshToken, exp) => {
+  const refreshTokenExp = Math.floor(Date.now() / 1000) + exp; // Поточний час + час дії в секундах
+  res.cookie('refreshToken', refreshToken, { httpOnly: true, path: '/', secure: true, sameSite: 'Strict' });
+  res.cookie('refreshTokenExp', refreshTokenExp, { httpOnly: false, path: '/', secure: true, sameSite: 'Strict' });
+};
+```
+
+---
+
+### Альтернативи
+
+1. **Декодування `refreshToken` для перевірки `exp`:**
+   - Якщо `refreshToken` є JWT, ви можете декодувати його на клієнті або на сервері для отримання `exp`, замість зберігання `refreshTokenExp` у cookies.
+   - Це зменшує кількість cookies, але вимагає додаткового розбору токена.
+
+   Приклад декодування токена:
+   ```javascript
+   import jwtDecode from 'jwt-decode';
+
+   const refreshToken = req.cookies.get('refreshToken');
+   if (refreshToken) {
+     const { exp } = jwtDecode(refreshToken);
+     if (exp <= Math.floor(Date.now() / 1000)) {
+       // Токен протермінований
+     }
+   }
+   ```
+
+2. **Перевірка на сервері при кожному запиті:**
+   - Якщо ваш сервер підтримує швидкий доступ до бази даних або іншого сховища, перевіряйте валідність `refreshToken` та його `exp` безпосередньо на сервері, а не на клієнті.
+   - Це більш безпечний варіант, але може трохи підвищити затримки.
+
+---
+
+### Рекомендація
+
+**Зберігання `refreshTokenExp` у cookies** є ефективним варіантом, оскільки:
+- Зменшує кількість запитів до сервера для перевірки протермінованих токенів.
+- Простий у реалізації.
+- Безпечний, якщо використовується з атрибутами `HttpOnly`, `Secure`, і `SameSite`.
+
+Альтернативно, якщо ви використовуєте JWT, декодування токена на боці клієнта також є популярним підходом. Обирайте варіант, який найкраще підходить для вашого проєкту.

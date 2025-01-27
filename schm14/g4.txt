@@ -1,0 +1,158 @@
+Проблема полягає в тому, що у вашому HOC (`withAuth`) залежність від контексту (`AuthContext`) може не синхронізуватися належним чином між клієнтською та серверною частинами Next.js через специфіку роботи контексту та процесу серверного рендерингу. Ось кілька причин і способів виправлення:
+
+---
+
+### **Причина**
+1. **Контекст недоступний на сервері:** `AuthContext` не може бути ініціалізований під час серверного рендерингу (SSG/SSR), оскільки контекст оновлюється тільки після повного завантаження клієнтської частини.
+2. **Стан контексту оновлюється асинхронно:** Ваш `checkAuthStatus` в `useEffect` виконується після рендерингу сторінки, що означає, що `authStatus` завжди буде починатися зі значення `nobody`, поки не завершиться асинхронна операція.
+
+---
+
+### **Рішення**
+#### 1. **Переконайтеся, що контекст працює лише на клієнті**
+Додайте `'use client';` на початку `AuthContext` і `AuthProvider`, щоб гарантувати, що вони працюють лише на клієнтській частині.
+
+#### 2. **Інтегруйте локальний стан із перевіркою `checkAuthStatus`**
+Використовуйте проміжний стан `loading`, щоб уникнути моментального перенаправлення, поки триває асинхронна перевірка `checkAuthStatus`.
+
+#### 3. **Додайте логіку в `AuthProvider`**
+Змініть `AuthProvider` таким чином:
+
+```javascript
+'use client';
+
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [authStatus, setAuthStatus] = useState('loading'); // loading | authenticated | nobody
+  const [accessToken, setAccessToken] = useState(null);
+
+  const login = (token) => {
+    setAccessToken(token);
+    setAuthStatus('authenticated');
+  };
+
+  const logout = () => {
+    setAccessToken(null);
+    setAuthStatus('nobody');
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+  };
+
+  const checkAuthStatus = async () => {
+    try {
+      const res = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        login(data.accessToken);
+      } else {
+        logout();
+      }
+    } catch (err) {
+      logout();
+    }
+  };
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  if (authStatus === 'loading') {
+    return <div>Loading...</div>; // Можна додати спінер або скелетон
+  }
+
+  return (
+    <AuthContext.Provider value={{ authStatus, accessToken, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+#### 4. **Оновіть `withAuth`**
+Додайте перевірку на `loading`, щоб уникнути перенаправлення під час завантаження стану.
+
+```javascript
+'use client';
+
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent, requiredRole = null) => {
+  return (props) => {
+    const { authStatus, user } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (authStatus === 'nobody') {
+        router.push('/login');
+        return;
+      }
+
+      if (requiredRole && user && !user.roles.includes(requiredRole)) {
+        router.push('/');
+        return;
+      }
+    }, [authStatus, user]);
+
+    if (authStatus === 'loading') {
+      return <div>Loading...</div>; // Додати спінер
+    }
+
+    if (authStatus === 'nobody' || (requiredRole && user && !user.roles.includes(requiredRole))) {
+      return null;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+};
+
+export default withAuth;
+```
+
+---
+
+#### 5. **Як переглядати значення контексту**
+- Використовуйте `console.log(authStatus)` в `AuthProvider` або `withAuth`.
+- У браузері можна використовувати [React Developer Tools](https://react.devtools) для перевірки стану контексту.
+- Ви також можете створити тестову сторінку для рендерингу `useAuth()`:
+
+```javascript
+'use client';
+
+import React from 'react';
+import { useAuth } from '../context/AuthContext';
+
+const DebugAuth = () => {
+  const { authStatus, accessToken } = useAuth();
+
+  return (
+    <div>
+      <p>Auth Status: {authStatus}</p>
+      <p>Access Token: {accessToken}</p>
+    </div>
+  );
+};
+
+export default DebugAuth;
+```
+
+---
+
+### **Чому контекст не оновлювався?**
+Контекст оновлюється асинхронно. У вашому випадку `useEffect` викликався після першого рендерингу, а `authStatus` залишався `nobody`, поки не завершувалась функція `checkAuthStatus`.
+
+---
+
+### **Резюме**
+- Додайте стан `loading` для асинхронної ініціалізації.
+- Забезпечте `withAuth` перевірку на `loading` перед виконанням перенаправлення.
+- Перевіряйте контекст через React Developer Tools або тестову сторінку.
+
+Цей підхід забезпечить коректне перенаправлення, а також уникне проблем із рендерингом.

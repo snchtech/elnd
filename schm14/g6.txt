@@ -1,0 +1,230 @@
+Ось альтернативний підхід, який зберігає статус автентифікованого користувача в `localStorage`. Такий підхід дозволяє при оновленні сторінки чи перезавантаженні браузера отримати статус із `localStorage`.
+
+---
+
+### **Оновлений `AuthContext` зі збереженням в `localStorage`**
+
+```javascript
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState('nobody'); // authenticated | nobody
+
+  // Ініціалізація при завантаженні компонента
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    const storedStatus = localStorage.getItem('authStatus');
+
+    if (storedUser && storedStatus === 'authenticated') {
+      setUser(JSON.parse(storedUser));
+      setAuthStatus(storedStatus);
+    }
+  }, []);
+
+  const login = (userData) => {
+    setUser(userData);
+    setAuthStatus('authenticated');
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('authStatus', 'authenticated');
+  };
+
+  const logout = () => {
+    setUser(null);
+    setAuthStatus('nobody');
+    localStorage.removeItem('user');
+    localStorage.setItem('authStatus', 'nobody');
+    document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, authStatus, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+### **HOC для захисту сторінок**
+
+```javascript
+'use client';
+
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
+
+const withAuth = (WrappedComponent, requiredRole = null) => {
+  return (props) => {
+    const { authStatus, user } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      const storedAuthStatus = localStorage.getItem('authStatus');
+      const storedUser = JSON.parse(localStorage.getItem('user'));
+
+      if (!storedAuthStatus || storedAuthStatus === 'nobody') {
+        router.push('/login');
+        return;
+      }
+
+      // Якщо передана роль і вона не відповідає ролям користувача
+      if (requiredRole && storedUser && !storedUser.roles.includes(requiredRole)) {
+        router.push('/');
+        return;
+      }
+    }, []);
+
+    if (authStatus === 'nobody' || (requiredRole && user && !user.roles.includes(requiredRole))) {
+      return null; // Можна додати спінер або повідомлення
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+};
+
+export default withAuth;
+```
+
+---
+
+### **Компонент Login**
+
+```javascript
+'use client';
+
+import React, { useState } from 'react';
+import { TextField, Button, Box, Typography, Alert } from '@mui/material';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+
+const LoginPage = () => {
+  const { login } = useAuth();
+  const router = useRouter();
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [capsLock, setCapsLock] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!username || !password) {
+      setError('Заповніть всі поля');
+      return;
+    }
+
+    if (/[а-яА-ЯЁё]/.test(password)) {
+      setError('Пароль не може містити кириличні символи');
+      return;
+    }
+
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'validated') {
+        login(data.user); // Оновлення контексту + збереження в localStorage
+        router.push('/editor'); // Перенаправлення
+      } else {
+        setError('Невірний логін або пароль');
+      }
+    } catch (error) {
+      setError('Помилка сервера');
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    setCapsLock(e.getModifierState('CapsLock'));
+  };
+
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      height="100vh"
+    >
+      <Typography variant="h4" gutterBottom>Вхід в систему</Typography>
+
+      {error && <Alert severity="error">{error}</Alert>}
+      {capsLock && <Alert severity="warning">Увімкнено CapsLock!</Alert>}
+
+      <Box component="form" onSubmit={handleSubmit} sx={{ width: 300 }}>
+        <TextField
+          fullWidth
+          label="Логін"
+          margin="normal"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          required
+        />
+
+        <TextField
+          fullWidth
+          label="Пароль"
+          type="password"
+          margin="normal"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={handleKeyPress}
+          required
+        />
+
+        <Button
+          type="submit"
+          fullWidth
+          variant="contained"
+          sx={{ mt: 2 }}
+        >
+          Увійти
+        </Button>
+      </Box>
+    </Box>
+  );
+};
+
+export default LoginPage;
+```
+
+---
+
+### **Як це працює**
+
+1. **Авторизація при логіні:**
+   - Після успішного логіну контекст `AuthContext` оновлює стан `user` і `authStatus`.
+   - `user` і `authStatus` зберігаються в `localStorage`.
+
+2. **Зчитування стану при перезавантаженні сторінки:**
+   - `useEffect` в `AuthProvider` перевіряє `localStorage` і оновлює контекст.
+
+3. **Перевірка статусу на захищених сторінках:**
+   - HOC `withAuth` зчитує стан `authStatus` і `user` з контексту (або `localStorage`).
+
+---
+
+### **Переваги такого підходу**
+- **Зручність:** `localStorage` дозволяє зберігати стан навіть після перезавантаження сторінки.
+- **Простота:** Менше залежності від бекенда (немає потреби щоразу робити запит для перевірки статусу).
+- **Реактивність:** `AuthContext` дозволяє використовувати оновлення стану в реальному часі.
+
+---
+
+### **Недоліки**
+- **Безпека:** `localStorage` не є найкращим місцем для зберігання чутливих даних (як-от токени).
+- **Складність із синхронізацією:** Якщо стан користувача змінюється на сервері, потрібно синхронізувати з клієнтом.
+
+Для більшої безпеки токени краще зберігати в `HttpOnly cookies`.

@@ -1,0 +1,136 @@
+Щоб після виклику функції `login(data)` контекст відразу відобразив, що користувач автентифікований, слід переконатися, що:
+
+1. **Функція `login` оновлює стан у контексті**. Якщо ви використовуєте `useState`, функція `login(data)` має викликати оновлення стану.
+   
+2. **Стан контексту (`authStatus` або `user`) має бути доступний через `useAuth` у будь-якому місці програми**.
+
+Давайте крок за кроком пояснимо, як це зробити.
+
+---
+
+### **Оновлення функції `login`**
+Зараз у вашій функції `login` є цей код:
+
+```javascript
+const login = (userData) => {
+  setUser(userData); // Оновлення стану користувача
+  setAuthStatus('authenticated'); // Оновлення статусу
+};
+```
+
+Цього достатньо для оновлення контексту. Як тільки ви викликаєте `login(data)`, `setUser` і `setAuthStatus` оновлять стан у контексті, і цей стан буде доступний у будь-якому компоненті, який використовує `useAuth`.
+
+---
+
+### **Кроки після логіна**
+
+1. **Переконайтеся, що ви використовуєте `login(data)`**:
+   На сторінці логіну ви викликаєте:
+
+   ```javascript
+   const handleSubmit = async (e) => {
+     e.preventDefault();
+
+     try {
+       const response = await fetch('http://localhost:5000/api/auth/login', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ username, password }),
+       });
+
+       const data = await response.json();
+
+       if (data.status === 'validated') {
+         login(data.user); // Передаємо дані користувача в контекст
+         router.push('/editor'); // Редирект на сторінку
+       } else {
+         setError('Невірний логін або пароль');
+       }
+     } catch (error) {
+       setError('Помилка сервера');
+     }
+   };
+   ```
+
+   Цей код:
+   - Викликає `login(data.user)`, яка оновлює контекст.
+   - Виконує редирект на сторінку `/editor`.
+
+---
+
+2. **Перевірка автентифікації на сторінці `Editor`**
+   На сторінці `Editor` використовуйте HOC `withAuth` або безпосередньо `useAuth` для перевірки стану:
+
+   ```javascript
+   import { useAuth } from '../context/AuthContext';
+
+   const Editor = () => {
+     const { user, authStatus } = useAuth();
+
+     if (authStatus === 'nobody') {
+       return <p>Користувач неавторизований</p>;
+     }
+
+     return (
+       <div>
+         <h1>Ласкаво просимо, {user.username}!</h1>
+         <p>Ваша посада: {user.position}</p>
+       </div>
+     );
+   };
+
+   export default Editor;
+   ```
+
+---
+
+3. **Переконайтеся, що контекст оновлюється синхронно**
+   Якщо на момент редиректу контекст ще не оновився, можливо, потрібен невеликий час для завершення виклику `setState`. Ви можете додати `useEffect` на сторінці `Editor`, щоб відслідковувати стан:
+
+   ```javascript
+   useEffect(() => {
+     if (authStatus === 'nobody') {
+       router.push('/login'); // Перенаправляємо, якщо користувач неавторизований
+     }
+   }, [authStatus]);
+   ```
+
+---
+
+### **Як відразу підтягнути автентифікацію**
+Ви можете налаштувати наступну логіку, щоб впевнитися, що після виклику `login` дані доступні одразу після редиректу:
+   
+- **Додайте спінер на час завантаження контексту:** Якщо редирект відбувається швидше, ніж оновлюється контекст, використовуйте стан `loading`.
+
+- **Оновіть `AuthProvider`**:
+
+   ```javascript
+   const [loading, setLoading] = useState(false);
+
+   const login = (userData) => {
+     setLoading(true);
+     setUser(userData);
+     setAuthStatus('authenticated');
+     setLoading(false);
+   };
+
+   return (
+     <AuthContext.Provider value={{ user, authStatus, login, logout, loading }}>
+       {children}
+     </AuthContext.Provider>
+   );
+   ```
+
+- **Використовуйте цей стан на сторінці логіну**:
+
+   ```javascript
+   if (loading) return <p>Завантаження...</p>;
+   ```
+
+---
+
+### **Як перевірити стан контексту**
+- Переглядати поточний стан контексту можна через [React Developer Tools](https://react.devtools).
+- Також ви можете додати `console.log(authStatus, user)` у будь-якому місці, де використовується `useAuth`.
+
+Ці кроки гарантують, що після логіну контекст оновлюється синхронно, а користувач залишається автентифікованим на всіх захищених сторінках.

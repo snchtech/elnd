@@ -1,0 +1,114 @@
+У **Next.js** змінну `API_URL` можна оголосити як змінну середовища. Це дозволить легко використовувати її у всьому проекті, включаючи кастомні запити, і зберігати окремо для різних середовищ (розробка, тестування, продакшн).
+
+---
+
+### **Кроки для зберігання `API_URL`**
+
+---
+
+#### **1. Додайте змінну в `.env.local`**
+
+Файл `.env.local` знаходиться в кореневій папці проекту. Якщо його ще немає, створіть його.
+
+```bash
+# .env.local
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+```
+
+- Змінні, що починаються з `NEXT_PUBLIC_`, автоматично доступні як на клієнтській, так і на серверній стороні.
+
+---
+
+#### **2. Використовуйте змінну в кастомному fetch-запиті**
+
+```javascript
+const apiFetch = async (endpoint, options = {}) => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  const response = await fetch(`${baseUrl}${endpoint}`, options);
+  const data = await response.json();
+  return data;
+};
+
+export default apiFetch;
+```
+
+---
+
+#### **3. Використання в коді**
+
+Використовуйте `apiFetch` для виконання запитів:
+
+```javascript
+import apiFetch from '../utils/apiFetch';
+
+const fetchDepartments = async () => {
+  try {
+    const data = await apiFetch('/departments');
+    console.log(data);
+  } catch (error) {
+    console.error('Помилка завантаження відділів:', error);
+  }
+};
+
+fetchDepartments();
+```
+
+---
+
+#### **4. Оптимізація для Next.js (додатково)**
+
+Якщо ви хочете використовувати `API_URL` тільки на серверній стороні (наприклад, для API-роутів), не додавайте префікс `NEXT_PUBLIC_`. Такі змінні будуть доступні тільки на сервері.
+
+- У файлі `.env.local`:
+  ```bash
+  API_URL=http://localhost:5000/api
+  ```
+
+- У серверному коді:
+  ```javascript
+  const baseUrl = process.env.API_URL;
+  ```
+
+---
+
+### **Рекомендації щодо середовищ**
+
+- **Для продакшн-середовища** створіть файл `.env.production`:
+  ```bash
+  NEXT_PUBLIC_API_URL=https://myapp.com/api
+  ```
+
+- **Для тестового середовища** створіть `.env.test`:
+  ```bash
+  NEXT_PUBLIC_API_URL=http://test.myapp.com/api
+  ```
+
+---
+
+### **5. Використання в `next.config.mjs` (додатково)**
+
+Ви можете також передати змінну через `next.config.mjs`:
+
+```javascript
+const nextConfig = {
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  },
+};
+
+export default nextConfig;
+```
+
+Однак, використання `.env.local` є більш зручним і стандартним підходом у Next.js.
+
+---
+
+### **6. Перевірка в браузері**
+
+Змінна `NEXT_PUBLIC_API_URL` доступна через:
+
+```javascript
+console.log(process.env.NEXT_PUBLIC_API_URL);
+```
+
+Переконайтеся, що файл `.env.local` не комітується в репозиторій, додавши його в `.gitignore`.

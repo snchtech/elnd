@@ -1,0 +1,131 @@
+У **Next.js**, файл `middleware.js` розташовується в кореневій папці проекту, і він автоматично підключається. Це новий підхід Next.js для обробки запитів на серверному боці, який виконується перед тим, як обробляти сторінки.
+
+### Кроки для інтеграції `middleware.js` в проект:
+
+---
+
+### **1. Розташування `middleware.js`**
+Файл `middleware.js` повинен знаходитися в корені вашого проекту, на одному рівні з папкою `pages`, наприклад:
+
+```
+/project-root
+  ├── /pages
+  ├── /public
+  ├── /styles
+  ├── middleware.js
+  ├── next.config.js
+  ├── package.json
+```
+
+---
+
+### **2. Налаштування Middleware**
+
+Код, який ти привів вище, вже є коректним прикладом для перевірки токена, але для впевненості, ти можеш налаштувати відповідні маршрути.
+
+- **Файл `middleware.js`:**
+
+```javascript
+import { NextResponse } from 'next/server';
+
+export function middleware(req) {
+  const refreshToken = req.cookies.get('refreshToken');
+  const refreshTokenExp = req.cookies.get('refreshTokenExp');
+  const url = req.nextUrl.clone();
+
+  // Якщо refreshToken відсутній або його строк дії закінчився
+  if (!refreshToken || !refreshTokenExp) {
+    if (url.pathname !== '/login') {
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  const currentTime = Math.floor(Date.now() / 1000);
+  if (Number(refreshTokenExp) <= currentTime) {
+    if (url.pathname !== '/login') {
+      url.pathname = '/login';
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/', '/editor', '/protected-page'], // Додай маршрути, які потребують перевірки
+};
+```
+
+---
+
+### **3. Як це працює?**
+
+Кожен запит, який співпадає з маршрутом у `matcher` (наприклад, `/`, `/editor` або `/protected-page`), буде спочатку перевірятися Middleware.
+
+1. **Без токена або з простроченим токеном**:
+   - Якщо `refreshToken` або `refreshTokenExp` відсутній або токен прострочений, користувач буде перенаправлений на `/login`.
+
+2. **Токен валідний**:
+   - Якщо `refreshToken` дійсний, запит пропускається далі (`NextResponse.next()`).
+
+---
+
+### **4. Як перевірити роботу Middleware?**
+
+1. **Створення тестової сторінки**
+
+У папці `pages` створи тестову сторінку, наприклад `/pages/protected-page.js`:
+
+```javascript
+export default function ProtectedPage() {
+  return <h1>Це захищена сторінка</h1>;
+}
+```
+
+2. **Перевірка доступу**
+
+- Якщо токен у куках відсутній або прострочений, Middleware перенаправить користувача на `/login`.
+- Якщо токен валідний, сторінка відкриється.
+
+---
+
+### **5. Генерація та зберігання токена**
+
+1. **На сервері (API):**
+   - Після входу користувача генерується `refreshToken` і `refreshTokenExp`.
+   - Встановлюються HTTP-only cookies:
+
+   ```javascript
+   res.cookie('refreshToken', token, {
+     httpOnly: true,
+     secure: process.env.NODE_ENV === 'production',
+     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 днів
+   });
+
+   res.cookie('refreshTokenExp', exp, {
+     httpOnly: true,
+     secure: process.env.NODE_ENV === 'production',
+     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 днів
+   });
+   ```
+
+2. **На клієнті:**
+   - Клієнт надсилає запити із автоматичним додаванням цих куків.
+   - Middleware перевіряє куки перед обробкою запиту.
+
+---
+
+### **6. Переваги використання Middleware**
+
+- **Централізована перевірка**: Усі запити перевіряються в одному місці.
+- **Захист сторінок**: Користувачі не можуть отримати доступ до захищених сторінок без валідного токена.
+- **Простота керування**: Ви додаєте нові захищені сторінки, просто розширивши `matcher`.
+
+---
+
+### **7. Альтернатива: Замість куків використовувати Context API**
+
+Middleware можна поєднати з Context API для керування станом користувача на клієнтській стороні. Це корисно, якщо ви хочете динамічно змінювати контент сторінок залежно від ролей користувача.

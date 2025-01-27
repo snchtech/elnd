@@ -1,0 +1,165 @@
+Ось як можна використовувати ваш код `apiFetch` для GET і POST запитів, а також покращити його, щоб відповідати найкращим практикам. Розділимо логіку на дві функції `apiGet` і `apiPost` для простоти використання та підтримки.
+
+---
+
+### **Покращений код `apiFetch`**
+
+```javascript
+const apiFetch = async (url, method, body = null, additionalOptions = {}) => {
+  const headers = { 'Content-Type': 'application/json', ...additionalOptions.headers };
+  const accessToken = localStorage.getItem('accessToken');
+  const accessTokenExp = localStorage.getItem('accessTokenExp');
+
+  const isTokenExpired = () => {
+    const currentTime = Math.floor(Date.now() / 1000);
+    return Number(accessTokenExp) <= currentTime;
+  };
+
+  const refreshTokens = async () => {
+    const refreshRes = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
+
+    if (refreshRes.ok) {
+      const data = await refreshRes.json();
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('accessTokenExp', data.exp);
+      return data.accessToken;
+    } else {
+      throw new Error('Authentication failed');
+    }
+  };
+
+  try {
+    // Перевірка валідності accessToken перед запитом
+    if (isTokenExpired()) {
+      const newAccessToken = await refreshTokens();
+      headers.Authorization = `Bearer ${newAccessToken}`;
+    } else if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    const options = {
+      method,
+      headers,
+      ...additionalOptions,
+    };
+
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+
+    // Виконуємо основний запит
+    const res = await fetch(url, options);
+
+    // Якщо отримуємо 401 Unauthorized, намагаємося оновити токени
+    if (res.status === 401) {
+      try {
+        const newAccessToken = await refreshTokens();
+        headers.Authorization = `Bearer ${newAccessToken}`;
+        return fetch(url, { ...options, headers }); // Повторний запит із новим токеном
+      } catch (error) {
+        // Якщо оновлення токена не вдалося, виконуємо logout
+        localStorage.clear();
+        document.cookie = 'refreshToken=; Max-Age=0; Path=/; HttpOnly';
+        throw new Error('Session expired. Please log in again.');
+      }
+    }
+
+    return res; // Повертаємо успішну відповідь
+  } catch (err) {
+    console.error('Request failed', err);
+    throw err;
+  }
+};
+```
+
+---
+
+### **Функції `apiGet` і `apiPost`**
+
+#### `apiGet`:
+Функція для виконання GET-запитів.
+
+```javascript
+export const apiGet = async (url, options = {}) => {
+  try {
+    const res = await apiFetch(url, 'GET', null, options);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('GET request failed:', error);
+    throw error;
+  }
+};
+```
+
+#### `apiPost`:
+Функція для виконання POST-запитів.
+
+```javascript
+export const apiPost = async (url, body, options = {}) => {
+  try {
+    const res = await apiFetch(url, 'POST', body, options);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('POST request failed:', error);
+    throw error;
+  }
+};
+```
+
+---
+
+### **Приклад використання**
+
+#### **GET-запит (отримання відділів):**
+```javascript
+import { apiGet } from '../utils/apiFetch';
+
+const fetchDepartments = async () => {
+  try {
+    const departments = await apiGet('http://localhost:5000/api/departments');
+    console.log('Departments:', departments);
+  } catch (error) {
+    console.error('Failed to fetch departments:', error);
+  }
+};
+
+fetchDepartments();
+```
+
+#### **POST-запит (створення нового запису):**
+```javascript
+import { apiPost } from '../utils/apiFetch';
+
+const createDepartment = async () => {
+  try {
+    const newDepartment = {
+      name: 'New Department',
+      shortName: 'ND',
+    };
+    const response = await apiPost('http://localhost:5000/api/departments', newDepartment);
+    console.log('New Department Created:', response);
+  } catch (error) {
+    console.error('Failed to create department:', error);
+  }
+};
+
+createDepartment();
+```
+
+---
+
+### **Переваги такого підходу**
+1. **Код стає чистішим**: Розділення на `apiGet` і `apiPost` робить код легким для читання і підтримки.
+2. **Управління токенами**: Автоматичне оновлення токенів робить систему більш надійною.
+3. **Гнучкість**: Ви можете легко додавати нові методи (`PUT`, `DELETE`) або налаштування (наприклад, кастомні заголовки).
+
+---
+
+### **Рекомендація**
+Такий підхід є масштабованим і добре підходить для роботи з REST API в Next.js або будь-якому сучасному фронтенд-додатку.

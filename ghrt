@@ -1,0 +1,409 @@
+In Next.js, if you’re trying to maintain user session data across routes and you're finding that using React Context alone doesn't persist the data between page navigation, it's because React Context is only available in memory during the current session, and when you use `router.push()`, the component state gets reset. To solve this, you'll need to use something like **cookies** or **localStorage** to persist session data and make it available across page navigations.
+
+Here’s a step-by-step guide to implement session persistence in your Next.js app using cookies, along with React Context for managing global state:
+
+### Step 1: Install Cookies Library
+First, install a cookie handling library like `js-cookie`, which will allow you to easily get and set cookies on the client side.
+
+```bash
+npm install js-cookie
+```
+
+### Step 2: Create a Context for User Data
+
+Create a `UserContext` to manage and provide global user session state across your app.
+
+```js
+// context/UserContext.js
+import { createContext, useContext, useState, useEffect } from 'react';
+import Cookies from 'js-cookie';
+
+const UserContext = createContext();
+
+export const UserProvider = ({ children }) => {
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    // Try to load user data from cookies on page load
+    const storedUserData = Cookies.get('userData');
+    if (storedUserData) {
+      setUserData(JSON.parse(storedUserData));
+    }
+  }, []);
+
+  const saveUserData = (data) => {
+    // Save user data to cookie and set state
+    Cookies.set('userData', JSON.stringify(data), { expires: 7 }); // Expires in 7 days
+    setUserData(data);
+  };
+
+  const clearUserData = () => {
+    // Clear user data from cookie and state
+    Cookies.remove('userData');
+    setUserData(null);
+  };
+
+  return (
+    <UserContext.Provider value={{ userData, saveUserData, clearUserData }}>
+      {children}
+    </UserContext.Provider>
+  );
+};
+
+export const useUser = () => useContext(UserContext);
+```
+
+### Step 3: Wrap Your App with the UserProvider
+
+Next, wrap your Next.js app in the `UserProvider` to make the context accessible to all components.
+
+```js
+// pages/_app.js
+import { UserProvider } from '../context/UserContext';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <UserProvider>
+      <Component {...pageProps} />
+    </UserProvider>
+  );
+}
+
+export default MyApp;
+```
+
+### Step 4: Using User Context in Components
+
+Now, you can use the `useUser` hook to access the session data and update it.
+
+For example, in your login component, you might do something like this to set the user data when they log in:
+
+```js
+// components/Login.js
+import { useUser } from '../context/UserContext';
+import { useRouter } from 'next/router';
+
+const Login = () => {
+  const { saveUserData } = useUser();
+  const router = useRouter();
+
+  const handleLogin = () => {
+    const user = { name: 'John Doe', email: 'john@example.com' }; // Replace with real user data
+    saveUserData(user);
+    router.push('/editor');
+  };
+
+  return (
+    <button onClick={handleLogin}>Login</button>
+  );
+};
+
+export default Login;
+```
+
+Then, in the `/editor` page (or any other page), you can access the user data like this:
+
+```js
+// pages/editor.js
+import { useUser } from '../context/UserContext';
+
+const Editor = () => {
+  const { userData } = useUser();
+
+  if (!userData) {
+    return <div>Please log in to access the editor.</div>;
+  }
+
+  return (
+    <div>
+      <h1>Welcome to the Editor, {userData.name}!</h1>
+      {/* Your editor content */}
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+### Step 5: Clear User Data (Optional)
+
+If you want to implement a logout functionality, you can clear the session data by calling the `clearUserData` function from the context.
+
+```js
+// components/Logout.js
+import { useUser } from '../context/UserContext';
+import { useRouter } from 'next/router';
+
+const Logout = () => {
+  const { clearUserData } = useUser();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearUserData();
+    router.push('/login'); // Redirect to login page or home
+  };
+
+  return <button onClick={handleLogout}>Logout</button>;
+};
+
+export default Logout;
+```
+
+### Why Cookies?
+
+Cookies are a good solution because:
+- They persist across page reloads and browser sessions.
+- You can set an expiration date on them (e.g., a session cookie that expires when the browser is closed or one that lasts for several days).
+- They can be accessed from both the client and server-side in Next.js, so you could potentially use server-side logic to check for session validity and render pages accordingly.
+
+### Step 6: Optional: Server-Side Session Handling (for SSR)
+
+If you want to handle user sessions on the server side (for example, to verify sessions or user authentication before rendering pages), you can use the `getServerSideProps` or `getInitialProps` methods to access cookies on the server side.
+
+Here’s an example of accessing the cookie server-side:
+
+```js
+// pages/editor.js
+export async function getServerSideProps(context) {
+  const { req } = context;
+  const cookie = req.cookies.userData || null; // Check cookie in server-side request
+
+  if (!cookie) {
+    return { redirect: { destination: '/login', permanent: false } };
+  }
+
+  // Process userData here if needed
+
+  return { props: {} };
+}
+```
+
+It sounds like you are dealing with a **cross-domain setup** where the Next.js frontend is hosted on one domain, and your API is hosted on a different domain. You're trying to use **NextAuth** for session management while ensuring that the session persists across domain redirects, and you also want to handle session state through React Context.
+
+To integrate **NextAuth** in this kind of architecture, where you have two separate domains (one for the frontend and one for the API), you need to ensure **cross-domain cookies** are handled correctly, and the session information is shared between your frontend and backend.
+
+Here’s how to do it step by step:
+
+---
+
+### Step 1: Configure Cross-Domain Cookies in NextAuth
+
+The most important consideration here is to configure **NextAuth** so it can work with cookies across different domains (cross-domain cookies). By default, cookies set by **NextAuth** will only be sent to the domain that created them. To enable cross-domain cookie sharing, you'll need to tweak your NextAuth settings and your browser’s cookie configuration.
+
+#### 1. Configure Cookie Options for Cross-Domain
+
+You can adjust the `cookie` options in the NextAuth configuration to enable **cross-domain** cookies. This can be done in your `pages/api/auth/[...nextauth].js` configuration.
+
+Here’s how you can do that:
+
+```js
+// pages/api/auth/[...nextauth].js
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+
+export default NextAuth({
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        // Handle the user authentication logic
+        if (credentials.email === "user@example.com" && credentials.password === "password123") {
+          return { id: 1, email: credentials.email, name: "User" };
+        }
+        return null; // Return null if login fails
+      }
+    }),
+  ],
+  session: {
+    jwt: true, // Enable JWT for session handling
+  },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.email = user.email;
+        token.name = user.name;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      session.user.id = token.id;
+      session.user.email = token.email;
+      session.user.name = token.name;
+      return session;
+    },
+  },
+  cookies: {
+    // Make sure cookies are set to allow cross-domain access
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production", // Set to true for HTTPS in production
+        sameSite: "None", // Important for cross-site cookies
+        domain: "your-frontend-domain.com", // Replace with your actual domain
+      },
+    },
+  },
+  pages: {
+    signIn: "/auth/signin", // Custom sign-in page
+  },
+});
+```
+
+### Key Points:
+- **`sameSite: "None"`**: This is essential for cross-domain cookies. It allows the cookie to be sent to another domain.
+- **`domain: "your-frontend-domain.com"`**: Set this to your **frontend domain** so the cookie is shared across different subdomains or between your API and frontend. Make sure the cookie domain matches your frontend domain.
+- **`secure: process.env.NODE_ENV === "production"`**: Make sure you’re using **HTTPS** in production, as cookies with `sameSite: "None"` require the cookie to be sent over **secure connections**.
+
+---
+
+### Step 2: Using React Context for Session Management
+
+Once the session is managed via **NextAuth** and stored in a cookie (with cross-domain support), you can use **React Context** to store and share the session state across your components.
+
+In your app, you can create a context to handle the session globally.
+
+#### 1. Create a `SessionContext.js` for React Context
+
+```js
+// context/SessionContext.js
+import { createContext, useContext, useState, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
+
+const SessionContext = createContext();
+
+export const SessionProvider = ({ children }) => {
+  const { data: session, status } = useSession();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      setIsAuthenticated(true);
+    } else {
+      setIsAuthenticated(false);
+    }
+  }, [session]);
+
+  return (
+    <SessionContext.Provider value={{ isAuthenticated, session, signIn, signOut }}>
+      {children}
+    </SessionContext.Provider>
+  );
+};
+
+export const useSessionContext = () => useContext(SessionContext);
+```
+
+Here:
+- **`useSession`**: This is provided by **NextAuth** to manage session state.
+- **`isAuthenticated`**: Tracks whether the user is logged in or not.
+- **`session`**: Contains the session information (like user details).
+- **`signIn` and `signOut`**: Use NextAuth's built-in functions to manage user login and logout.
+
+#### 2. Wrap Your App with `SessionProvider`
+
+You need to wrap your Next.js app with the `SessionProvider` to make the session context available globally.
+
+```js
+// pages/_app.js
+import { SessionProvider } from "../context/SessionContext";
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <SessionProvider>
+      <Component {...pageProps} />
+    </SessionProvider>
+  );
+}
+
+export default MyApp;
+```
+
+#### 3. Access Session in Any Component
+
+Now you can access the session state anywhere in your app using the `useSessionContext` hook:
+
+```js
+// components/Dashboard.js
+import { useSessionContext } from "../context/SessionContext";
+import { useRouter } from "next/router";
+
+const Dashboard = () => {
+  const { isAuthenticated, session } = useSessionContext();
+  const router = useRouter();
+
+  if (!isAuthenticated) {
+    router.push("/auth/signin"); // Redirect to login if not authenticated
+  }
+
+  return (
+    <div>
+      <h1>Welcome {session?.user?.name}</h1>
+      {/* Display other content */}
+    </div>
+  );
+};
+
+export default Dashboard;
+```
+
+---
+
+### Step 3: Handling API Requests and Cross-Domain Authentication
+
+Since you're working with an **API on another domain**, make sure that:
+
+1. **The frontend sends credentials with requests**: When making API requests (such as login requests), ensure that **credentials** are sent along with the request so the server can set the session cookies correctly.
+
+```js
+// Example API request with credentials (like login form)
+const loginUser = async (email, password) => {
+  const response = await fetch("https://api.yourdomain.com/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+    credentials: "include", // Important for cross-domain cookies
+  });
+
+  const data = await response.json();
+  return data;
+};
+```
+
+2. **API Server sets cookies correctly**: On the server, make sure the cookies are set with **`SameSite=None`** and **`Secure=true`** (especially if you're using HTTPS in production).
+
+```js
+// On your API server
+app.post("/login", (req, res) => {
+  res.cookie("authStatus", "authenticated", {
+    httpOnly: true,
+    secure: true, // Use secure cookies over HTTPS
+    sameSite: "None", // Allow cross-domain cookies
+    domain: ".your-frontend-domain.com", // Match frontend domain
+  });
+  res.json({ message: "Logged in" });
+});
+```
+
+---
+
+### Summary
+
+In your setup, where the frontend is hosted on a separate domain from the API, and you want to use **NextAuth** for session management, here’s the overall flow:
+
+1. **Set up NextAuth** with JWT-based session management and configure cross-domain cookies using `sameSite: "None"` and `secure: true`.
+2. **Use React Context** to manage and share session data globally in your app.
+3. **Ensure that the frontend sends cookies** along with API requests by setting `credentials: "include"`.
+4. **API sets cookies with appropriate domain and cross-site cookie settings**.
+
+This ensures that you can manage user sessions effectively, even with a separate frontend and API domain.
+
+
+By combining React Context with cookies, you should be able to persist user data across different routes in your Next.js application!

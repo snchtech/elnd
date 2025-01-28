@@ -1,0 +1,181 @@
+In Next.js, if you’re trying to maintain user session data across routes and you're finding that using React Context alone doesn't persist the data between page navigation, it's because React Context is only available in memory during the current session, and when you use `router.push()`, the component state gets reset. To solve this, you'll need to use something like **cookies** or **localStorage** to persist session data and make it available across page navigations.
+
+Here’s a step-by-step guide to implement session persistence in your Next.js app using cookies, along with React Context for managing global state:
+
+### Step 1: Install Cookies Library
+First, install a cookie handling library like `js-cookie`, which will allow you to easily get and set cookies on the client side.
+
+```bash
+npm install js-cookie
+```
+
+### Step 2: Create a Context for User Data
+
+Create a `UserContext` to manage and provide global user session state across your app.
+
+```js
+// context/UserContext.js
+import { createContext, useContext, useState, useEffect } from 'react';
+import Cookies from 'js-cookie';
+
+const UserContext = createContext();
+
+export const UserProvider = ({ children }) => {
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    // Try to load user data from cookies on page load
+    const storedUserData = Cookies.get('userData');
+    if (storedUserData) {
+      setUserData(JSON.parse(storedUserData));
+    }
+  }, []);
+
+  const saveUserData = (data) => {
+    // Save user data to cookie and set state
+    Cookies.set('userData', JSON.stringify(data), { expires: 7 }); // Expires in 7 days
+    setUserData(data);
+  };
+
+  const clearUserData = () => {
+    // Clear user data from cookie and state
+    Cookies.remove('userData');
+    setUserData(null);
+  };
+
+  return (
+    <UserContext.Provider value={{ userData, saveUserData, clearUserData }}>
+      {children}
+    </UserContext.Provider>
+  );
+};
+
+export const useUser = () => useContext(UserContext);
+```
+
+### Step 3: Wrap Your App with the UserProvider
+
+Next, wrap your Next.js app in the `UserProvider` to make the context accessible to all components.
+
+```js
+// pages/_app.js
+import { UserProvider } from '../context/UserContext';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <UserProvider>
+      <Component {...pageProps} />
+    </UserProvider>
+  );
+}
+
+export default MyApp;
+```
+
+### Step 4: Using User Context in Components
+
+Now, you can use the `useUser` hook to access the session data and update it.
+
+For example, in your login component, you might do something like this to set the user data when they log in:
+
+```js
+// components/Login.js
+import { useUser } from '../context/UserContext';
+import { useRouter } from 'next/router';
+
+const Login = () => {
+  const { saveUserData } = useUser();
+  const router = useRouter();
+
+  const handleLogin = () => {
+    const user = { name: 'John Doe', email: 'john@example.com' }; // Replace with real user data
+    saveUserData(user);
+    router.push('/editor');
+  };
+
+  return (
+    <button onClick={handleLogin}>Login</button>
+  );
+};
+
+export default Login;
+```
+
+Then, in the `/editor` page (or any other page), you can access the user data like this:
+
+```js
+// pages/editor.js
+import { useUser } from '../context/UserContext';
+
+const Editor = () => {
+  const { userData } = useUser();
+
+  if (!userData) {
+    return <div>Please log in to access the editor.</div>;
+  }
+
+  return (
+    <div>
+      <h1>Welcome to the Editor, {userData.name}!</h1>
+      {/* Your editor content */}
+    </div>
+  );
+};
+
+export default Editor;
+```
+
+### Step 5: Clear User Data (Optional)
+
+If you want to implement a logout functionality, you can clear the session data by calling the `clearUserData` function from the context.
+
+```js
+// components/Logout.js
+import { useUser } from '../context/UserContext';
+import { useRouter } from 'next/router';
+
+const Logout = () => {
+  const { clearUserData } = useUser();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearUserData();
+    router.push('/login'); // Redirect to login page or home
+  };
+
+  return <button onClick={handleLogout}>Logout</button>;
+};
+
+export default Logout;
+```
+
+### Why Cookies?
+
+Cookies are a good solution because:
+- They persist across page reloads and browser sessions.
+- You can set an expiration date on them (e.g., a session cookie that expires when the browser is closed or one that lasts for several days).
+- They can be accessed from both the client and server-side in Next.js, so you could potentially use server-side logic to check for session validity and render pages accordingly.
+
+### Step 6: Optional: Server-Side Session Handling (for SSR)
+
+If you want to handle user sessions on the server side (for example, to verify sessions or user authentication before rendering pages), you can use the `getServerSideProps` or `getInitialProps` methods to access cookies on the server side.
+
+Here’s an example of accessing the cookie server-side:
+
+```js
+// pages/editor.js
+export async function getServerSideProps(context) {
+  const { req } = context;
+  const cookie = req.cookies.userData || null; // Check cookie in server-side request
+
+  if (!cookie) {
+    return { redirect: { destination: '/login', permanent: false } };
+  }
+
+  // Process userData here if needed
+
+  return { props: {} };
+}
+```
+
+By combining React Context with cookies, you should be able to persist user data across different routes in your Next.js application!

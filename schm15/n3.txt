@@ -1,0 +1,216 @@
+Цілком слушне зауваження! Повторення великого блоку коду на кожній сторінці — це неефективно. Це можна оптимізувати, винісши логіку перевірки доступу в окрему функцію і підключаючи її на кожній сторінці.
+
+---
+
+### **1. Винесення логіки у функцію**
+
+Створимо окрему функцію, яка обробляє перевірку доступу та повертає потрібні дані для `getServerSideProps`. Наприклад:
+
+```javascript
+// utils/auth.js
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY = "your_secret_key";
+
+export const authenticate = async (req) => {
+  const { accessToken } = req.cookies || {};
+
+  if (!accessToken) {
+    return { isAuthenticated: false };
+  }
+
+  try {
+    const userData = jwt.verify(accessToken, SECRET_KEY);
+    return { isAuthenticated: true, userData };
+  } catch (err) {
+    console.error("Authentication error:", err);
+    return { isAuthenticated: false };
+  }
+};
+```
+
+---
+
+### **2. Використання `authenticate` у `getServerSideProps`**
+
+На сторінках ти тепер можеш викликати цю функцію і легко обробляти перевірку доступу:
+
+```javascript
+// pages/index.js
+import { authenticate } from "@/utils/auth";
+
+export async function getServerSideProps(context) {
+  const { req } = context;
+  const auth = await authenticate(req);
+
+  if (!auth.isAuthenticated) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  return {
+    props: { userData: auth.userData },
+  };
+}
+
+export default function HomePage({ userData }) {
+  return (
+    <div>
+      <h1>Welcome, {userData.username}!</h1>
+    </div>
+  );
+}
+```
+
+---
+
+### **3. Ще більш зручний підхід із HOC для сторінок**
+
+Можна створити **вищий порядок функцію (HOC)** для спрощення логіки, щоб ти міг просто "обгортати" сторінки, які потребують аутентифікації.
+
+```javascript
+// utils/withAuth.js
+import { authenticate } from "@/utils/auth";
+
+export function withAuth(getServerSidePropsFunc) {
+  return async (context) => {
+    const { req } = context;
+    const auth = await authenticate(req);
+
+    if (!auth.isAuthenticated) {
+      return {
+        redirect: {
+          destination: "/login",
+          permanent: false,
+        },
+      };
+    }
+
+    // Якщо потрібно, виконуємо додатковий `getServerSideProps`
+    if (getServerSidePropsFunc) {
+      const pageProps = await getServerSidePropsFunc(context);
+      return {
+        ...pageProps,
+        props: {
+          ...pageProps.props,
+          userData: auth.userData,
+        },
+      };
+    }
+
+    return {
+      props: { userData: auth.userData },
+    };
+  };
+}
+```
+
+---
+
+### **4. Використання `withAuth` для сторінок**
+
+Тепер на кожній сторінці можна використовувати цей HOC, і код стає значно простішим:
+
+```javascript
+// pages/index.js
+import { withAuth } from "@/utils/withAuth";
+
+export const getServerSideProps = withAuth();
+
+export default function HomePage({ userData }) {
+  return (
+    <div>
+      <h1>Welcome, {userData.username}!</h1>
+    </div>
+  );
+}
+```
+
+Або, якщо ти хочеш додати додаткову логіку в `getServerSideProps`:
+
+```javascript
+// pages/profile.js
+import { withAuth } from "@/utils/withAuth";
+
+const getServerSidePropsFunc = async (context) => {
+  // Додаткова логіка
+  const extraData = { role: "admin" }; // Наприклад
+  return {
+    props: { extraData },
+  };
+};
+
+export const getServerSideProps = withAuth(getServerSidePropsFunc);
+
+export default function ProfilePage({ userData, extraData }) {
+  return (
+    <div>
+      <h1>Profile of {userData.username}</h1>
+      <p>Role: {extraData.role}</p>
+    </div>
+  );
+}
+```
+
+---
+
+### **5. Чи варто використовувати HOC?**
+
+**Переваги:**
+1. **Мінімізація повторень:** Логіка аутентифікації знаходиться в одному місці.
+2. **Гнучкість:** Можна легко додавати логіку для окремих сторінок через додаткові функції.
+3. **Зручність:** Код сторінок стає чистішим і простішим для читання.
+
+**Коли це підходить:**
+- Якщо більшість сторінок у проєкті використовують подібну логіку перевірки доступу.
+- Якщо ти хочеш централізувати обробку аутентифікації.
+
+**Недоліки:**
+- Може бути трішки складніше для налагодження, особливо якщо потрібно зрозуміти, як HOC працює.
+
+---
+
+### **Альтернатива: Middleware**
+
+Якщо багато сторінок потребують однакової перевірки доступу, ти можеш використати `middleware.js` для виконання цієї логіки ще **до завантаження сторінки**.
+
+```javascript
+// middleware.js
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY = "your_secret_key";
+
+export function middleware(req) {
+  const accessToken = req.cookies.accessToken;
+
+  if (!accessToken) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  try {
+    jwt.verify(accessToken, SECRET_KEY);
+    return NextResponse.next(); // Дозволяємо доступ
+  } catch (err) {
+    console.error("Invalid token:", err);
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+}
+
+export const config = {
+  matcher: ["/", "/profile", "/dashboard"], // Захищені сторінки
+};
+```
+
+---
+
+### **Що краще: HOC чи Middleware?**
+
+- **HOC:** Якщо потрібно передати додаткові дані на сторінку через `getServerSideProps`, краще використовувати HOC.
+- **Middleware:** Якщо перевірка доступу єдина і проста, Middleware забезпечить її виконання без повторень.
+
+Іноді найкраще поєднати обидва підходи: Middleware для базової перевірки, а HOC для передавання `userData` та додаткових даних.

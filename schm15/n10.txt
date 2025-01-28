@@ -1,0 +1,102 @@
+Так, реалізувати подібний функціонал можна за допомогою **Konva.js**, **konva-react** та інструментів для генерації PDF у React (наприклад, **jspdf** або **html-to-canvas**). Ось кроки, як це зробити:
+
+---
+
+### 1. **Малювання схеми в області екрану**
+   Використовуйте `Stage` та `Layer` з **konva-react** для створення області для малювання. Це дозволить інтерактивно працювати з векторною графікою. Наприклад:
+
+```jsx
+import { Stage, Layer, Rect, Text } from "react-konva";
+
+const DrawingArea = () => {
+  return (
+    <Stage width={window.innerWidth} height={window.innerHeight}>
+      <Layer>
+        <Rect
+          x={50}
+          y={50}
+          width={200}
+          height={100}
+          fill="red"
+          draggable
+        />
+        <Text text="Drag me!" fontSize={15} x={60} y={70} />
+      </Layer>
+    </Stage>
+  );
+};
+
+export default DrawingArea;
+```
+
+---
+
+### 2. **Масштабування схеми до розміру A3 (96dpi)**
+Щоб перенести схему у формат A3 (або інший фіксований розмір) з відповідним масштабуванням:
+- A3 у пікселях при 96dpi: `3508 x 4961` (висота × ширина).
+- Використовуйте методи `Stage` для масштабування.
+
+Приклад реалізації:
+```jsx
+const exportToPDF = (stageRef) => {
+  const scaleFactor = 3508 / stageRef.current.width();
+
+  // Масштабуємо сцену
+  const scaledDataURL = stageRef.current.toDataURL({
+    pixelRatio: scaleFactor, // Масштаб пропорційно A3
+  });
+
+  // Генеруємо PDF
+  const pdf = new jsPDF("portrait", "px", [4961, 3508]);
+  pdf.addImage(scaledDataURL, "PNG", 0, 0, 3508, 4961);
+  pdf.save("drawing.pdf");
+};
+```
+
+> **Пояснення:**
+> - `stageRef.current.toDataURL()` дозволяє отримати графіку в форматі PNG із заданим масштабом.
+> - `jsPDF` розміщує цю графіку у PDF-аркуші.
+
+---
+
+### 3. **Додавання рамки до схеми**
+Перед генерацією PDF можна додати рамку як окремий елемент Konva. Наприклад:
+
+```jsx
+<Rect
+  x={0}
+  y={0}
+  width={stageWidth}
+  height={stageHeight}
+  stroke="black"
+  strokeWidth={2}
+/>
+```
+
+Або можна програмно додати рамку вже у PDF:
+```javascript
+pdf.setLineWidth(2);
+pdf.setDrawColor(0, 0, 0);
+pdf.rect(0, 0, 3508, 4961); // Рамка на весь аркуш A3
+```
+
+---
+
+### 4. **Динамічна адаптація для друку**
+Щоб зробити розмір сцени динамічним для різних екранів або форматів, налаштуйте масштабування сцени відносно її розміру:
+
+```javascript
+const scaleForPrint = (targetWidth, stageWidth) => {
+  return targetWidth / stageWidth;
+};
+```
+
+---
+
+### Ключові моменти:
+1. **Сцена Konva масштабована.** Ви можете зберегти її пропорції за допомогою `scaleX` та `scaleY`.
+2. **Розмір A3 у пікселях (96dpi)**: `3508 x 4961`.
+3. **PDF із рамкою.** Додайте графіку у PDF як зображення і доповніть рамкою.
+4. **Масштабування векторної графіки.** Konva.js зберігає високу якість зображення при масштабуванні, адже використовує векторний рендеринг.
+
+Якщо вам потрібно більше деталей або допомога з кодом, дайте знати!

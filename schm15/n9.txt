@@ -1,0 +1,198 @@
+Ця проблема виникає через те, що при **ручному введенні URL** в адресний рядок браузера або при оновленні сторінки контекст (`AuthContext`) у React **скидається**. Це пов’язано з тим, що React працює на клієнтській стороні, а при новому запиті (ручний перехід або оновлення сторінки) Next.js спочатку рендерить сторінку на сервері, а потім "гідратує" React на клієнті.
+
+Коли відбувається перезавантаження сторінки:
+1. **SSR:** Next.js виконує `getServerSideProps` на сервері.
+2. **React:** Коли сторінка рендериться на клієнті, контекст потрібно заново ініціалізувати, але без належної логіки це може не відбутися.
+
+---
+
+### **Чому контекст не оновлюється?**
+1. **Контекст скидається при перезавантаженні:**
+   - React створює новий стан контексту (`AuthContext`) при кожному завантаженні або рендері програми.
+   - Якщо контекст не ініціалізований правильно з сервера або токенів у `cookies`, то в ньому немає даних про користувача.
+
+2. **Відсутня логіка повторної ініціалізації:**
+   - При ручному переході або оновленні браузер робить повний запит до сервера, і клієнтська частина React втрачає всі дані, які були збережені у пам'яті.
+
+---
+
+### **Як це виправити?**
+
+Щоб зберігати стан контексту після перезавантаження або ручного введення URL, потрібно:
+
+1. **Ініціалізувати контекст на сервері через `getServerSideProps`:**
+   - Передавати `userData` у контекст під час завантаження сторінки.
+   - Це гарантує, що при кожному завантаженні сторінки дані користувача передаються з сервера.
+
+2. **Ініціалізувати контекст із cookies на клієнті (fallback):**
+   - Якщо дані не передані з сервера (наприклад, через кешування сторінки або інші причини), контекст може ініціалізуватися з cookies.
+
+---
+
+### **Виправлення коду**
+
+#### **1. Передавання даних із `getServerSideProps` у контекст**
+Оновимо `_app.js`, щоб контекст отримував дані від `getServerSideProps`:
+
+```javascript
+// pages/_app.js
+import { AuthProvider } from "@/context/AuthContext";
+
+export default function MyApp({ Component, pageProps }) {
+  return (
+    <AuthProvider initialUserData={pageProps.userData}>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+```
+
+---
+
+#### **2. Ініціалізація контексту у `AuthProvider`**
+
+Модифікуємо `AuthProvider`, щоб він підтримував `initialUserData` із серверної сторони, а також fallback-зчитування із cookies:
+
+```javascript
+// context/AuthContext.js
+import { createContext, useContext, useEffect, useState } from "react";
+import jwt from "jsonwebtoken";
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children, initialUserData }) => {
+  const [user, setUser] = useState(initialUserData || null);
+
+  // Зчитування токена з cookies при клієнтському рендері
+  useEffect(() => {
+    if (!user) {
+      const cookies = document.cookie.split("; ").reduce((acc, cookie) => {
+        const [key, value] = cookie.split("=");
+        acc[key] = value;
+        return acc;
+      }, {});
+
+      const token = cookies.accessToken;
+      if (token) {
+        try {
+          const decoded = jwt.decode(token);
+          setUser(decoded);
+        } catch (err) {
+          console.error("Failed to decode token:", err);
+        }
+      }
+    }
+  }, [user]);
+
+  return (
+    <AuthContext.Provider value={{ user, setUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+#### **3. Передача `userData` із `getServerSideProps`**
+
+Оновимо сторінки так, щоб вони передавали `userData` через `getServerSideProps`:
+
+```javascript
+// pages/index.js
+import jwt from "jsonwebtoken";
+import { useAuth } from "@/context/AuthContext";
+
+const SECRET_KEY = "your_secret_key";
+
+export async function getServerSideProps(context) {
+  const { accessToken } = context.req.cookies || {};
+
+  if (!accessToken) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  try {
+    const userData = jwt.verify(accessToken, SECRET_KEY);
+
+    return {
+      props: { userData }, // Передаємо дані користувача
+    };
+  } catch (err) {
+    console.error("Invalid token:", err);
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+}
+
+export default function HomePage() {
+  const { user } = useAuth();
+
+  return (
+    <div>
+      <h1>Welcome, {user?.username || "Guest"}!</h1>
+    </div>
+  );
+}
+```
+
+---
+
+#### **4. Альтернатива: Middleware**
+
+Якщо потрібно автоматизувати перевірку токенів для всіх сторінок, можна використовувати `middleware` для централізованої перевірки доступу, а дані користувача підтягувати вже у `AuthProvider`.
+
+```javascript
+// middleware.js
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY = "your_secret_key";
+
+export function middleware(req) {
+  const accessToken = req.cookies.accessToken;
+
+  if (!accessToken) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  try {
+    jwt.verify(accessToken, SECRET_KEY);
+    return NextResponse.next(); // Токен валідний
+  } catch (err) {
+    console.error("Invalid token:", err);
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+}
+
+export const config = {
+  matcher: ["/", "/profile", "/dashboard"], // Захищені сторінки
+};
+```
+
+---
+
+### **Пояснення:**
+1. **Коли виконується `router.push`**:
+   - Контекст React (і токени в пам'яті) залишаються валідними, оскільки не виконується повне перезавантаження сторінки.
+
+2. **Коли виконується ручний перехід або оновлення сторінки**:
+   - Next.js виконує серверний рендеринг сторінки (через `getServerSideProps`).
+   - Якщо контекст не ініціалізується коректно (наприклад, з токенів у cookies), дані не передаються.
+
+3. **Рішення**:
+   - Передавати `userData` через `getServerSideProps`.
+   - Використовувати `AuthProvider`, щоб fallback-логіка зчитувала токени із `cookies`.
+
+Цей підхід забезпечує стабільний контекст при будь-яких переходах або оновленнях сторінок.

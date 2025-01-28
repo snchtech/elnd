@@ -1,0 +1,215 @@
+Ось як можна реалізувати оновлення контексту користувача при переходах між сторінками та зберігати його стан, навіть якщо React перезавантажує сторінку:
+
+---
+
+### **1. Створення `AuthContext` і `AuthProvider`**
+
+```javascript
+// context/AuthContext.js
+import { createContext, useContext, useEffect, useState } from "react";
+import jwt from "jsonwebtoken";
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children, initialUserData }) => {
+  const [user, setUser] = useState(initialUserData || null);
+
+  // Використовується для ініціалізації контексту при першому рендері
+  useEffect(() => {
+    if (!user) {
+      const token = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("accessToken="))
+        ?.split("=")[1];
+
+      if (token) {
+        try {
+          const decoded = jwt.decode(token);
+          setUser(decoded);
+        } catch (err) {
+          console.error("Failed to decode token:", err);
+        }
+      }
+    }
+  }, [user]);
+
+  return (
+    <AuthContext.Provider value={{ user, setUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Хук для зручного доступу до контексту
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+### **2. Ініціалізація контексту через `getServerSideProps`**
+
+На серверній стороні зчитуємо токен з cookies, декодуємо його та передаємо `userData` на сторінку. Ці дані передаються в `AuthProvider` як `initialUserData`.
+
+```javascript
+// pages/_app.js
+import { AuthProvider } from "@/context/AuthContext";
+
+export default function App({ Component, pageProps }) {
+  return (
+    <AuthProvider initialUserData={pageProps.userData}>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+```
+
+---
+
+### **3. Зчитування даних із токена в `getServerSideProps`**
+
+На кожній сторінці, яка потребує контексту користувача, можна зчитувати токен через `getServerSideProps`.
+
+```javascript
+// pages/index.js
+import jwt from "jsonwebtoken";
+import { useAuth } from "@/context/AuthContext";
+
+const SECRET_KEY = "your_secret_key"; // Має збігатися з ключем для токена
+
+export async function getServerSideProps({ req }) {
+  const { accessToken } = req.cookies || {};
+
+  if (!accessToken) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  try {
+    // Декодуємо токен на сервері
+    const userData = jwt.verify(accessToken, SECRET_KEY);
+
+    return {
+      props: { userData }, // Передаємо в компонент
+    };
+  } catch (err) {
+    console.error("Invalid token:", err);
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+}
+
+export default function HomePage() {
+  const { user } = useAuth(); // Доступ до контексту
+
+  return (
+    <div>
+      <h1>Welcome, {user?.username || "Guest"}!</h1>
+    </div>
+  );
+}
+```
+
+---
+
+### **4. Робота з контекстом при переходах між сторінками**
+
+Коли користувач переходить між сторінками, `AuthProvider` автоматично оновлює контекст, оскільки:
+1. `getServerSideProps` викликається для кожної нової сторінки.
+2. Дані передаються в `AuthProvider` через `initialUserData`.
+
+Приклад іншої сторінки:
+
+```javascript
+// pages/profile.js
+import { useAuth } from "@/context/AuthContext";
+
+export async function getServerSideProps({ req }) {
+  const { accessToken } = req.cookies || {};
+  const SECRET_KEY = "your_secret_key";
+
+  if (!accessToken) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  try {
+    const userData = jwt.verify(accessToken, SECRET_KEY);
+    return {
+      props: { userData },
+    };
+  } catch (err) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+}
+
+export default function ProfilePage() {
+  const { user } = useAuth();
+
+  return (
+    <div>
+      <h1>Profile</h1>
+      <p>Username: {user?.username}</p>
+      <p>Role: {user?.role}</p>
+    </div>
+  );
+}
+```
+
+---
+
+### **5. Оновлення контексту вручну**
+
+Якщо токен оновлюється (наприклад, після логіну), можна оновити контекст вручну через функцію `setUser`.
+
+```javascript
+// Наприклад, після логіну
+import { useAuth } from "@/context/AuthContext";
+
+const LoginPage = () => {
+  const { setUser } = useAuth();
+
+  const handleLogin = async () => {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (res.ok) {
+      const token = await res.text();
+      const decoded = jwt.decode(token);
+
+      // Оновлюємо контекст користувача
+      setUser(decoded);
+    }
+  };
+
+  return <button onClick={handleLogin}>Login</button>;
+};
+```
+
+---
+
+### **Резюме**
+
+- `getServerSideProps` забезпечує, що токен декодується на сервері для кожної сторінки.
+- `AuthProvider` зберігає `userData` у React-контексті та дозволяє використовувати його на всіх сторінках.
+- При переходах між сторінками контекст автоматично оновлюється, оскільки `userData` передається через `pageProps`.
+
+Ця структура дозволяє підтримувати безпеку (через серверний рендеринг і токени в cookies) та зручність використання (через React Context).

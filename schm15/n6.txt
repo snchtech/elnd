@@ -1,0 +1,215 @@
+Ось як можна реалізувати оновлення `accessToken` за допомогою API Next.js і забезпечити безперебійність запиту навіть якщо токен сплив:
+
+---
+
+### **1. Структура:**
+- **API `refresh.js`:** Оновлює `accessToken` через `refreshToken`.
+- **Клієнтська функція для запиту даних:** Перевіряє валідність `accessToken`, оновлює його, якщо це необхідно, і потім виконує запит.
+- **Прямий запит до стороннього API або через Next.js як проксі?**
+  - **Використання Next.js як проксі:** Корисно для централізації логіки, наприклад:
+    - Додавання заголовків (headers).
+    - Логування або обробки помилок.
+    - Захист ключів доступу (якщо вони є).
+  - **Прямий запит:** Можна використовувати, якщо серверна логіка проста і немає додаткових умов.
+
+Для безпечності та розширюваності рекомендую використовувати Next.js як проксі.
+
+---
+
+### **2. API для оновлення токенів (`refresh.js`)**
+
+```javascript
+// pages/api/auth/refresh.js
+import cookie from "cookie";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: "Refresh token not provided" });
+  }
+
+  try {
+    // Звертаємось до стороннього API для оновлення токенів
+    const response = await fetch("https://your-api-server.com/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      return res.status(401).json({ error: "Failed to refresh tokens" });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = await response.json();
+
+    // Оновлюємо cookies з новими токенами
+    res.setHeader("Set-Cookie", [
+      cookie.serialize("accessToken", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60, // 1 година
+      }),
+      cookie.serialize("refreshToken", newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, // 7 днів
+      }),
+    ]);
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Error refreshing tokens:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+```
+
+---
+
+### **3. Функція для отримання даних із сервера з оновленням токена**
+
+Ця функція:
+1. Виконує запит до API зі збереженим `accessToken`.
+2. Якщо отримує відповідь із помилкою 401 (невалідний токен), викликає `refresh.js` для поновлення токенів.
+3. Після успішного поновлення повторює запит.
+
+```javascript
+// utils/api.js
+export const fetchWithRefresh = async (url, options = {}) => {
+  try {
+    // Виконуємо основний запит
+    const res = await fetch(url, options);
+
+    // Якщо токен валідний, повертаємо відповідь
+    if (res.ok) {
+      return await res.json();
+    }
+
+    // Якщо отримали 401 (невалідний токен)
+    if (res.status === 401) {
+      console.warn("Access token expired, refreshing...");
+
+      // Виконуємо запит на поновлення токена
+      const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+
+      if (!refreshRes.ok) {
+        throw new Error("Failed to refresh tokens");
+      }
+
+      // Після успішного поновлення повторюємо основний запит
+      const retryRes = await fetch(url, options);
+
+      if (!retryRes.ok) {
+        throw new Error("Failed to fetch data after token refresh");
+      }
+
+      return await retryRes.json();
+    }
+
+    throw new Error(`Failed to fetch: ${res.statusText}`);
+  } catch (err) {
+    console.error("Error fetching data:", err);
+    throw err;
+  }
+};
+```
+
+---
+
+### **4. Використання функції `fetchWithRefresh`**
+
+Приклад отримання `department` із стороннього API:
+
+```javascript
+// pages/department.js
+import { fetchWithRefresh } from "@/utils/api";
+
+export default function DepartmentPage({ departments }) {
+  return (
+    <div>
+      <h1>Departments</h1>
+      <ul>
+        {departments.map((dept) => (
+          <li key={dept.id}>{dept.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export async function getServerSideProps(context) {
+  try {
+    const departments = await fetchWithRefresh(
+      "https://your-api-server.com/departments",
+      {
+        headers: {
+          Cookie: context.req.headers.cookie || "", // Передаємо cookies
+        },
+      }
+    );
+
+    return {
+      props: { departments },
+    };
+  } catch (err) {
+    console.error("Failed to fetch departments:", err);
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+}
+```
+
+---
+
+### **5. Прямий запит vs API Next.js як проксі**
+
+#### **Прямий запит до стороннього API:**
+- **Плюси:**
+  - Менший оверхед.
+  - Швидкість: запит іде напряму до стороннього сервера.
+- **Мінуси:**
+  - Клієнт повинен включати всі необхідні заголовки (`Authorization`, cookies).
+  - Потенційно складніше керувати помилками або специфічними вимогами.
+
+#### **API Next.js як проксі:**
+- **Плюси:**
+  - Централізована логіка: усі клієнтські запити проходять через проксі.
+  - Можна легко додавати стандартні заголовки, токени та інші параметри.
+  - Захищає секретні ключі (якщо вони є).
+  - Простий обробник помилок (логування, стандартизація відповідей).
+- **Мінуси:**
+  - Додатковий крок обробки (легке збільшення часу відповіді).
+
+---
+
+#### **Рекомендація:**
+- Використовуйте **API Next.js як проксі**, якщо:
+  - Є багато сторінок із подібною логікою.
+  - Потрібно захистити дані (наприклад, API ключі).
+  - Хочете централізовано обробляти помилки.
+
+- Використовуйте **прямий запит**, якщо:
+  - Запити прості й не вимагають додаткових заголовків або обробки.
+  - Важлива мінімізація часу відповіді.
+
+---
+
+### **6. Рекомендація щодо оптимізації:**
+Для великих проєктів поєднуйте обидва підходи:
+- **Middleware:** Автоматично перевіряє токени перед запитом.
+- **Next.js API:** Служить проксі для централізованої обробки складніших запитів.
+- **Клієнтські функції:** Використовують `fetchWithRefresh` для забезпечення seamless experience навіть із протермінованими токенами.

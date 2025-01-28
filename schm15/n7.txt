@@ -1,0 +1,217 @@
+Ось оновлена функція `fetchWithRefresh`, яка додає перевірку часу закінчення `accessToken` перед виконанням запиту. Ми будемо зчитувати час закінчення токена (`accessTokenExpIn`) з cookies і перевіряти його перед надсиланням запиту.
+
+---
+
+### **Оновлена функція `fetchWithRefresh`**
+
+```javascript
+// utils/api.js
+export const fetchWithRefresh = async (url, options = {}) => {
+  try {
+    // Зчитуємо cookies
+    const cookies = document.cookie.split("; ").reduce((acc, cookie) => {
+      const [key, value] = cookie.split("=");
+      acc[key] = value;
+      return acc;
+    }, {});
+
+    // Перевіряємо час закінчення токена
+    const accessTokenExpIn = cookies.accessTokenExpIn
+      ? parseInt(cookies.accessTokenExpIn, 10)
+      : null;
+
+    const currentTime = Math.floor(Date.now() / 1000); // Поточний час у секундах
+
+    if (accessTokenExpIn && currentTime >= accessTokenExpIn) {
+      console.warn("Access token expired, refreshing...");
+
+      // Виконуємо запит на поновлення токена
+      const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+
+      if (!refreshRes.ok) {
+        throw new Error("Failed to refresh tokens");
+      }
+    }
+
+    // Після поновлення (або якщо токен ще дійсний), виконуємо основний запит
+    const res = await fetch(url, options);
+
+    // Якщо основний запит успішний, повертаємо результат
+    if (res.ok) {
+      return await res.json();
+    }
+
+    // Якщо основний запит повертає 401, пробуємо повторити після поновлення
+    if (res.status === 401) {
+      console.warn("Access token expired during request, refreshing...");
+
+      // Виконуємо запит на поновлення токена
+      const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+
+      if (!refreshRes.ok) {
+        throw new Error("Failed to refresh tokens after 401");
+      }
+
+      // Повторюємо основний запит
+      const retryRes = await fetch(url, options);
+
+      if (!retryRes.ok) {
+        throw new Error("Failed to fetch data after token refresh");
+      }
+
+      return await retryRes.json();
+    }
+
+    throw new Error(`Failed to fetch: ${res.statusText}`);
+  } catch (err) {
+    console.error("Error fetching data:", err);
+    throw err;
+  }
+};
+```
+
+---
+
+### **Як це працює:**
+1. **Зчитування `accessTokenExpIn`:**
+   - Час закінчення токена (`accessTokenExpIn`) зберігається в `cookies` у форматі UNIX timestamp.
+   - Ми зчитуємо цей час і порівнюємо його з поточним часом.
+
+2. **Перевірка перед запитом:**
+   - Якщо поточний час (`currentTime`) перевищує `accessTokenExpIn`, викликаємо `/api/auth/refresh` для оновлення токенів.
+
+3. **Виконання запиту:**
+   - Якщо токен ще дійсний, виконується запит до API.
+   - Якщо API повертає помилку 401, спроба поновлення токена здійснюється ще раз (як додатковий захист).
+
+4. **Оновлення після 401:**
+   - У випадку 401 помилки навіть після попередньої перевірки, ми викликаємо `/api/auth/refresh` і повторюємо запит.
+
+---
+
+### **Робота із `accessTokenExpIn` на сервері**
+
+Для правильного функціонування потрібно, щоб при кожному оновленні токена на сервері час його закінчення також зберігався у cookie.
+
+#### Приклад у `/api/auth/refresh.js`:
+
+```javascript
+// pages/api/auth/refresh.js
+import cookie from "cookie";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: "Refresh token not provided" });
+  }
+
+  try {
+    const response = await fetch("https://your-api-server.com/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      return res.status(401).json({ error: "Failed to refresh tokens" });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken, accessTokenExpIn } =
+      await response.json();
+
+    // Встановлюємо cookies
+    res.setHeader("Set-Cookie", [
+      cookie.serialize("accessToken", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60, // 1 година
+      }),
+      cookie.serialize("refreshToken", newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, // 7 днів
+      }),
+      cookie.serialize("accessTokenExpIn", accessTokenExpIn, {
+        httpOnly: false, // Доступно клієнту для перевірки
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60, // 1 година
+      }),
+    ]);
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Error refreshing tokens:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+```
+
+---
+
+### **Використання функції `fetchWithRefresh`**
+
+Приклад отримання `department` із стороннього API:
+
+```javascript
+// pages/department.js
+import { fetchWithRefresh } from "@/utils/api";
+
+export default function DepartmentPage({ departments }) {
+  return (
+    <div>
+      <h1>Departments</h1>
+      <ul>
+        {departments.map((dept) => (
+          <li key={dept.id}>{dept.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export async function getServerSideProps(context) {
+  try {
+    const departments = await fetchWithRefresh(
+      "https://your-api-server.com/departments",
+      {
+        headers: {
+          Cookie: context.req.headers.cookie || "", // Передаємо cookies
+        },
+      }
+    );
+
+    return {
+      props: { departments },
+    };
+  } catch (err) {
+    console.error("Failed to fetch departments:", err);
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+}
+```
+
+---
+
+### **Переваги підходу:**
+1. **Додаткова перевірка на клієнті:** Зменшує кількість непотрібних запитів.
+2. **Гнучкість:** Якщо сервер повертає 401, все одно відбувається спроба поновлення.
+3. **Централізована логіка:** Вся логіка перевірки та оновлення токенів знаходиться в одній функції.
+
+Цей підхід є безпечним і оптимізованим для роботи з токенами в Next.js.

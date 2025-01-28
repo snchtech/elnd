@@ -1,0 +1,217 @@
+Ось оновлений код для функції `refresh.js`, яка спочатку перевіряє валідність `refreshTokenExpIn` по часу. Якщо `refreshToken` недійсний за часом, виконується вихід (logout) з перенаправленням на `/login`. Якщо валідний, то виконується процедура поновлення токенів.
+
+---
+
+### **Оновлений код `refresh.js`**
+
+```javascript
+// pages/api/auth/refresh.js
+import cookie from "cookie";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", ["POST"]);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const cookies = req.cookies;
+  const refreshToken = cookies.refreshToken;
+  const refreshTokenExpIn = cookies.refreshTokenExpIn
+    ? parseInt(cookies.refreshTokenExpIn, 10)
+    : null;
+
+  if (!refreshToken || !refreshTokenExpIn) {
+    return res.status(401).json({ error: "Refresh token not provided or expired" });
+  }
+
+  // Перевірка часу валідності refreshToken
+  const currentTime = Math.floor(Date.now() / 1000); // Поточний час у секундах
+
+  if (currentTime >= refreshTokenExpIn) {
+    console.warn("Refresh token expired, logging out...");
+    res.setHeader(
+      "Set-Cookie",
+      [
+        // Видаляємо всі токени
+        cookie.serialize("accessToken", "", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+          expires: new Date(0), // Встановлюємо минулу дату
+        }),
+        cookie.serialize("refreshToken", "", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+          expires: new Date(0),
+        }),
+        cookie.serialize("accessTokenExpIn", "", {
+          httpOnly: false, // Доступно клієнту
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+          expires: new Date(0),
+        }),
+        cookie.serialize("refreshTokenExpIn", "", {
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
+          path: "/",
+          expires: new Date(0),
+        }),
+      ]
+    );
+
+    // Перенаправляємо на /login
+    return res.status(401).json({ error: "Refresh token expired, redirect to login" });
+  }
+
+  try {
+    // Виконуємо запит до стороннього API для поновлення токенів
+    const response = await fetch("https://your-api-server.com/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      return res.status(401).json({ error: "Failed to refresh tokens" });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken, accessTokenExpIn, refreshTokenExpIn: newRefreshTokenExpIn } =
+      await response.json();
+
+    // Встановлюємо нові cookies
+    res.setHeader("Set-Cookie", [
+      cookie.serialize("accessToken", accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60, // 1 година
+      }),
+      cookie.serialize("refreshToken", newRefreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, // 7 днів
+      }),
+      cookie.serialize("accessTokenExpIn", accessTokenExpIn, {
+        httpOnly: false, // Доступно клієнту
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60, // 1 година
+      }),
+      cookie.serialize("refreshTokenExpIn", newRefreshTokenExpIn, {
+        httpOnly: false, // Доступно клієнту
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7, // 7 днів
+      }),
+    ]);
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Error refreshing tokens:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+```
+
+---
+
+### **Що змінено:**
+1. **Перевірка валідності `refreshTokenExpIn`:**
+   - Зчитується час закінчення `refreshTokenExpIn` із cookie.
+   - Якщо час минув, видаляються всі токени, і користувач перенаправляється на логін.
+
+2. **Logout (видалення cookies):**
+   - Якщо `refreshToken` недійсний, усі токени (`accessToken`, `refreshToken`, їхні терміни дії) видаляються через встановлення `expires: new Date(0)`.
+
+3. **Процедура оновлення:**
+   - Виконується лише якщо `refreshTokenExpIn` ще дійсний.
+
+---
+
+### **Клієнтська функція для поновлення токенів**
+Клієнт викликає цей API тільки коли потрібне поновлення токенів:
+
+```javascript
+// utils/auth.js
+export const refreshTokens = async () => {
+  try {
+    const res = await fetch("/api/auth/refresh", {
+      method: "POST",
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        // Якщо refreshToken недійсний, перенаправляємо на логін
+        window.location.href = "/login";
+      }
+      throw new Error("Failed to refresh tokens");
+    }
+
+    const data = await res.json();
+    return data.success;
+  } catch (err) {
+    console.error("Error refreshing tokens:", err);
+    return false;
+  }
+};
+```
+
+---
+
+### **Використання функції `refreshTokens`**
+Приклад використання функції в запитах із перевіркою та оновленням токенів:
+
+```javascript
+// utils/api.js
+export const fetchWithRefresh = async (url, options = {}) => {
+  try {
+    const res = await fetch(url, options);
+
+    if (res.ok) {
+      return await res.json();
+    }
+
+    // Якщо отримано 401, спробуємо оновити токени
+    if (res.status === 401) {
+      const refreshed = await refreshTokens();
+
+      if (refreshed) {
+        // Повторюємо запит після оновлення
+        const retryRes = await fetch(url, options);
+        if (retryRes.ok) {
+          return await retryRes.json();
+        }
+      }
+
+      throw new Error("Failed to fetch after token refresh");
+    }
+
+    throw new Error(`Failed to fetch: ${res.statusText}`);
+  } catch (err) {
+    console.error("Error fetching data:", err);
+    throw err;
+  }
+};
+```
+
+---
+
+### **Резюме:**
+1. Якщо час дії `refreshToken` закінчився, виконується вихід (logout) із видаленням усіх токенів.
+2. Якщо `refreshToken` валідний, токени оновлюються через запит до стороннього API.
+3. Цей підхід дозволяє забезпечити:
+   - Безпеку (недійсні токени видаляються одразу).
+   - Централізовану логіку обробки токенів на сервері Next.js.
+4. На клієнті інтегрується логіка автоматичного поновлення токенів і повторення запитів через `fetchWithRefresh`.
+
+Це гарантує безперервність роботи для користувача, поки його токени валідні.

@@ -1,0 +1,231 @@
+Yes, you can use the cookies from another API domain to manage authentication and session handling in your Next.js app. I'll guide you step by step to achieve your desired functionality.
+
+### Steps Breakdown:
+
+1. **Receive JWT Token and Store it as a Cookie in Your Next.js App**
+2. **Check if the JWT Cookie Exists on Page Load**
+3. **Use Context to Handle Authentication**
+4. **Access JWT Payload Data on Different Pages**
+
+### 1. **Receiving the JWT Token & Storing It as a Cookie**
+First, let’s assume your external API is providing the JWT token when the user logs in.
+
+In your Next.js API routes, you will set the JWT token as an HTTP-only cookie after receiving it from the external API.
+
+#### API Route for Authentication (Next.js API Route)
+Create an API route in your Next.js app (e.g., `pages/api/auth/login.js`).
+
+```js
+import jwt from 'jsonwebtoken';
+import Cookies from 'js-cookie';
+
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    // Mock the token (you would get this from your external API)
+    const { token } = req.body;
+
+    // Verify and decode the JWT token here (if necessary)
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Set the JWT token in an HTTP-only cookie (so it can't be accessed by JS)
+    res.setHeader('Set-Cookie', `etls-session=${token}; HttpOnly; Path=/; Max-Age=${13 * 60 * 60}; SameSite=Strict; Secure`);
+
+    return res.status(200).json({ message: 'Logged in successfully' });
+  } else {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+}
+```
+
+Here we set a cookie called `etls-session` with an expiry time of 13 hours and with the `HttpOnly` flag (which means JavaScript can’t access the cookie, but it will be sent with each request).
+
+### 2. **Check if JWT Cookie Exists on Page Load**
+
+To check if the cookie exists, you can create a utility function that checks for the cookie and validates the session.
+
+#### Utility Function to Check for Cookie
+
+You can create a helper function in a `utils` directory:
+
+```js
+import Cookies from 'js-cookie';
+
+export const getTokenFromCookies = () => {
+  return Cookies.get('etls-session');
+};
+
+export const isAuthenticated = () => {
+  const token = getTokenFromCookies();
+  return token ? true : false;
+};
+```
+
+### 3. **Authentication Context with AuthProvider**
+
+Using React Context, we can manage authentication state globally in your app. This will allow us to check if a user is authenticated and conditionally render the components or redirect to the login page.
+
+#### Create `AuthContext.js`
+
+```js
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isAuthenticated } from '../utils/auth'; // the function we created to check if token exists
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [authStatus, setAuthStatus] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = () => {
+      if (isAuthenticated()) {
+        setAuthStatus(true);
+      } else {
+        setAuthStatus(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ authStatus }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+#### Wrap your app with the `AuthProvider` in `_app.js`:
+
+```js
+import { AuthProvider } from '../context/AuthContext';
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  );
+}
+
+export default MyApp;
+```
+
+### 4. **Redirect Based on Authentication State**
+
+You can use this context in any page to determine if the user should be redirected to the login page or if the page components should be shown.
+
+#### Example of Page with Authentication Check
+
+For example, on a page like `pages/dashboard.js`, you can use `useAuth` to check authentication and redirect accordingly.
+
+```js
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/router';
+
+const Dashboard = () => {
+  const { authStatus } = useAuth();
+  const router = useRouter();
+
+  if (!authStatus) {
+    // Redirect to login page if not authenticated
+    router.push('/login');
+    return null;
+  }
+
+  return <div>Welcome to the Dashboard</div>;
+};
+
+export default Dashboard;
+```
+
+### 5. **Getting JWT Payload Data on Different Pages**
+
+Now, to access the JWT payload on different pages, you can decode the JWT token and store it in context or directly in the cookie.
+
+#### Create a Utility to Decode JWT
+
+If you need to access the payload of the JWT, you can use a library like `jsonwebtoken` to decode it.
+
+```js
+import jwt from 'jsonwebtoken';
+
+export const decodeToken = (token) => {
+  if (!token) return null;
+  return jwt.decode(token); // This will return the payload
+};
+```
+
+Then, you can decode the token and pass it through context if needed.
+
+#### Example with AuthContext to Store and Access JWT Payload
+
+Update your `AuthContext` to store the decoded payload:
+
+```js
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isAuthenticated, getTokenFromCookies } from '../utils/auth';
+import { decodeToken } from '../utils/decodeToken';
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [authStatus, setAuthStatus] = useState(false);
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = getTokenFromCookies();
+      if (token) {
+        setAuthStatus(true);
+        setUserData(decodeToken(token)); // Store the decoded payload
+      } else {
+        setAuthStatus(false);
+        setUserData(null);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ authStatus, userData }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+Now, you can use `userData` in any component to access the JWT payload:
+
+```js
+import { useAuth } from '../context/AuthContext';
+
+const UserProfile = () => {
+  const { userData } = useAuth();
+
+  if (!userData) return <div>Loading...</div>;
+
+  return (
+    <div>
+      <h1>Welcome, {userData.name}</h1>
+      <p>Email: {userData.email}</p>
+    </div>
+  );
+};
+
+export default UserProfile;
+```
+
+### Conclusion
+
+- You can send the JWT token from your backend to the frontend and store it in an HTTP-only cookie for security.
+- Use a context provider to globally manage authentication status and user data (decoded JWT).
+- Check authentication on page load and use redirection when necessary.
+- Access JWT payload data via the context in different components or pages.
+
+This approach will help you securely handle sessions with JWTs and manage user access in a Next.js app.

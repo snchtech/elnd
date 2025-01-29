@@ -1,0 +1,173 @@
+### 🔹 **Врахування часу життя (`accessExpireIn` та `refreshExpireIn`)**
+У твоєму випадку, де час життя (`accessExpireIn` і `refreshExpireIn`) **зберігається в HTTP-only cookies**, можна покращити логіку, щоб **не розшифровувати токен** на сервері, а просто перевіряти збережені значення часу.
+
+✅ **Чому це корисно?**  
+- **Можна швидше перевіряти сесію** без розшифровки JWT.  
+- **Зменшується навантаження на сервер** (не потрібно кожного разу декодувати токен).  
+- **Просте управління часом життя** без перевірки `iat` (issued at) у токені.  
+
+---
+
+## 🔹 **📌 1. Оновлений API `/api/auth/checkAuth.js`**
+Цей API тепер перевіряє **`accessExpireIn` і `refreshExpireIn` без розшифровки токенів**.
+
+```javascript
+import { parse } from 'cookie';
+
+export default function handler(req, res) {
+  try {
+    // Отримуємо cookies
+    const cookies = parse(req.headers.cookie || '');
+
+    const accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+    const accessExpireIn = cookies.accessExpireIn ? parseInt(cookies.accessExpireIn, 10) : null;
+    const refreshExpireIn = cookies.refreshExpireIn ? parseInt(cookies.refreshExpireIn, 10) : null;
+
+    const currentTime = Math.floor(Date.now() / 1000); // Поточний час у секундах
+
+    // Якщо немає токенів – вихід
+    if (!accessToken && !refreshToken) {
+      return res.status(401).json({ isAuth: false, message: 'No tokens found' });
+    }
+
+    // Перевіряємо час життя accessToken
+    if (accessExpireIn && accessExpireIn > currentTime) {
+      return res.status(200).json({ isAuth: true, userSession: 'access_valid' });
+    }
+
+    // Якщо accessToken протермінований, перевіряємо refreshToken
+    if (refreshExpireIn && refreshExpireIn > currentTime) {
+      return res.status(200).json({ isAuth: true, userSession: 'refresh_valid' });
+    }
+
+    // Якщо і refreshToken протермінований – робимо logout
+    res.setHeader('Set-Cookie', [
+      'accessToken=; HttpOnly; Path=/; Max-Age=0',
+      'refreshToken=; HttpOnly; Path=/; Max-Age=0',
+      'accessExpireIn=; HttpOnly; Path=/; Max-Age=0',
+      'refreshExpireIn=; HttpOnly; Path=/; Max-Age=0',
+    ]);
+    return res.status(401).json({ isAuth: false, message: 'Session expired' });
+
+  } catch (error) {
+    return res.status(500).json({ isAuth: false, message: 'Internal server error' });
+  }
+}
+```
+
+---
+
+## 🔹 **📌 2. Оновлена функція `isAuth` (`utils/auth.js`)**
+Ця функція перевіряє статус сесії через `/api/auth/checkAuth`.  
+Якщо **обидва токени протерміновані**, то вона виконує logout і редірект.
+
+```javascript
+export const isAuth = async () => {
+  try {
+    const response = await fetch('/api/auth/checkAuth', {
+      method: 'GET',
+      credentials: 'include', // Передає HTTP-only cookies
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await response.json();
+
+    if (!data.isAuth) {
+      // Якщо сесія закінчилася, виконуємо logout
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      window.location.href = '/login';
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error checking auth:', error);
+    return false;
+  }
+};
+```
+
+---
+
+## 🔹 **📌 3. Використання `isAuth` у HOC `withAuth.js`**
+```javascript
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { isAuth } from '../utils/auth';
+
+const withAuth = (WrappedComponent) => {
+  const AuthHOC = (props) => {
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const checkAuthentication = async () => {
+        const authenticated = await isAuth();
+        if (!authenticated) {
+          router.push('/login');
+        } else {
+          setLoading(false);
+        }
+      };
+
+      checkAuthentication();
+    }, []);
+
+    if (loading) {
+      return <p>Loading...</p>;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+
+  AuthHOC.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
+
+  return AuthHOC;
+};
+
+export default withAuth;
+```
+
+---
+
+## 🔹 **📌 4. API `/api/auth/logout.js`**
+Цей API видаляє всі сесійні cookies, включаючи `accessExpireIn` та `refreshExpireIn`.
+
+```javascript
+export default function handler(req, res) {
+  res.setHeader('Set-Cookie', [
+    'accessToken=; HttpOnly; Path=/; Max-Age=0',
+    'refreshToken=; HttpOnly; Path=/; Max-Age=0',
+    'accessExpireIn=; HttpOnly; Path=/; Max-Age=0',
+    'refreshExpireIn=; HttpOnly; Path=/; Max-Age=0',
+  ]);
+  res.status(200).json({ message: 'Logged out' });
+}
+```
+
+---
+
+## 🔹 **📌 5. Використання `withAuth` у компоненті**
+```javascript
+import withAuth from '../hoc/withAuth';
+
+const Dashboard = () => {
+  return <h1>Welcome to the Dashboard</h1>;
+};
+
+export default withAuth(Dashboard);
+```
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Замість декодування токенів у `jwt.verify`, ми перевіряємо їх `exp` значення з cookie.**  
+✔ **Менше навантаження на сервер, оскільки перевірка виконується швидше.**  
+✔ **Якщо `accessToken` валідний → користувач автентифікований.**  
+✔ **Якщо `accessToken` закінчився, але `refreshToken` ще активний → користувач теж вважається авторизованим.**  
+✔ **Якщо обидва токени закінчилися → виконується `logout` і редірект.**  
+
+🔹 **Тепер твоя логіка автентифікації повністю враховує час життя токенів без їх декодування! 🚀**

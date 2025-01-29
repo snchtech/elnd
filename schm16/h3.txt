@@ -1,0 +1,166 @@
+### ✅ **Функція `isAuth` для перевірки валідності токенів у HTTP-only cookie**
+Оскільки `accessToken` та `refreshToken` **зберігаються в HTTP-only cookies**, ми не можемо їх отримати через `JavaScript`. Тому логіку перевірки потрібно виконати на **серверному API** `/api/auth/checkAuth`, який:
+1. **Читає токени з HTTP-only cookies**.
+2. **Перевіряє, чи `accessToken` валідний**:
+   - Якщо так → користувач автентифікований.
+   - Якщо `accessToken` закінчився, перевіряє `refreshToken`.
+3. **Якщо `refreshToken` також недійсний → виконує logout і редірект**.
+
+---
+
+## 🔹 **📌 1. Серверний API для перевірки авторизації (`pages/api/auth/checkAuth.js`)**
+```javascript
+import { parse } from 'cookie';
+import jwt from 'jsonwebtoken';
+
+export default function handler(req, res) {
+  try {
+    // Отримуємо cookies
+    const cookies = parse(req.headers.cookie || '');
+
+    const accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    // Якщо немає accessToken та refreshToken – вихід
+    if (!accessToken && !refreshToken) {
+      return res.status(401).json({ isAuth: false, message: 'No tokens found' });
+    }
+
+    // Перевіряємо accessToken
+    try {
+      const decodedAccessToken = jwt.verify(accessToken, process.env.JWT_SECRET);
+      return res.status(200).json({ isAuth: true, user: decodedAccessToken });
+    } catch (accessError) {
+      // Якщо accessToken недійсний, перевіряємо refreshToken
+      try {
+        const decodedRefreshToken = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+        // Якщо refreshToken ще дійсний, вважаємо користувача авторизованим
+        return res.status(200).json({ isAuth: true, refreshSession: true });
+      } catch (refreshError) {
+        // Якщо refreshToken теж недійсний – робимо logout
+        res.setHeader('Set-Cookie', [
+          'accessToken=; HttpOnly; Path=/; Max-Age=0',
+          'refreshToken=; HttpOnly; Path=/; Max-Age=0',
+        ]);
+        return res.status(401).json({ isAuth: false, message: 'Session expired' });
+      }
+    }
+  } catch (error) {
+    return res.status(500).json({ isAuth: false, message: 'Internal server error' });
+  }
+}
+```
+
+---
+
+## 🔹 **📌 2. Функція `isAuth` на клієнті (`utils/auth.js`)**
+Ця функція:
+- Виконує запит до `/api/auth/checkAuth` для перевірки сесії.
+- Якщо `isAuth === false`, виконує **logout і редірект**.
+
+```javascript
+export const isAuth = async () => {
+  try {
+    const response = await fetch('/api/auth/checkAuth', {
+      method: 'GET',
+      credentials: 'include', // Передає cookies
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await response.json();
+
+    if (!data.isAuth) {
+      // Якщо сесія закінчилася, виконуємо logout
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      window.location.href = '/login';
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error checking auth:', error);
+    return false;
+  }
+};
+```
+
+---
+
+## 🔹 **📌 3. Використання `isAuth` у HOC `withAuth.js`**
+```javascript
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { isAuth } from '../utils/auth';
+
+const withAuth = (WrappedComponent) => {
+  const AuthHOC = (props) => {
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const checkAuthentication = async () => {
+        const authenticated = await isAuth();
+        if (!authenticated) {
+          router.push('/login');
+        } else {
+          setLoading(false);
+        }
+      };
+
+      checkAuthentication();
+    }, []);
+
+    if (loading) {
+      return <p>Loading...</p>;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+
+  AuthHOC.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
+
+  return AuthHOC;
+};
+
+export default withAuth;
+```
+
+---
+
+## 🔹 **📌 4. Використання `withAuth` у компоненті**
+```javascript
+import withAuth from '../hoc/withAuth';
+
+const Dashboard = () => {
+  return <h1>Welcome to the Dashboard</h1>;
+};
+
+export default withAuth(Dashboard);
+```
+
+---
+
+## 🔹 **📌 5. API `/api/auth/logout.js`**
+Очищає `accessToken` та `refreshToken`:
+```javascript
+export default function handler(req, res) {
+  res.setHeader('Set-Cookie', [
+    'accessToken=; HttpOnly; Path=/; Max-Age=0',
+    'refreshToken=; HttpOnly; Path=/; Max-Age=0',
+  ]);
+  res.status(200).json({ message: 'Logged out' });
+}
+```
+
+---
+
+## **✅ Що ми отримали**
+✔ **Перевірка токенів на сервері через `/api/auth/checkAuth`**  
+✔ **Функція `isAuth` перевіряє автентифікацію і виконує logout при необхідності**  
+✔ **HOC `withAuth` захищає сторінки і перенаправляє на логін**  
+✔ **При завершенні сесії автоматично виконується logout і редірект**  
+
+🔹 **Тепер твоє рішення працює, як класична серверна сесія!** 🚀

@@ -1,0 +1,140 @@
+Щоб реалізувати **контроль доступу на рівні сторінок і окремих компонентів** в Next.js через HOC (`withAuth`), потрібно:
+
+1. **Обмежити доступ до сторінок** – якщо користувач не має потрібної ролі, його перенаправляє на сторінку логіну або іншу визначену.
+2. **Приховувати окремі компоненти** – якщо користувач не має дозволеної ролі, компонент просто не рендериться.
+
+---
+
+### 🔹 **Оновлений `withAuth.js` для захисту сторінок**
+```javascript
+'use client';
+
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+// Мапа ролей (якщо треба розширити доступ, редагуємо тут)
+const ROLE_HIERARCHY = {
+  viewer: ['viewer'],
+  editor: ['editor', 'viewer'],
+  creator: ['creator', 'editor', 'viewer'],
+  admin: ['admin', 'creator', 'editor', 'viewer'],
+};
+
+const withAuth = (WrappedComponent, requiredRole = null) => {
+  const AuthHOC = (props) => {
+    const { authStatus, user, setUser } = useAuth();
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const fetchUserData = async () => {
+        try {
+          const response = await fetch('/api/getUserData', {
+            method: 'GET',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          if (data.userData) {
+            setUser(data.userData);
+          } else {
+            throw new Error('No user data');
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          router.push('/login'); // Перенаправлення на логін
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchUserData();
+    }, []);
+
+    if (loading) {
+      return <p>Loading...</p>;
+    }
+
+    // Перевірка ролі
+    if (requiredRole && (!user || !ROLE_HIERARCHY[requiredRole]?.includes(user.role))) {
+      return <p>Access Denied</p>; // Або можна зробити редірект, або показати кастомний компонент
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+
+  AuthHOC.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
+
+  return AuthHOC;
+};
+
+export default withAuth;
+```
+
+---
+### 🔹 **Функція `CanAccess` для контролю доступу до окремих елементів**
+Якщо потрібно **приховати кнопки, панелі чи блоки** для певних ролей, краще використовувати окремий компонент.
+
+#### **`CanAccess.js`**
+```javascript
+const CanAccess = ({ role, userRole, children }) => {
+  if (!userRole || !ROLE_HIERARCHY[userRole]?.includes(role)) {
+    return null; // Якщо немає прав доступу – не рендеримо компонент
+  }
+  return children;
+};
+
+export default CanAccess;
+```
+
+---
+### 🔹 **Як використовувати `withAuth` для захисту сторінок**
+```javascript
+import withAuth from '../hoc/withAuth';
+
+const EditorPage = () => {
+  return <h1>Welcome to the Editor Page</h1>;
+};
+
+export default withAuth(EditorPage, 'editor');
+```
+
+Це означає, що тільки **editor та вищі ролі** можуть відкрити цю сторінку.
+
+---
+### 🔹 **Як використовувати `CanAccess` для приховування компонентів**
+```javascript
+import CanAccess from '../hoc/CanAccess';
+import { useAuth } from '../context/AuthContext';
+
+const SomeComponent = () => {
+  const { user } = useAuth();
+
+  return (
+    <div>
+      <h1>Welcome!</h1>
+
+      {/* Приховуємо кнопку для користувачів без ролі admin */}
+      <CanAccess role="admin" userRole={user?.role}>
+        <button>Delete Data</button>
+      </CanAccess>
+    </div>
+  );
+};
+
+export default SomeComponent;
+```
+
+---
+### **✅ Підсумок**
+✔ **withAuth** → Забезпечує доступ до сторінки лише для дозволених ролей.<br>
+✔ **CanAccess** → Приховує окремі елементи (наприклад, кнопки, панелі) для користувачів без відповідних прав.<br>
+✔ **Гнучкість** → Легко налаштовувати доступ для нових ролей у `ROLE_HIERARCHY`.<br>
+
+🔹 Тепер ти можеш **гнучко контролювати доступ як до сторінок, так і до окремих елементів** у Next.js! 🚀

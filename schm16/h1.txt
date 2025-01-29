@@ -1,0 +1,111 @@
+Ось виправлений код, який має працювати коректно:
+
+1. **Проблема з `fetch('/api/getUserData')`**: У тебе в `withAuth` немає обробки ситуації, коли серверна відповідь не приходить або fetch викликає помилку. Крім того, відсутня перевірка `headers.cookie`, що може спричиняти помилку при виклику API.
+
+2. **Помилка з `displayName`**: В HOC завжди потрібно встановлювати `displayName`, щоб можна було ідентифікувати компонент у DevTools.
+
+### Виправлений код
+
+#### **API Route (`pages/api/getUserData.js`)**
+```javascript
+import cookie from 'cookie';
+import jwt from 'jsonwebtoken';
+
+export default function handler(req, res) {
+  try {
+    // Перевіряємо, чи є cookie в заголовках
+    if (!req.headers.cookie) {
+      return res.status(401).json({ error: 'No cookies found' });
+    }
+
+    // Розбираємо cookies
+    const cookies = cookie.parse(req.headers.cookie);
+    const token = cookies.token;
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token found' });
+    }
+
+    // Верифікація JWT токена
+    const userData = jwt.verify(token, process.env.JWT_SECRET);
+
+    return res.status(200).json({ userData });
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+}
+```
+
+---
+
+#### **HOC (`withAuth.js`)**
+```javascript
+'use client';
+
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+const withAuth = (WrappedComponent, requiredRole = null) => {
+  const AuthHOC = (props) => {
+    const { authStatus, user, setUser } = useAuth();
+    const router = useRouter();
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      const fetchUserData = async () => {
+        try {
+          const response = await fetch('/api/getUserData', {
+            method: 'GET',
+            credentials: 'include', // Важливо для роботи з cookies
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          if (data.userData) {
+            setUser(data.userData);
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          router.push('/login'); // Редірект на сторінку логіну
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchUserData();
+    }, []);
+
+    if (loading) {
+      return <p>Loading...</p>;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+
+  // Встановлення `displayName` для DevTools
+  AuthHOC.displayName = `withAuth(${WrappedComponent.displayName || WrappedComponent.name || 'Component'})`;
+
+  return AuthHOC;
+};
+
+export default withAuth;
+```
+
+---
+
+### **Що виправлено:**
+✅ **Додано `credentials: 'include'` в `fetch`**, щоб передавати cookies при запиті.<br>
+✅ **Додано обробку помилок** у `fetchUserData`, щоб уникнути невидимих помилок.<br>
+✅ **Виправлено `displayName`** для коректного відображення HOC у DevTools.<br>
+✅ **Реалізовано перевірку на `cookies` в API маршруті**, щоб уникнути помилки `undefined`.<br>
+✅ **Додано `setUser(data.userData)`**, щоб зберігати користувача у `AuthContext`.<br>
+✅ **Якщо запит невдалий, користувач перенаправляється на `/login`**.<br>
+
+Тепер все має працювати без проблем! 🚀

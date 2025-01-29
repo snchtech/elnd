@@ -1,0 +1,145 @@
+Sure! Here's how you can rewrite the code using the `cookie` module instead of `nookies`.
+
+The `cookie` module is commonly used for parsing and setting cookies on the server-side in Node.js environments. I'll update the code to use the `cookie` module to read and write cookies in your API route and HOC.
+
+### Step 1: Install the `cookie` module
+
+First, make sure you have the `cookie` module installed in your Next.js project:
+
+```bash
+npm install cookie
+```
+
+### Step 2: Update the API Route to Use `cookie` Module
+
+In your API route, you can use `cookie.parse` to parse the cookies from the `req.headers.cookie`, and `cookie.serialize` to set cookies in the response.
+
+```js
+// pages/api/getUserData.js
+
+import cookie from 'cookie';
+
+export default function handler(req, res) {
+  // Parse cookies from the request
+  const cookies = cookie.parse(req.headers.cookie || '');
+
+  // Assuming the cookie is named 'token'
+  const token = cookies.token;
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token found' });
+  }
+
+  // Verify or decode the token (e.g., using JWT)
+  try {
+    const userData = verifyToken(token);  // Replace with your token verification logic
+    return res.status(200).json({ userData });
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid token' });
+  }
+}
+
+// Example function to verify JWT token (replace with your own logic)
+function verifyToken(token) {
+  const jwt = require('jsonwebtoken');
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);  // Replace JWT_SECRET with your secret
+  return decoded;
+}
+```
+
+### Step 3: Update the `withAuth` HOC
+
+Now, in the `withAuth` HOC, you can use `fetch` to call the API route and retrieve user data. This code remains similar, but the API route will now rely on the cookie being sent automatically with the request.
+
+```js
+// hoc/withAuth.js
+
+import React, { useEffect, useState } from 'react';
+
+const withAuth = (WrappedComponent) => {
+  return (props) => {
+    const [userData, setUserData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    
+    useEffect(() => {
+      // Call the API route to get user data from cookies
+      const fetchUserData = async () => {
+        try {
+          const response = await fetch('/api/getUserData');
+          if (response.ok) {
+            const data = await response.json();
+            setUserData(data.userData);
+          } else {
+            // Handle no token or error response
+            console.error('No user data found or error fetching.');
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchUserData();
+    }, []);
+    
+    if (loading) return <div>Loading...</div>;
+    if (!userData) return <div>Not Authorized</div>;
+
+    return <WrappedComponent {...props} userData={userData} />;
+  };
+};
+
+export default withAuth;
+```
+
+### Step 4: Set the Cookie on the Client-Side (Optional)
+
+When the user logs in, you might want to set the cookie on the server-side. Here’s how you can use the `cookie` module to set the HTTP-only cookie after successful authentication.
+
+```js
+// pages/api/login.js
+
+import cookie from 'cookie';
+
+export default function loginHandler(req, res) {
+  if (req.method === 'POST') {
+    const { username, password } = req.body;
+
+    // Authenticate the user (this is just an example)
+    if (username === 'admin' && password === 'password') {
+      const token = 'generated-jwt-token';  // Replace with your actual token generation logic
+
+      // Set the token as an HTTP-only cookie
+      res.setHeader('Set-Cookie', cookie.serialize('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',  // Set to true in production to enable HTTPS
+        maxAge: 60 * 60 * 24 * 7,  // 1 week
+        path: '/',  // Make the cookie accessible for all routes
+      }));
+
+      return res.status(200).json({ message: 'Login successful' });
+    }
+
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+}
+```
+
+### Step 5: How the API and HOC Work Together
+
+1. **API Route**: 
+   - The `getUserData` API route reads the cookies from `req.headers.cookie` using `cookie.parse()`.
+   - It extracts the `token` cookie and verifies the token.
+   - If valid, it sends back the user data. If not, it returns an error.
+
+2. **withAuth HOC**:
+   - The `withAuth` HOC makes a request to `/api/getUserData` to fetch the user data stored in the cookie.
+   - It waits for the response, handles loading state, and passes the user data to the wrapped component.
+
+3. **Login API**:
+   - When a user logs in, the `login` API route sets the authentication token in an HTTP-only cookie using `cookie.serialize`.
+
+### Conclusion
+
+In this updated code, I've replaced `nookies` with the `cookie` module. The cookie module parses the cookies from the `req.headers.cookie` and allows you to set HTTP-only cookies properly. You can now manage cookies with `cookie.parse` and `cookie.serialize` to securely read and write cookies in your Next.js API routes.

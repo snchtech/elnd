@@ -1,0 +1,201 @@
+Ось детальний план реалізації з оновленням `api/auth/login`, `middleware.js`, та `api/auth/refreshtoken`.
+
+---
+
+## 🔹 **📌 1. Оновлений `api/auth/login.js`**
+- Виконує запит на зовнішній API `/login`.
+- Отримує `accessToken`, `refreshToken`, `userData`, `refreshExpireIn`.
+- Генерує **внутрішні токени** `accessTokenEtls` і `refreshTokenEtls` з власним `SECRET_KEY_ETLS`.
+- Зберігає всі токени у `HTTP-only` cookies.
+
+```javascript
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY_ETLS = process.env.SECRET_KEY_ETLS;
+const EXPIRES_IN_ACCESS_ETLS = "15m"; // Час дії accessTokenEtls
+const EXPIRES_IN_REFRESH_ETLS = "7d"; // Час дії refreshTokenEtls
+
+export async function POST(req) {
+  try {
+    const { email, password } = await req.json();
+
+    // Запит на зовнішній API сервер для отримання токенів
+    const apiResponse = await fetch(`${process.env.EXTERNAL_API_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!apiResponse.ok) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const { accessToken, refreshToken, userData, refreshExpireIn } = await apiResponse.json();
+
+    // Генерація внутрішніх токенів
+    const accessTokenEtls = jwt.sign({ userId: userData.id, role: userData.role }, SECRET_KEY_ETLS, {
+      expiresIn: EXPIRES_IN_ACCESS_ETLS,
+    });
+
+    const refreshTokenEtls = jwt.sign({ userId: userData.id }, SECRET_KEY_ETLS, {
+      expiresIn: EXPIRES_IN_REFRESH_ETLS,
+    });
+
+    // Формуємо response з cookies
+    const response = NextResponse.json({ message: "Login successful", userData });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${refreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Login error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## 🔹 **📌 2. Middleware: `middleware.js`**
+- Читає `cookies`.
+- Перевіряє `accessTokenEtls`. Якщо він дійсний → `next()`.
+- Якщо `accessTokenEtls` недійсний, перевіряє `refreshTokenEtls`.
+- Якщо `refreshTokenEtls` теж недійсний → Logout і редірект на `/login`.
+- Якщо `refreshTokenEtls` дійсний → Викликає `/api/auth/refreshtoken` для отримання нових токенів.
+
+```javascript
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY_ETLS = process.env.SECRET_KEY_ETLS;
+
+export async function middleware(req) {
+  const cookies = req.cookies;
+  const accessTokenEtls = cookies.get("accessTokenEtls")?.value;
+  const refreshTokenEtls = cookies.get("refreshTokenEtls")?.value;
+
+  // Якщо немає жодного токена → редірект на /login
+  if (!accessTokenEtls && !refreshTokenEtls) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  // Перевіряємо accessTokenEtls
+  try {
+    jwt.verify(accessTokenEtls, SECRET_KEY_ETLS);
+    return NextResponse.next();
+  } catch (error) {
+    console.warn("accessTokenEtls invalid, checking refreshTokenEtls...");
+  }
+
+  // Перевіряємо refreshTokenEtls
+  try {
+    jwt.verify(refreshTokenEtls, SECRET_KEY_ETLS);
+
+    // Викликаємо `/api/auth/refreshtoken` для отримання нових токенів
+    const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: req.headers.get("cookie") || "",
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      throw new Error("Failed to refresh tokens");
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error("refreshTokenEtls invalid:", error);
+
+    // Очистка всіх cookies і редірект на /login
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  }
+}
+
+export const config = {
+  matcher: ["/dashboard", "/profile"], // Захищені сторінки
+};
+```
+
+---
+
+## 🔹 **📌 3. API `/api/auth/refreshtoken.js`**
+- Перевіряє `refreshTokenEtls`.
+- Якщо він валідний → Генерує **нові `accessTokenEtls` і `refreshTokenEtls`**.
+- Встановлює нові токени в `HTTP-only` cookies.
+- Повертає оновлені токени.
+
+```javascript
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const SECRET_KEY_ETLS = process.env.SECRET_KEY_ETLS;
+const EXPIRES_IN_ACCESS_ETLS = "15m";
+const EXPIRES_IN_REFRESH_ETLS = "7d";
+
+export async function POST(req) {
+  try {
+    const cookies = req.cookies;
+    const refreshTokenEtls = cookies.get("refreshTokenEtls")?.value;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // Перевіряємо refreshTokenEtls
+    const decoded = jwt.verify(refreshTokenEtls, SECRET_KEY_ETLS);
+    const newPayload = { userId: decoded.userId };
+
+    // Генеруємо нові токени
+    const newAccessTokenEtls = jwt.sign(newPayload, SECRET_KEY_ETLS, { expiresIn: EXPIRES_IN_ACCESS_ETLS });
+    const newRefreshTokenEtls = jwt.sign(newPayload, SECRET_KEY_ETLS, { expiresIn: EXPIRES_IN_REFRESH_ETLS });
+
+    // Формуємо response з новими cookies
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${newRefreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Failed to refresh tokens:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що ми отримали?**
+✔ **Next.js API `/api/auth/login` тепер зберігає 4 токени (`accessToken`, `refreshToken`, `accessTokenEtls`, `refreshTokenEtls`)**  
+✔ **Middleware перевіряє `accessTokenEtls`, а при його закінченні – `refreshTokenEtls`**  
+✔ **Якщо `refreshTokenEtls` теж закінчився → повний logout (`/login`)**  
+✔ **Якщо `refreshTokenEtls` ще активний → генеруємо нові токени через `/api/auth/refreshtoken`**  
+✔ **Всі токени захищені через `HTTP-only cookies`**
+
+🔹 **Тепер твоя автентифікація максимально безпечна і продуктивна! 🚀**

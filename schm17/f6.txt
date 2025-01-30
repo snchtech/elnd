@@ -1,0 +1,152 @@
+## ✅ **📌 Як виключити `/login` з `middleware.js` у Next.js 15?**
+
+У Next.js 15, `middleware.js` повинен бути розміщений у **корені папки `src`** або безпосередньо в **корені проекту**.
+
+- **Розташування файлу:**
+  - Якщо в тебе є папка `src`:  
+    ```
+    /src/middleware.js
+    ```
+  - Якщо немає папки `src`:  
+    ```
+    /middleware.js
+    ```
+
+---
+
+## 🔹 **📌 Як виключити `/login` з `middleware.js`?**
+У `config.matcher` потрібно **виключити** сторінку `/login`, щоб `middleware.js` не виконувався на ній.
+
+Ось як це зробити:
+
+### **📝 Оновлений `middleware.js`**
+```javascript
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const ETLS_ACCESS = process.env.ETLS_ACCESS;
+const ETLS_REFRESH = process.env.ETLS_REFRESH;
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+
+  // 🔹 Виключаємо `/login` (middleware не запускається для цієї сторінки)
+  if (pathname.startsWith("/login")) {
+    return NextResponse.next();
+  }
+
+  const cookies = req.cookies;
+  const accessTokenEtls = cookies.get("accessTokenEtls")?.value;
+  const refreshTokenEtls = cookies.get("refreshTokenEtls")?.value;
+
+  // Якщо немає токенів → редірект на /login
+  if (!accessTokenEtls && !refreshTokenEtls) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  // Перевіряємо accessTokenEtls
+  try {
+    jwt.verify(accessTokenEtls, ETLS_ACCESS);
+    return NextResponse.next();
+  } catch (error) {
+    console.warn("accessTokenEtls invalid, checking refreshTokenEtls...");
+  }
+
+  // Перевіряємо refreshTokenEtls
+  try {
+    jwt.verify(refreshTokenEtls, ETLS_REFRESH);
+
+    // Викликаємо `/api/auth/refreshtoken` для отримання нових токенів
+    const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: req.headers.get("cookie") || "",
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      throw new Error("Failed to refresh tokens");
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error("refreshTokenEtls invalid:", error);
+
+    // Очистка всіх cookies і редірект на /login
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  }
+}
+
+// 🔹 Вказуємо, для яких сторінок застосовувати middleware (виключаємо `/login`)
+export const config = {
+  matcher: ["/((?!login).*)"], // Запускає middleware для всіх сторінок, крім /login
+};
+```
+
+---
+
+## ✅ **📌 Пояснення змін**
+### 🔹 **1. Додаємо перевірку `pathname.startsWith("/login")`**
+Це дозволяє **ігнорувати** `middleware` для сторінки `/login`:
+```javascript
+if (pathname.startsWith("/login")) {
+  return NextResponse.next();
+}
+```
+Ця перевірка працює **на початку middleware**, що дозволяє одразу виходити без виконання решти коду.
+
+---
+
+### 🔹 **2. Використовуємо `matcher` для виключення `/login`**
+```javascript
+export const config = {
+  matcher: ["/((?!login).*)"], // Запускає middleware для всіх сторінок, крім /login
+};
+```
+🔹 **Як це працює?**  
+- `/((?!login).*)/` – це **регулярний вираз**, що означає:
+  - `.*` → застосовувати middleware для всіх маршрутів.
+  - `(?!login)` → **виключити будь-який шлях, що починається з `/login`**.
+
+🔹 **Приклади:**
+| URL | Виконується middleware? |
+|----------------------|------------------|
+| `/dashboard` | ✅ Так |
+| `/profile` | ✅ Так |
+| `/unit` | ✅ Так |
+| `/login` | ❌ Ні |
+| `/login/reset` | ❌ Ні |
+
+---
+
+## ✅ **📌 Де розмістити `middleware.js` у Next.js 15?**
+1. Якщо у проєкті є папка `src`, розміщуємо:
+   ```
+   /src/middleware.js
+   ```
+2. Якщо папки `src` немає, то файл має бути в корені:
+   ```
+   /middleware.js
+   ```
+
+**📌 Важливо:** У Next.js 15 **не можна розміщувати middleware у папці `app`**, інакше він не працюватиме.
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Виключили сторінку `/login` з перевірки в `middleware.js`**.  
+✔ **Додали `matcher`, щоб middleware працював тільки на потрібних сторінках**.  
+✔ **Файл `middleware.js` має бути у `/src` або корені проєкту**.  
+
+🔹 **Тепер middleware не буде перевіряти `/login`, а працюватиме для всіх інших сторінок! 🚀**

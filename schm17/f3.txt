@@ -1,0 +1,124 @@
+Ось реалізація `customFetch(url, options)`, яка буде обробляти `accessToken` з `HTTP-only cookies`, автоматично оновлювати його при 401 помилці та повторювати запит.
+
+---
+
+## 🔹 **📌 1. Створюємо `/api/getdata.js` з `customFetch`**
+```javascript
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+import jwt from "jsonwebtoken";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    // Якщо немає accessToken – перевіряємо refreshToken
+    if (!accessToken) {
+      console.warn("No access token, attempting refresh...");
+      const refreshedTokens = await refreshAccessToken(refreshToken);
+      if (!refreshedTokens) return redirectToLogin();
+      accessToken = refreshedTokens.accessToken;
+    }
+
+    // Виконуємо запит з поточним accessToken
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    // Якщо accessToken невалідний (401), оновлюємо токени та повторюємо запит
+    if (response.status === 401) {
+      console.warn("Access token expired, refreshing...");
+
+      const refreshedTokens = await refreshAccessToken(refreshToken);
+      if (!refreshedTokens) return redirectToLogin();
+
+      // Повторний запит з новим accessToken
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${refreshedTokens.accessToken}`,
+        },
+      });
+
+      if (!response.ok) throw new Error(`Request failed after token refresh: ${response.statusText}`);
+    }
+
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    console.error("Error in customFetch:", error);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+
+// 🔹 Функція оновлення токенів
+async function refreshAccessToken(refreshToken) {
+  try {
+    if (!refreshToken) {
+      console.warn("No refresh token available");
+      return null;
+    }
+
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!refreshResponse.ok) {
+      console.error("Failed to refresh token");
+      return null;
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = await refreshResponse.json();
+
+    // Формуємо Set-Cookie заголовки
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return { accessToken, refreshToken: newRefreshToken };
+  } catch (error) {
+    console.error("Error refreshing tokens:", error);
+    return null;
+  }
+}
+
+// 🔹 Функція редіректу на логін
+function redirectToLogin() {
+  return NextResponse.redirect(new URL("/login", req.url), {
+    headers: {
+      "Set-Cookie": [
+        "accessToken=; HttpOnly; Path=/; Max-Age=0",
+        "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+```
+
+---
+
+## ✅ **📌 Що реалізовано?**
+✔ **Додає `accessToken` в `Authorization: Bearer ...`** перед кожним запитом.  
+✔ **Якщо `accessToken` повертає 401**, виконує запит `/refreshtoken` на `REMOTE_API`.  
+✔ **Якщо оновлення успішне, встановлює нові токени у `HTTP-only cookies`.**  
+✔ **Повторює початковий запит з новим `accessToken`.**  
+✔ **Якщо оновлення не вдалося, видаляє всі токени та перенаправляє користувача на `/login`.**  
+
+🔹 **Тепер Next.js API безпечно працює з зовнішнім API, оновлюючи токени автоматично! 🚀**

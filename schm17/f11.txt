@@ -1,0 +1,81 @@
+Ось код компонента **Loader**, який можна використовувати для анімації завантаження сторінки в Next.js. Він використовує **Material-UI** (`@mui/material`) і відображає круговий індикатор завантаження (**CircularProgress**).
+
+---
+
+### **📌 1. Встановлення Material-UI (якщо ще не встановлено)**
+Якщо ти ще не використовуєш `@mui/material`, спочатку встанови його:
+
+```sh
+npm install @mui/material @emotion/react @emotion/styled
+```
+
+---
+
+### **📌 2. Компонент `PageLoader.js` (Анімація завантаження)**
+```javascript
+import { Box, CircularProgress, Typography } from "@mui/material";
+
+const PageLoader = ({ text = "Loading..." }) => {
+  return (
+    <Box
+      sx={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(255, 255, 255, 0.8)",
+        zIndex: 9999,
+      }}
+    >
+      <Box display="flex" flexDirection="column" alignItems="center">
+        <CircularProgress size={60} thickness={5} />
+        <Typography variant="h6" mt={2}>
+          {text}
+        </Typography>
+      </Box>
+    </Box>
+  );
+};
+
+export default PageLoader;
+```
+
+---
+
+### **📌 3. Використання `PageLoader` на сторінках**
+Використовуй цей компонент у `useEffect`, щоб показувати його при завантаженні сторінки.
+
+```javascript
+import { useEffect, useState } from "react";
+import PageLoader from "../components/PageLoader"; // Шлях до компонента
+
+const Dashboard = () => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setTimeout(() => {
+      setLoading(false);
+    }, 2000); // Симуляція завантаження (замінити на реальні дані)
+  }, []);
+
+  if (loading) return <PageLoader text="Loading Dashboard..." />;
+
+  return <h1>Welcome to Dashboard</h1>;
+};
+
+export default Dashboard;
+```
+
+---
+
+### ✅ **📌 Що цей код робить?**
+✔ **Показує Material-UI `CircularProgress` + текст `Loading...`**.  
+✔ **Перекриває всю сторінку з білим прозорим фоном, щоб блокувати контент**.  
+✔ **Легко додається в будь-який компонент або сторінку**.  
+✔ **Можна передавати текст через `text` пропс** (наприклад, `Loading Dashboard...`).  
+
+🚀 **Тепер сторінки Next.js матимуть красиву анімацію завантаження!** 🔥

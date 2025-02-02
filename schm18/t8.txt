@@ -1,0 +1,101 @@
+### ✅ **Оновлений `AuthContext.js` з `jose` та коректним отриманням `userDataEtls`**
+Тобі потрібно **правильно отримувати `userDataEtls` з `HTTP-only cookies`**, а також **змінити `jsonwebtoken` на `jose`** для декодування токена.
+
+---
+
+## 🔹 **📌 Оновлений код `AuthContext.js`**
+```javascript
+"use client";
+
+import { createContext, useContext, useEffect, useState } from "react";
+import { jwtVerify } from "jose";
+
+const AuthContext = createContext();
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        // 🔹 Викликаємо API Next.js, щоб отримати `userDataEtls` із cookies
+        const res = await fetch("/api/auth/get-user", { credentials: "include" });
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+
+        const { userData } = await res.json();
+        setUser(userData);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  return <AuthContext.Provider value={{ user, setUser }}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+## 🔹 **📌 Створюємо `/api/auth/get-user.js`**
+Оскільки `document.cookie` **не дозволяє отримати `HttpOnly cookies`**, треба створити Next.js API-ендпоїнт `/api/auth/get-user`, який буде отримувати `userDataEtls` із cookies та декодувати його.
+
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+
+export async function GET() {
+  try {
+    const cookieStore = cookies();
+    const userDataEtls = cookieStore.get("userDataEtls")?.value;
+
+    if (!userDataEtls) {
+      return NextResponse.json({ error: "No user data available" }, { status: 401 });
+    }
+
+    // 🔹 Верифікація `userDataEtls` через `jose`
+    const { payload } = await jwtVerify(userDataEtls, ETLS_ACCESS);
+
+    return NextResponse.json({ userData: payload });
+  } catch (error) {
+    console.error("Error verifying userDataEtls:", error);
+    return NextResponse.json({ error: "Invalid user data" }, { status: 401 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що змінено та виправлено**
+| ❌ Було (Помилка) | ✅ Стало (Виправлено) |
+|------------------|------------------|
+| Використовували `jsonwebtoken` | Використовуємо `jose` (`jwtVerify`) |
+| `document.cookie` не може отримати `HttpOnly cookies` | Тепер отримуємо `userDataEtls` через Next.js API |
+| Верифікація `accessToken`, а не `userDataEtls` | Тепер використовуємо `userDataEtls` |
+
+---
+
+## ✅ **📌 Як тепер працює `AuthContext.js`?**
+1️⃣ **Компонент `AuthProvider` завантажується**  
+2️⃣ **Next.js API `/api/auth/get-user` отримує `userDataEtls` із cookies**  
+3️⃣ **Декодує `userDataEtls` через `jose`**  
+4️⃣ **Повертає `userData`, який зберігається у `AuthContext`**  
+5️⃣ **Дані користувача доступні в `useAuth()`**
+
+---
+
+## ✅ **📌 Висновок**
+✔ **Тепер `AuthContext.js` отримує `userDataEtls` коректно через Next.js API.**  
+✔ **Використовується `jose`, а не `jsonwebtoken`.**  
+✔ **Більше немає проблем із `document.cookie` і `HttpOnly cookies`.**  
+
+🚀 **Тепер контекст авторизації працює безпечно та стабільно! 🔥**

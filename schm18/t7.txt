@@ -1,0 +1,107 @@
+### ✅ **📌 Чи можна оновлювати `refreshToken` API при кожному оновленні `refreshTokenEtls`?**
+Так, можна зробити так, щоб **при кожному оновленні `refreshTokenEtls` на Next.js API** одночасно оновлювався **і `refreshToken` на сервері API (Node.js + Express)**. Це усуває необхідність перевіряти `refreshExpireIn`, але трохи збільшує кількість запитів.
+
+---
+
+## 🔹 **📌 Оновлений підхід: оновлення `refreshToken` при кожному оновленні `refreshTokenEtls`**
+### **Що змінюється?**
+- При кожному оновленні `accessTokenEtls` ми **завжди оновлюємо `refreshToken` на API**.
+- `refreshTokenEtls` тепер **оновлюється разом з `refreshToken` API**.
+- Це **гарантує синхронізацію** двох пар токенів.
+
+---
+
+## 🔹 **📌 Оновлений код `refreshresttokens.js`**
+```javascript
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+import { SignJWT, jwtVerify } from "jose";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 12 * 60 * 60; // 12 годин у секундах
+
+export async function POST(req) {
+  try {
+    const cookies = parse(req.headers.get("cookie") || "");
+    const refreshTokenEtls = cookies.refreshTokenEtls;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Верифікація `refreshTokenEtls`
+    const { payload } = await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+    // 🔹 Оновлення `accessToken` та `refreshToken` на API
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+    });
+
+    if (!refreshResponse.ok) {
+      return redirectToLogin();
+    }
+
+    const { accessToken, refreshToken: newRefreshToken, userData } = await refreshResponse.json();
+
+    // 🔹 Генеруємо `accessTokenEtls`
+    const newAccessTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Генеруємо `refreshTokenEtls` (завжди оновлюється разом із `refreshToken`)
+    const newRefreshTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    // 🔹 Генеруємо `userDataEtls`
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Формуємо відповідь з оновленими токенами
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${newRefreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Error refreshing tokens:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+
+---
+
+## 🔹 **📌 Що змінилося в цьому підході?**
+| 🔥 Що було | ✅ Що стало |
+|------------|------------|
+| **Перевіряли `refreshExpireIn` перед оновленням `refreshTokenEtls`** | `refreshTokenEtls` оновлюється **завжди разом з `refreshToken` API** |
+| `refreshTokenEtls` міг залишатися активним після закінчення `refreshToken` API | **Гарантована синхронізація** `refreshTokenEtls` та `refreshToken` API |
+| Були випадки, коли `refreshTokenEtls` ще діяв, а API вже видалило `refreshToken` | **Користувач ніколи не залишиться з "мертвим" токеном** |
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **При кожному оновленні `accessTokenEtls`, оновлюється і `refreshToken` API**.  
+✔ **`refreshTokenEtls` завжди синхронізується з `refreshToken` API, уникаючи розсинхрону**.  
+✔ **API та Next.js більше не мають відмінностей у термінах дії токенів**.  
+
+🚀 **Цей підхід гарантує синхронізацію токенів і виключає будь-які розсинхрони між серверами! 🔥**

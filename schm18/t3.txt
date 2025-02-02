@@ -1,0 +1,207 @@
+### ✅ **Відповіді на запитання про `customFetch` і рефакторинг Next.js API**
+
+---
+
+## 🔹 **📌 1. Що означає `refreshToken: newRefreshToken` у коді**
+```javascript
+const { accessToken, refreshToken: newRefreshToken } = await refreshResponse.json();
+```
+Це **деструктуризація об'єкта**, отриманого з JSON-відповіді API.
+
+📌 **Що тут відбувається?**  
+- `refreshResponse.json()` повертає об'єкт:
+  ```json
+  {
+    "accessToken": "abc123",
+    "refreshToken": "xyz456"
+  }
+  ```
+- `{ accessToken, refreshToken: newRefreshToken }`  
+  - `accessToken` залишається таким же.
+  - `refreshToken` перейменовується в `newRefreshToken`.
+
+📌 **Навіщо це потрібно?**
+- Якщо ти вже маєш змінну `refreshToken`, ти не можеш її перевизначити в цьому ж рядку.
+- **Тому `refreshToken` перейменовується в `newRefreshToken`**, щоб уникнути конфлікту змінних.
+
+---
+
+## 🔹 **📌 2. Аналіз логіки `customFetch`**
+Так, ти **правильно розумієш** логіку, але є один момент, де можна покращити.
+
+📌 **Огляд логіки:**
+1. Перевіряємо, чи є `accessToken` у cookies.
+   - ❌ **Помилка** – потрібно також перевіряти `refreshToken` в cookies, перш ніж робити оновлення.
+2. Якщо `accessToken` немає, намагаємось оновити через `refreshToken`.
+3. Виконуємо запит на `REMOTE_API`.
+4. Якщо отримуємо `401`, знову пробуємо оновити `accessToken` і повторити запит.
+5. Якщо `refreshToken` теж недійсний – виконуємо **logout** (очищаємо cookies).
+
+📌 **Що покращити?**
+- 🔹 **Перед першим оновленням перевіряти `refreshToken`**.  
+- 🔹 **Додати обробку випадку, коли `refreshToken` теж відсутній** → **відразу виконуємо logout**.
+
+---
+
+## 🔹 **📌 3. Додавання `userDataEtls` у `refreshAccessToken`**
+Тепер **при оновленні токенів ми ще оновлюємо `userDataEtls`**, зашифрувавши `userData` через `jose`.
+
+### ✅ **Оновлений `refreshAccessToken.js`**
+```javascript
+import { NextResponse } from "next/server";
+import { jwtVerify, SignJWT } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const cookies = parse(req.headers.get("cookie") || "");
+    const refreshTokenEtls = cookies.refreshTokenEtls;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // Перевіряємо refreshTokenEtls
+    const { payload } = await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+    // 🔹 Генеруємо нові токени
+    const newAccessTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    const newRefreshTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    // 🔹 Генеруємо `userDataEtls`
+    const userData = payload.userData || {}; // Додаємо userData, якщо є
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // Формуємо відповідь з новими токенами
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${newRefreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Failed to refresh tokens:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+✔ **Тепер ми оновлюємо `userDataEtls` разом із токенами.**  
+✔ **Це дозволить отримувати актуальні дані про користувача після кожного оновлення.**
+
+---
+
+## 🔹 **📌 4. Винесення `customFetch` у `api/rest/customfetch.js`**
+```javascript
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    if (!accessToken) {
+      if (!refreshToken) return redirectToLogin();
+      const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshedTokens.ok) return redirectToLogin();
+      const { accessToken } = await refreshedTokens.json();
+    }
+
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (response.status === 401) {
+      const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshedTokens.ok) return redirectToLogin();
+      const { accessToken } = await refreshedTokens.json();
+
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${accessToken}` },
+      });
+    }
+
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+```
+✔ **Цей API буде використовуватися як проксі між Next.js і стороннім API.**
+
+---
+
+## 🔹 **📌 5. Винесення `refreshAccessToken` у `api/rest/refreshresttokens.js`**
+Це ми вже реалізували у **пункті 3**.
+
+---
+
+## 🔹 **📌 6. Куди винести `redirectToLogin` у Next.js?**
+Функцію `redirectToLogin()` потрібно винести у `utils/auth.js`.
+
+📌 **Створюємо `utils/auth.js`**
+```javascript
+import { NextResponse } from "next/server";
+
+export function redirectToLogin() {
+  return NextResponse.redirect(new URL("/login", req.url), {
+    headers: {
+      "Set-Cookie": [
+        "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+```
+✔ **Тепер у всіх API можна просто імпортувати `redirectToLogin()`**.
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Оновлено `refreshresttokens` для оновлення `userDataEtls`**  
+✔ **`customFetch` тепер працює як Next.js API (`api/rest/customfetch.js`)**  
+✔ **Обробку редіректу винесено у `utils/auth.js`**  
+
+🚀 **Тепер твій Next.js API правильно проксірує сторонній API і працює ефективно! 🔥**

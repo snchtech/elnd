@@ -1,0 +1,89 @@
+### ✅ **📌 Винесення `fetchDepartments` у окремий утилітний файл `utils/api.js`**
+Щоб спростити код на сторінках і компонентах, винесемо функції для отримання `departments`, `units` тощо у файл `utils/api.js`.
+
+---
+
+## **🔹 1. Створюємо `utils/api.js`**
+У цьому файлі будуть зберігатися всі функції для отримання даних через Next.js API.
+
+```javascript
+export const fetchDepartments = async () => {
+  try {
+    const res = await fetch("/api/rest/fetchDepartments", {
+      method: "GET",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch departments");
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    return [];
+  }
+};
+
+export const fetchUnits = async () => {
+  try {
+    const res = await fetch("/api/rest/fetchUnits", {
+      method: "GET",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch units");
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching units:", error);
+    return [];
+  }
+};
+```
+✔ **Тепер всі функції для отримання даних знаходяться в одному місці (`utils/api.js`).**  
+✔ **Легко розширювати – просто додавай нові функції (`fetchUsers`, `fetchProjects` тощо).**
+
+---
+
+## **🔹 2. Використання `fetchDepartments` на сторінці**
+Тепер можна **імпортувати** функцію `fetchDepartments` у будь-якому компоненті:
+
+```javascript
+import { useEffect, useState } from "react";
+import { fetchDepartments } from "../utils/api"; // Імпортуємо функцію
+
+export default function DepartmentsPage() {
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    fetchDepartments().then(setDepartments);
+  }, []);
+
+  return (
+    <div>
+      <h1>Departments</h1>
+      <ul>
+        {departments.map((dep) => (
+          <li key={dep.id}>{dep.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+✔ **Код сторінки став чистішим – немає дублювання логіки запитів.**  
+✔ **Легко змінювати запити в `utils/api.js`, не змінюючи кожну сторінку окремо.**  
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Всі функції для запитів винесені в `utils/api.js`.**  
+✔ **Тепер можна легко імпортувати `fetchDepartments`, `fetchUnits` тощо.**  
+✔ **Структура Next.js API стала більш гнучкою і легко масштабованою.**  
+
+🚀 **Тепер додавати нові запити та працювати з API ще простіше! 🔥**

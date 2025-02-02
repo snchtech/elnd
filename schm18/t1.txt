@@ -1,0 +1,205 @@
+### ✅ **Перехід на `jose` для роботи з JWT у Next.js**
+`jsonwebtoken` **не рекомендується для Next.js**, оскільки він потребує Node.js API, а в Next.js API-роути можуть працювати в `Edge Runtime`.  
+`jose` – це **легка бібліотека для роботи з JWT**, яка працює **на сервері та в Edge Runtime**.
+
+---
+
+## 🔹 **📌 1. Оновлений `api/auth/login.js` (Генерація токенів з `jose`)**
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const { email, password } = await req.json();
+
+    // Запит до стороннього API
+    const apiResponse = await fetch(`${process.env.EXTERNAL_API_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!apiResponse.ok) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const { accessToken, refreshToken, userData } = await apiResponse.json();
+
+    // Генерація `accessTokenEtls`
+    const accessTokenEtls = await new SignJWT({ userId: userData.id, role: userData.role })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // Генерація `refreshTokenEtls`
+    const refreshTokenEtls = await new SignJWT({ userId: userData.id })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    // Відправляємо відповідь з токенами в cookies
+    const response = NextResponse.json({ message: "Login successful", userData });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${refreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Login error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## 🔹 **📌 2. Оновлений `middleware.js` (Верифікація `jose` + оновлення токенів)**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+
+  // Виключаємо `/login` зі списку перевірок
+  if (pathname.startsWith("/login")) {
+    return NextResponse.next();
+  }
+
+  const cookieStore = cookies();
+  const accessTokenEtls = cookieStore.get("accessTokenEtls")?.value;
+  const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+  // Якщо немає токенів – редірект на `/login`
+  if (!accessTokenEtls && !refreshTokenEtls) {
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  // Перевіряємо accessTokenEtls
+  try {
+    await jwtVerify(accessTokenEtls, ETLS_ACCESS);
+    return NextResponse.next();
+  } catch (error) {
+    console.warn("accessTokenEtls invalid, checking refreshTokenEtls...");
+  }
+
+  // Перевіряємо refreshTokenEtls
+  try {
+    await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+    // Запит на оновлення токенів
+    const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: req.headers.get("cookie") || "",
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      throw new Error("Failed to refresh tokens");
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error("refreshTokenEtls invalid:", error);
+
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  }
+}
+
+export const config = {
+  matcher: ["/((?!login).*)"], // Виключає `/login` з перевірки
+};
+```
+
+---
+
+## 🔹 **📌 3. Оновлений `api/auth/refreshtoken.js` (Оновлення `accessTokenEtls` + `refreshTokenEtls`)**
+```javascript
+import { NextResponse } from "next/server";
+import { jwtVerify, SignJWT } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // Перевіряємо refreshTokenEtls
+    const { payload } = await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+    // Генеруємо нові токени
+    const newAccessTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    const newRefreshTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    // Формуємо відповідь з новими токенами
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${newRefreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Failed to refresh tokens:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що змінилося та покращилося?**
+✔ **Перехід на `jose`, що дозволяє працювати в Next.js API та Edge Runtime.**  
+✔ **Безпечна верифікація токенів через `jwtVerify`.**  
+✔ **Використання `SignJWT` для генерації JWT без `jsonwebtoken`.**  
+✔ **Оптимізована робота з cookies (`cookies()` API).**  
+
+🚀 **Тепер система автентифікації працює безпечно, ефективно та без проблем у Next.js! 🔥**

@@ -1,0 +1,72 @@
+### ✅ **📌 Оновлений `refreshAccessToken` з оновленням `userDataEtls`**
+Цей код **оновлює `accessToken`, `refreshToken` і `userDataEtls`**, використовуючи **`jose`** для генерації `userDataEtls`.
+
+---
+
+### 🔹 **📌 Оновлений `refreshAccessToken`**
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function refreshAccessToken(refreshToken) {
+  try {
+    if (!refreshToken) {
+      console.warn("No refresh token available");
+      return null;
+    }
+
+    // 🔹 Запит на оновлення токенів у REMOTE_API
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!refreshResponse.ok) {
+      console.error("Failed to refresh token");
+      return null;
+    }
+
+    // 🔹 Отримуємо нові токени та userData з API
+    const { accessToken, refreshToken: newRefreshToken, userData } = await refreshResponse.json();
+
+    // 🔹 Генеруємо `userDataEtls` через `jose`
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Формуємо відповідь з оновленими токенами у `Set-Cookie`
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return { accessToken, refreshToken: newRefreshToken, userDataEtls };
+  } catch (error) {
+    console.error("Error refreshing tokens:", error);
+    return null;
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що виправлено та покращено**
+✔ **Тепер `userDataEtls` оновлюється разом із токенами**.  
+✔ **Використовуємо `jose` для кодування `userData` в `userDataEtls`**.  
+✔ **Безпечне оновлення через `Set-Cookie`**, щоб користувач завжди отримував актуальні дані.  
+✔ **Код оптимізовано для роботи через Next.js API та `REMOTE_API`.**  
+
+🚀 **Тепер при оновленні токенів автоматично оновлюється `userData` у сесії! 🔥**

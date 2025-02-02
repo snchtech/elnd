@@ -1,0 +1,95 @@
+### ✅ **📌 Як використовувати `customFetch` для отримання `departments` у Next.js**
+Оскільки ти використовуєш **Next.js API як proxy до стороннього API**, тепер можна робити запити на **`/api/rest/customfetch`**, передаючи `url` та `options`.
+
+---
+
+## **🔹 1. Використання `customFetch` у `getServerSideProps` (SSR)**
+Якщо ти хочеш отримати `departments` на серверній стороні (при кожному завантаженні сторінки), використовуй **`getServerSideProps`**:
+
+```javascript
+export async function getServerSideProps(context) {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/rest/customfetch`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Cookie: context.req.headers.cookie || "" },
+      body: JSON.stringify({ url: "/departments", options: { method: "GET" } }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch departments");
+    }
+
+    const data = await res.json();
+
+    return { props: { departments: data } };
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    return { props: { departments: [] } }; // Повертаємо пустий масив у разі помилки
+  }
+}
+```
+✔ **Тут `customFetch` викликається на сервері**, передаючи `Cookie` з авторизацією.  
+✔ **API `/api/rest/customfetch`** виконує запит на сторонній API `/departments`.  
+✔ **Якщо отримуємо помилку, повертаємо порожній масив `departments`**.  
+
+---
+
+## **🔹 2. Використання `customFetch` на клієнті (React `useEffect`)**
+Якщо ти хочеш отримувати `departments` **динамічно на фронтенді**, використовуй `useEffect`:
+
+```javascript
+import { useEffect, useState } from "react";
+
+const fetchDepartments = async () => {
+  try {
+    const res = await fetch("/api/rest/customfetch", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "/departments", options: { method: "GET" } }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch departments");
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    return [];
+  }
+};
+
+export default function DepartmentsPage() {
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    fetchDepartments().then(setDepartments);
+  }, []);
+
+  return (
+    <div>
+      <h1>Departments</h1>
+      <ul>
+        {departments.map((dep) => (
+          <li key={dep.id}>{dep.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+✔ **При завантаженні сторінки виконується запит через `customFetch` API.**  
+✔ **`credentials: "include"` дозволяє передавати `cookies` для авторизації.**  
+✔ **Дані рендеряться після отримання відповіді.**
+
+---
+
+## ✅ **📌 Підсумок**
+| Підхід | Використання |
+|--------|-------------|
+| **`getServerSideProps`** | Отримує `departments` перед рендерингом сторінки (SEO + SSR) |
+| **`useEffect` (Клієнтський запит)** | Динамічно отримує `departments` після завантаження сторінки |
+
+🚀 **Тепер ти можеш викликати `customFetch` на сторінках, безпосередньо звертаючись до `/api/rest/customfetch`! 🔥**

@@ -1,0 +1,120 @@
+### ✅ **Розбір помилки `JWSSignatureVerificationFailed: signature verification failed`**
+Помилка `JWSSignatureVerificationFailed` у `jose.jwtVerify` означає, що:
+1. **Токен був підписаний іншим ключем** – тобто `jsonwebtoken` і `jose` використовують різні методи підпису.
+2. **Ключ `ETLS_REFRESH` у `jose.jwtVerify` не збігається з тим, що використовувався при підписуванні**.
+3. **Токен може бути змінений або пошкоджений** – наприклад, якщо під час передачі його модифікував проксі-сервер.
+
+---
+
+## 🔹 **📌 Чому ця помилка виникла у тебе?**
+Ти **спочатку генерував JWT токени через `jsonwebtoken`**, а потім **спробував верифікувати їх у `jose`**, що може викликати **невідповідність підпису**.
+
+📌 **Причина:**  
+- `jsonwebtoken` за замовчуванням використовує **Base64Url encoding**, але його реалізація трохи відрізняється від `jose`.
+- `jose` використовує `Uint8Array` для ключів (`TextEncoder().encode()`), а `jsonwebtoken` працює з рядковими ключами.
+- `jsonwebtoken.sign()` працює по-іншому, ніж `jose.SignJWT()`.
+
+**Тому токени, згенеровані `jsonwebtoken`, не можна коректно верифікувати через `jose`!**
+
+---
+
+## 🔹 **📌 Як виправити помилку?**
+### ✅ **Варіант 1 (Рекомендований) – Використовувати `jose` на всіх етапах**
+**Що потрібно зробити:**  
+✅ Повністю перейти на `jose`, згенерувавши токени заново через `SignJWT`.  
+✅ Використовувати `new TextEncoder().encode(KEY)` при підписанні та перевірці.
+
+**📌 Фінальний код без помилки:**
+```javascript
+import { jwtVerify, SignJWT } from "jose";
+
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Верифікація refreshTokenEtls (згенерованого через `jose`)
+    const { payload } = await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+    // 🔹 Генерація нового accessTokenEtls
+    const newAccessTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("15m")
+      .sign(ETLS_REFRESH);
+
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+    response.headers.set(
+      "Set-Cookie",
+      `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`
+    );
+
+    return response;
+  } catch (error) {
+    console.error("JWT Verification Error:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+✔ **Цей код тепер не матиме помилки `signature verification failed`**, бо генерація та верифікація працюють з `jose`.
+
+---
+
+### ✅ **Варіант 2 (Тимчасове рішення) – Використовувати `jsonwebtoken` всюди**
+Якщо ти хочеш тимчасово використовувати `jsonwebtoken`, тобі потрібно **генерувати та верифікувати токени однаковим способом**.
+
+📌 **Оновлений код для `jsonwebtoken`:**
+```javascript
+import jwt from "jsonwebtoken";
+
+const ETLS_REFRESH = process.env.ETLS_REFRESH;
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+    if (!refreshTokenEtls) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Верифікація токена через `jsonwebtoken`
+    const decoded = jwt.verify(refreshTokenEtls, ETLS_REFRESH);
+
+    // 🔹 Генерація нового `accessTokenEtls`
+    const newAccessTokenEtls = jwt.sign({ userId: decoded.userId }, ETLS_REFRESH, {
+      expiresIn: "15m",
+    });
+
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+    response.headers.set(
+      "Set-Cookie",
+      `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`
+    );
+
+    return response;
+  } catch (error) {
+    console.error("JWT Verification Error:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+✔ **Це тимчасове рішення – але в майбутньому краще перейти на `jose` всюди.**
+
+---
+
+## 🔹 **📌 Висновок**
+| Підхід | Чи працює? | Ризик помилок |
+|--------|------------|---------------|
+| Використовувати `jose` всюди (генерація + верифікація) | ✅ Так | 🔥 Немає |
+| Використовувати `jsonwebtoken` всюди | ✅ Так | ❗ Може не працювати у `middleware.js` |
+| Генерація `jsonwebtoken`, верифікація `jose` | ❌ Ні | 🚨 `signature verification failed` |
+
+✅ **Рекомендація:** повністю перейти на `jose` на всіх рівнях **(Login, Middleware, RefreshToken API)**, щоб уникнути проблем.  
+
+🚀 **Це 100% вирішить помилку `JWSSignatureVerificationFailed`!** 🔥

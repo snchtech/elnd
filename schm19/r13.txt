@@ -1,0 +1,66 @@
+### ✅ **📌 Додаємо `logger` у `redirectToLogin`**
+Щоб **логувати події розлогінювання користувачів**, потрібно:
+1. **Логувати виклик `redirectToLogin()`**.
+2. **Якщо є `req`, логувати `user-agent` користувача**.
+3. **Якщо є `cookies`, логувати `userId` перед видаленням (якщо можливо).**  
+4. **Логувати помилки (якщо `req` не переданий)**.
+
+---
+
+## 🔹 **📌 Оновлений `redirectToLogin.js` з `logger`**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import logger from "@/utils/logger"; // 🔹 Імпортуємо логер
+
+export function redirectToLogin(req) {
+  try {
+    const cookieStore = cookies();
+    const userDataEtls = cookieStore.get("userDataEtls")?.value;
+
+    let userId = "Unknown";
+    if (userDataEtls) {
+      try {
+        const payload = JSON.parse(atob(userDataEtls.split(".")[1])); // Розшифровка `JWT payload`
+        userId = payload.userId || "Unknown";
+      } catch (error) {
+        logger.warn("Failed to decode userDataEtls token.");
+      }
+    }
+
+    logger.info(`Redirecting user (ID=${userId}) to /login`);
+
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  } catch (error) {
+    logger.error(`Error in redirectToLogin: ${error.message}`);
+    return NextResponse.redirect(new URL("/login", "/"));
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Що логуємо?** | **Приклад логу** |
+|----------------|----------------|
+| Користувач розлогінується | `[12.06.2024 12:15:21] INFO: Redirecting user (ID=42) to /login` |
+| Не вдалося розшифрувати `userDataEtls` | `[12.06.2024 12:15:22] WARN: Failed to decode userDataEtls token.` |
+| Виникла помилка | `[12.06.2024 12:15:23] ERROR: Error in redirectToLogin: TypeError: Cannot read properties of undefined (reading 'url')` |
+
+---
+
+## ✅ **📌 Підсумок**
+🔹 **Логування, якщо користувач розлогінується**.  
+🔹 **Логування `userId`, якщо він є у `userDataEtls`.**  
+🔹 **Логування `WARN`, якщо `userDataEtls` не розшифрувався.**  
+🔹 **Логування `ERROR`, якщо функція викликана некоректно.**  
+
+🚀 **Тепер `redirectToLogin` має потужну систему логування, що допомагає відстежувати всіх користувачів, яких викидає на сторінку логіну! 🔥**

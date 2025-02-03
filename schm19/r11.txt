@@ -1,0 +1,94 @@
+### ✅ **📌 Додаємо `logger` у `refreshresttokens.js`**
+Щоб **відстежувати оновлення токенів**, потрібно:
+1. **Логувати початок запиту (`refreshTokenEtls` отримано чи ні)**.
+2. **Логувати успішну верифікацію `refreshTokenEtls`**.
+3. **Логувати створення нових токенів (`userId`)**.
+4. **Логувати помилки (`401`, якщо токен невалідний, або інші винятки).**
+
+---
+
+## 🔹 **📌 Оновлений `refreshresttokens.js` з `logger`**
+```javascript
+import { NextResponse } from "next/server";
+import { jwtVerify, SignJWT } from "jose";
+import { cookies } from "next/headers";
+import logger from "@/utils/logger"; // 🔹 Імпортуємо логер
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+    if (!refreshTokenEtls) {
+      logger.warn("No refresh token provided, cannot refresh tokens."); // 🔹 Логуємо відсутність токена
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Верифікуємо refreshTokenEtls
+    let payload;
+    try {
+      ({ payload } = await jwtVerify(refreshTokenEtls, ETLS_REFRESH));
+      logger.info(`Refresh token verified for userId=${payload.userId}`); // 🔹 Логуємо успішну верифікацію
+    } catch (error) {
+      logger.error(`Invalid refresh token: ${error.message}`); // 🔹 Логуємо невдалу верифікацію
+      return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+    }
+
+    // 🔹 Генеруємо нові токени
+    const newAccessTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    const newRefreshTokenEtls = await new SignJWT({ userId: payload.userId })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    logger.info(`New tokens generated for userId=${payload.userId}`); // 🔹 Логуємо генерацію нових токенів
+
+    // 🔹 Формуємо відповідь з новими токенами
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessTokenEtls=${newAccessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${newRefreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    logger.error(`Failed to refresh tokens: ${error.message}`); // 🔹 Логуємо загальні помилки
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Що логуємо?** | **Приклад логу** |
+|----------------|----------------|
+| Початок оновлення токенів | `[12.06.2024 12:15:21] INFO: Refresh token verified for userId=42` |
+| Відсутній `refreshTokenEtls` | `[12.06.2024 12:15:22] WARN: No refresh token provided, cannot refresh tokens.` |
+| Невдала верифікація | `[12.06.2024 12:15:23] ERROR: Invalid refresh token: JWT expired` |
+| Генерація нових токенів | `[12.06.2024 12:15:24] INFO: New tokens generated for userId=42` |
+| Помилка сервера | `[12.06.2024 12:15:25] ERROR: Failed to refresh tokens: TypeError: Cannot read property 'userId' of undefined` |
+
+---
+
+## ✅ **📌 Підсумок**
+🔹 **Додаємо детальне логування всього процесу оновлення токенів.**  
+🔹 **Якщо `refreshTokenEtls` не знайдено – логування відображає `WARN`.**  
+🔹 **Якщо токен невалідний – логування дає `ERROR`.**  
+🔹 **Якщо токени успішно оновлені – логування показує `INFO`.**  
+🔹 **Якщо є помилки – вони логуються разом із `userId`.**  
+
+🚀 **Тепер оновлення токенів має чітку систему логування, що допомагає відстежувати всі події! 🔥**

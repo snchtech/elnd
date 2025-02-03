@@ -1,0 +1,94 @@
+### ✅ **📌 Додаємо `logger` у `login.js` для логування автентифікації**
+Оновимо код, щоб:
+1. **Логувати початок логіну (`email` користувача, без пароля!)**.
+2. **Логувати успішний вхід (`userId` та `role`)**.
+3. **Логувати невдалий вхід (`401` для неправильного пароля)**.
+4. **Логувати помилки під час логіну**.
+
+---
+
+## 🔹 **📌 Оновлений `login.js` з `logger`**
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+import logger from "@/utils/logger"; // 🔹 Імпортуємо логер
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const { email, password } = await req.json();
+    logger.info(`Login attempt for email: ${email}`); // 🔹 Логуємо спробу входу
+
+    // 🔹 Запит до стороннього API
+    const apiResponse = await fetch(`${process.env.EXTERNAL_API_URL}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!apiResponse.ok) {
+      logger.warn(`Failed login attempt for email: ${email}`); // 🔹 Логуємо невдалий вхід
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const { accessToken, refreshToken, userData } = await apiResponse.json();
+
+    // 🔹 Генерація `accessTokenEtls`
+    const accessTokenEtls = await new SignJWT({ userId: userData.id, role: userData.role })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Генерація `refreshTokenEtls`
+    const refreshTokenEtls = await new SignJWT({ userId: userData.id })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    // 🔹 Логуємо успішний вхід
+    logger.info(`User logged in: ID=${userData.id}, Role=${userData.role}, Email=${email}`);
+
+    // 🔹 Відправляємо відповідь з токенами в cookies
+    const response = NextResponse.json({ message: "Login successful", userData });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${refreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    logger.error(`Login error for email ${req.email}: ${error.message}`); // 🔹 Логуємо помилки
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Що логуємо?** | **Приклад логу** |
+|----------------|----------------|
+| Початок входу | `[12.06.2024 12:15:21] INFO: Login attempt for email: user@example.com` |
+| Невдалий вхід | `[12.06.2024 12:15:22] WARN: Failed login attempt for email: user@example.com` |
+| Успішний вхід | `[12.06.2024 12:15:23] INFO: User logged in: ID=42, Role=admin, Email=user@example.com` |
+| Помилка | `[12.06.2024 12:15:25] ERROR: Login error for email user@example.com: TypeError: Failed to fetch` |
+
+---
+
+## ✅ **📌 Підсумок**
+🔹 **Логування допомагає бачити всі спроби входу в систему.**  
+🔹 **Якщо логін невдалий — видно, що пішло не так (невірний пароль чи помилка сервера).**  
+🔹 **Якщо логін успішний — видно `userId`, `role`, `email` користувача.**  
+🔹 **Тепер можна легко аналізувати логування входів і можливі атаки або помилки.**  
+
+🚀 **Тепер система логування для логіну працює ідеально! 🔥**

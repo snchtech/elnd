@@ -1,0 +1,103 @@
+### ✅ **📌 Додаємо `logger` у `refreshAccessToken.js`**
+Щоб **відстежувати оновлення токенів**, потрібно:
+1. **Логувати початок оновлення токенів (`refreshToken` передано чи ні)**.
+2. **Логувати результат запиту до `REMOTE_API`**.
+3. **Логувати успішне створення нових токенів (`userId`)**.
+4. **Логувати всі помилки** (якщо API недоступне, якщо токен невалідний тощо).
+
+---
+
+## 🔹 **📌 Оновлений `refreshAccessToken.js` з `logger`**
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+import logger from "@/utils/logger"; // 🔹 Імпортуємо логер
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function refreshAccessToken(refreshToken) {
+  try {
+    if (!refreshToken) {
+      logger.warn("No refresh token available, cannot refresh tokens.");
+      return null;
+    }
+
+    logger.info("Attempting to refresh access token...");
+
+    // 🔹 Запит на оновлення токенів у REMOTE_API
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!refreshResponse.ok) {
+      logger.error(`Failed to refresh token from API, Status: ${refreshResponse.status}`);
+      return null;
+    }
+
+    // 🔹 Отримуємо нові токени та userData з API
+    const { accessToken, refreshToken: newRefreshToken, userData } = await refreshResponse.json();
+
+    if (!accessToken || !newRefreshToken || !userData) {
+      logger.error("API returned invalid token data.");
+      return null;
+    }
+
+    // 🔹 Генеруємо `userDataEtls` через `jose`
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    logger.info(`New access token generated for userId=${userData.id}`);
+
+    // 🔹 Формуємо відповідь з оновленими токенами у `Set-Cookie`
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    logger.info(`Tokens successfully refreshed for userId=${userData.id}`);
+
+    return { accessToken, refreshToken: newRefreshToken, userDataEtls };
+  } catch (error) {
+    logger.error(`Error refreshing tokens: ${error.message}`);
+    return null;
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Що логуємо?** | **Приклад логу** |
+|----------------|----------------|
+| Початок оновлення токенів | `[12.06.2024 12:15:21] INFO: Attempting to refresh access token...` |
+| Відсутній `refreshToken` | `[12.06.2024 12:15:22] WARN: No refresh token available, cannot refresh tokens.` |
+| Невдале оновлення (`401` або інший статус) | `[12.06.2024 12:15:23] ERROR: Failed to refresh token from API, Status: 401` |
+| Некоректні дані від API | `[12.06.2024 12:15:24] ERROR: API returned invalid token data.` |
+| Успішне оновлення | `[12.06.2024 12:15:25] INFO: New access token generated for userId=42` |
+| Успішний запис у `cookies` | `[12.06.2024 12:15:26] INFO: Tokens successfully refreshed for userId=42` |
+| Помилка сервера | `[12.06.2024 12:15:27] ERROR: Error refreshing tokens: TypeError: Failed to fetch` |
+
+---
+
+## ✅ **📌 Підсумок**
+🔹 **Додаємо детальне логування процесу оновлення токенів.**  
+🔹 **Якщо `refreshToken` відсутній — `WARN`-лог.**  
+🔹 **Якщо API повертає помилку — `ERROR`-лог з `status`.**  
+🔹 **Якщо `userData` не валідний — `ERROR`-лог.**  
+🔹 **Якщо все успішно — логуються `userId` і запис у `cookies`.**  
+
+🚀 **Тепер оновлення токенів на Next.js має потужну систему логування, що спрощує налагодження та моніторинг! 🔥**

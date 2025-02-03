@@ -1,0 +1,164 @@
+### ✅ **📌 Як правильно передавати `cookies` з Next.js API до стороннього API (Node.js + Express)?**
+Ти хочеш **правильно передавати cookies від Next.js API до стороннього API**, а потім **отримати оновлені токени в відповідь і передати їх назад клієнту**.
+
+---
+
+## 🔹 **📌 Проблеми в твоєму коді**
+### **1. `parse(req.header.cookie)` – помилка**
+- `req.headers.cookie` містить `cookies` у вигляді рядка, а `parse(req.headers.cookie)` повертає **об'єкт**.
+- **Однак `fetch` не може використовувати об'єкт у `headers.Cookie` – йому потрібен рядок.**
+- **❌ ПОМИЛКА:** `TypeError: Cannot convert object to primitive value`.
+
+### **2. Як правильно отримати cookies на сервері Express**
+- `req.cookies` працює **тільки якщо cookies встановлюються браузером**.
+- **Коли cookies передаються в `headers.Cookie`, потрібно їх парсити вручну з `req.headers.cookie`**.
+
+---
+
+## 🔹 **📌 Як правильно передавати `cookies` від Next.js API до Node.js API**
+### ✅ **1. Next.js API (`refreshresttokens.js`)**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { SignJWT } from "jose";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв
+const EXPIRES_IN_REFRESH_ETLS = 12 * 60 * 60; // 12 год
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshToken = cookieStore.get("refreshToken")?.value;
+
+    if (!refreshToken) {
+      console.warn("No refresh token available");
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Передаємо cookies у заголовках до REMOTE_API
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `refreshToken=${refreshToken}`,
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      console.error("Failed to refresh token");
+      return NextResponse.json({ error: "Failed to refresh token" }, { status: 401 });
+    }
+
+    // 🔹 Отримуємо нові токени та `userData`
+    const { accessToken, refreshToken: newRefreshToken, userData } = await refreshResponse.json();
+
+    // 🔹 Генеруємо `userDataEtls` через `jose`
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Передаємо оновлені токени клієнту через `Set-Cookie`
+    const response = NextResponse.json({ message: "Tokens refreshed" });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    console.error("Error refreshing tokens:", error);
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+
+✔ **Тепер Next.js API правильно передає `refreshToken` в заголовках.**  
+✔ **Відповідь повертає нові токени і передає їх у `Set-Cookie`.**  
+
+---
+
+## ✅ **2. Node.js + Express API (`refreshtoken.js`)**
+```javascript
+import express from "express";
+import cookieParser from "cookie-parser";
+
+const app = express();
+app.use(express.json());
+app.use(cookieParser());
+
+app.post("/refreshtoken", async (req, res) => {
+  try {
+    // 🔹 Отримуємо cookies із заголовка
+    const cookieHeader = req.headers.cookie;
+    let refreshToken = "";
+
+    if (cookieHeader) {
+      const cookies = Object.fromEntries(
+        cookieHeader.split("; ").map((c) => c.split("="))
+      );
+      refreshToken = cookies.refreshToken;
+    }
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: "No refresh token provided" });
+    }
+
+    // 🔹 Верифікація refreshToken (тут має бути твоя логіка перевірки)
+    const isValid = true; // Симулюємо верифікацію
+    if (!isValid) {
+      return res.status(403).json({ error: "Invalid refresh token" });
+    }
+
+    // 🔹 Генеруємо нові токени
+    const newAccessToken = "newAccessToken123";
+    const newRefreshToken = "newRefreshToken456";
+    const userData = { id: 1, role: "admin" };
+
+    // 🔹 Встановлюємо нові токени в cookies
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+    });
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+    });
+
+    // 🔹 Повертаємо оновлені токени у відповідь
+    res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken, userData });
+  } catch (error) {
+    console.error("Error refreshing token:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.listen(3001, () => console.log("Auth API running on port 3001"));
+```
+
+✔ **Сервер Express тепер правильно читає `cookies` із заголовків.**  
+✔ **Оновлені токени передаються у `Set-Cookie` відповідь.**  
+✔ **Next.js API отримує нові токени і передає їх клієнту.**  
+
+---
+
+## ✅ **📌 Підсумок**
+| **Що потрібно зробити** | **Як це виправлено** |
+|------------------|------------------|
+| **Передавати `refreshToken` від Next.js API до Express API** | Використовуємо `headers.Cookie: refreshToken=${refreshToken}` |
+| **Отримувати `refreshToken` в Express API** | Парсимо `req.headers.cookie` |
+| **Передавати нові токени назад клієнту** | Використовуємо `res.cookie("accessToken", newAccessToken, {...})` |
+
+🚀 **Тепер Next.js API і Express API обмінюються `cookies` правильно! 🔥**

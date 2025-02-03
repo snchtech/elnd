@@ -1,0 +1,214 @@
+### ✅ **📌 Додаємо логування `username` та часу запиту у Next.js API**
+Оновимо систему логування, щоб:
+- **Логувати `username` із `cookies`** (`etlsUser` – це JWT токен, тому треба його розшифрувати за допомогою `jose`).
+- **Додавати час у форматі `DD.MM.YYYY HH:mm:ss`**.
+- **Додавати `username` у кожен лог запиту**.
+
+---
+
+## 🔹 **📌 Оновлений `logger.js`**
+📌 **Оновлюємо `utils/logger.js`**, додаємо формат часу `DD.MM.YYYY HH:mm:ss`.
+
+```javascript
+import { createLogger, format, transports } from "winston";
+
+// 🔹 Формат часу: 12.06.2024 12:15:21
+const timeFormat = () => {
+  const now = new Date();
+  return now.toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+};
+
+// 🔹 Форматування логів
+const logFormat = format.printf(({ level, message }) => `[${timeFormat()}] ${level.toUpperCase()}: ${message}`);
+
+const logger = createLogger({
+  level: "info",
+  format: format.combine(format.colorize(), logFormat),
+  transports: [
+    new transports.Console(),
+    new transports.File({ filename: "logs/requests.log", level: "info" }),
+    new transports.File({ filename: "logs/errors.log", level: "error" }),
+  ],
+});
+
+export default logger;
+```
+✔ **Логи тепер містять правильний формат часу `DD.MM.YYYY HH:mm:ss`.**  
+✔ **Всі запити логуються у `logs/requests.log`, а помилки в `logs/errors.log`.**
+
+---
+
+## 🔹 **📌 Оновлений `middleware.js`**
+📌 **Додаємо розшифровку `etlsUser` для отримання `username`**.
+
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+import logger from "@/utils/logger";
+
+const ETLS_SECRET = new TextEncoder().encode(process.env.ETLS_ACCESS);
+
+async function getUsernameFromToken(token) {
+  try {
+    const { payload } = await jwtVerify(token, ETLS_SECRET);
+    return payload.username || "Unknown User";
+  } catch (error) {
+    return "Unknown User";
+  }
+}
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const accessTokenEtls = cookieStore.get("accessTokenEtls")?.value;
+  const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+  const etlsUserToken = cookieStore.get("etlsUser")?.value;
+
+  const username = etlsUserToken ? await getUsernameFromToken(etlsUserToken) : "Unknown User";
+
+  // 🔹 Логування запиту з `username`
+  const logMessage = `${req.method} ${pathname} from ${username} [${req.headers.get("user-agent")}]`;
+  logger.info(logMessage);
+
+  // 🔹 Якщо користувач автентифікований і переходить на `/login`, робимо logout
+  if (pathname === "/login" && (accessTokenEtls || refreshTokenEtls)) {
+    logger.info(`${username} accessed /login → Logging out`);
+    return logoutUser(req);
+  }
+
+  return NextResponse.next();
+}
+
+function logoutUser(req) {
+  return NextResponse.redirect(new URL("/login", req.url), {
+    headers: {
+      "Set-Cookie": [
+        "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+        "etlsUser=; HttpOnly; Path=/; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+
+export const config = {
+  matcher: ["/login", "/dashboard", "/profile"],
+};
+```
+✔ **Логування тепер включає `username`, розшифрований із `etlsUser`.**  
+✔ **Якщо `etlsUser` недоступний або невалідний – вказується `"Unknown User"`.**  
+✔ **Логування містить `User-Agent` для додаткової аналітики.**  
+
+---
+
+## 🔹 **📌 Оновлення `customFetch.js`**
+📌 **Додаємо `username` у кожен лог запиту.**
+
+```javascript
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+import { jwtVerify } from "jose";
+import logger from "@/utils/logger";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_SECRET = new TextEncoder().encode(process.env.ETLS_ACCESS);
+
+async function getUsernameFromToken(token) {
+  try {
+    const { payload } = await jwtVerify(token, ETLS_SECRET);
+    return payload.username || "Unknown User";
+  } catch (error) {
+    return "Unknown User";
+  }
+}
+
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+    const etlsUserToken = cookies.etlsUser;
+
+    const username = etlsUserToken ? await getUsernameFromToken(etlsUserToken) : "Unknown User";
+
+    if (!accessToken) {
+      if (!refreshToken) {
+        logger.warn(`${username} → No access token and no refresh token → Redirecting to login`);
+        return redirectToLogin();
+      }
+
+      logger.info(`${username} → Access token missing → Refreshing tokens...`);
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) {
+        logger.error(`${username} → Failed to refresh tokens → Redirecting to login`);
+        return redirectToLogin();
+      }
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+      accessToken = newAccessToken;
+    }
+
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    logger.info(`${username} → API request: ${req.method} ${url} - Status: ${response.status}`);
+
+    if (response.status === 401) {
+      logger.warn(`${username} → Access token expired → Refreshing tokens...`);
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) {
+        logger.error(`${username} → Failed to refresh tokens after 401 → Redirecting to login`);
+        return redirectToLogin();
+      }
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+      accessToken = newAccessToken;
+
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${newAccessToken}` },
+      });
+
+      logger.info(`${username} → Retried API request: ${req.method} ${url} - Status: ${response.status}`);
+    }
+
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    logger.error(`Request failed: ${error.message}`);
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+```
+✔ **Логування всіх запитів тепер включає `username`!**  
+✔ **Якщо `etlsUser` не існує – використовується `"Unknown User"`.**  
+✔ **Всі запити, включаючи оновлення токенів, логуються разом із `username`.**  
+
+---
+
+## ✅ **📌 Підсумок**
+🔹 **Тепер кожен запит у Next.js API логує `username`, час та статус.**  
+🔹 **`etlsUser` розшифровується через `jose`, і його `username` додається в логи.**  
+🔹 **Логи в `requests.log` мають вигляд:**
+```
+[12.06.2024 12:15:21] INFO: GET /dashboard from adminUser [Mozilla/5.0]
+```
+🚀 **Твоя система логування тепер ще потужніша та зручніша для аналітики! 🔥**

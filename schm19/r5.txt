@@ -1,0 +1,80 @@
+### ✅ **📌 Як автоматично розлогінювати користувача, якщо він переходить на `/login`?**
+Тобі потрібно **перевіряти, чи користувач вже автентифікований, коли він заходить на сторінку `/login`**. Якщо так – **видалити його `cookies` (logout) та змусити ввійти заново**.
+
+---
+
+## 🔹 **📌 Оновлюємо `middleware.js`**
+Додаємо логіку перевірки, якщо користувач заходить на `/login`, і розлогінюємо його.
+
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+
+export function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const accessTokenEtls = cookieStore.get("accessTokenEtls")?.value;
+  const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+  // 🔹 Якщо користувач вже автентифікований і заходить на `/login`, робимо logout
+  if (pathname === "/login" && (accessTokenEtls || refreshTokenEtls)) {
+    return logoutUser(req);
+  }
+
+  return NextResponse.next();
+}
+
+function logoutUser(req) {
+  return NextResponse.redirect(new URL("/login", req.url), {
+    headers: {
+      "Set-Cookie": [
+        "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+
+// 🔹 Вказуємо, що middleware працює на всіх сторінках
+export const config = {
+  matcher: ["/login", "/dashboard", "/profile"], // Список сторінок для перевірки
+};
+```
+
+✔ **Якщо користувач заходить на `/login`, але ще автентифікований – він розлогінується.**  
+✔ **Користувач мусить ввести дані заново перед входом.**  
+✔ **Цей підхід працює без зайвих запитів на сервер!**
+
+---
+
+## 🔹 **📌 Використовуємо `redirectToLogin()` у Next.js API**
+Тепер ми можемо викликати `redirectToLogin()` у будь-якому API, якщо треба виконати logout.
+
+### **🛠 Оновлений `utils/auth.js`**
+```javascript
+import { NextResponse } from "next/server";
+
+export function redirectToLogin(req) {
+  return NextResponse.redirect(new URL("/login", req.url), {
+    headers: {
+      "Set-Cookie": [
+        "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+        "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+      ].join(", "),
+    },
+  });
+}
+```
+✔ **Тепер `redirectToLogin()` можна використовувати в будь-якому API або middleware.**  
+
+---
+
+## ✅ **📌 Як це працює?**
+1️⃣ **Користувач вже автентифікований і переходить на `/login`.**  
+2️⃣ **Middleware бачить, що у нього ще є `accessTokenEtls` або `refreshTokenEtls`.**  
+3️⃣ **Middleware викликає `logoutUser()`, який очищає `cookies` та перенаправляє на `/login`.**  
+4️⃣ **Користувач мусить ввести дані заново.**  
+
+🚀 **Ця система автоматично розлогінює користувача при поверненні на `/login`, змушуючи його авторизуватись знову! 🔥**

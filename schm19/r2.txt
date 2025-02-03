@@ -1,0 +1,157 @@
+### ✅ **📌 Як правильно передати оновлені токени з `refreshresttokens` до `customFetch` і оновити їх у cookies клієнта?**
+Тобі потрібно:
+1. **Оновити `cookies` у клієнта після оновлення токенів**.
+2. **Зчитати оновлені `accessToken` та `refreshToken` у `customFetch`**.
+3. **Вставити оновлені токени в `Set-Cookie`, щоб браузер їх отримав**.
+
+---
+
+## 🔹 **📌 Оновлений `refreshresttokens.js`**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { SignJWT } from "jose";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв
+const EXPIRES_IN_REFRESH_ETLS = 12 * 60 * 60; // 12 год
+
+export async function POST(req) {
+  try {
+    const cookieStore = cookies();
+    const refreshToken = cookieStore.get("refreshToken")?.value;
+
+    if (!refreshToken) {
+      return NextResponse.json({ error: "No refresh token provided" }, { status: 401 });
+    }
+
+    // 🔹 Виконуємо запит до стороннього API для оновлення токенів
+    const refreshResponse = await fetch(`${REMOTE_API}/refreshtoken`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `refreshToken=${refreshToken}`,
+      },
+    });
+
+    if (!refreshResponse.ok) {
+      return NextResponse.json({ error: "Failed to refresh token" }, { status: 401 });
+    }
+
+    // 🔹 Отримуємо нові токени
+    const { accessToken, refreshToken: newRefreshToken, userData } = await refreshResponse.json();
+
+    // 🔹 Генеруємо `userDataEtls`
+    const userDataEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    // 🔹 Формуємо відповідь із оновленими токенами у `Set-Cookie`
+    const response = NextResponse.json({ accessToken, refreshToken: newRefreshToken, userDataEtls });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    return NextResponse.json({ error: "Invalid refresh token" }, { status: 401 });
+  }
+}
+```
+✔ **Тепер `refreshresttokens` повертає нові токени у `Set-Cookie`.**  
+✔ **Також передає `accessToken` у `JSON`, щоб `customFetch` міг його використати.**  
+
+---
+
+## 🔹 **📌 Оновлений `customFetch.js`**
+```javascript
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    // 🔹 Якщо немає accessToken, спочатку пробуємо оновити токени
+    if (!accessToken) {
+      if (!refreshToken) return redirectToLogin();
+
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) return redirectToLogin();
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+      accessToken = newAccessToken;
+    }
+
+    // 🔹 Виконуємо початковий запит із отриманим токеном
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    // 🔹 Якщо отримали 401, пробуємо оновити токени і повторити запит
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) return redirectToLogin();
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${newAccessToken}` },
+      });
+    }
+
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Що виправлено та покращено**
+| ❌ Проблема | ✅ Виправлення |
+|------------|---------------|
+| `customFetch` не отримував нові токени | Тепер `customFetch` отримує `accessToken` у JSON-відповіді та використовує його |
+| `Set-Cookie` не оновлювався у клієнта | `refreshresttokens` тепер передає `Set-Cookie` у відповідь |
+| Не було способу передати оновлені токени клієнту | Відповідь API містить оновлені `accessToken`, `refreshToken` та `userDataEtls` |
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Коли `accessToken` закінчується, `customFetch` оновлює його через `refreshresttokens`**.  
+✔ **`refreshresttokens` передає оновлені токени через `Set-Cookie`, зберігаючи їх у браузері**.  
+✔ **`customFetch` отримує `accessToken` у `JSON-відповіді` і використовує його без зайвих запитів**.  
+
+🚀 **Тепер Next.js API та Express API працюють ідеально синхронізовано! 🔥**

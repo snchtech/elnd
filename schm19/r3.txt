@@ -1,0 +1,79 @@
+### ✅ **📌 Як `Set-Cookie` в `refreshresttokens.js` оновлює cookies, якщо запит спочатку йде до `customFetch`?**
+Твій випадок ускладнюється тим, що **користувач у браузері не робить запит напряму до `refreshresttokens`, а до `customFetch`**. Отже, оновлення `cookies` повинно пройти через `customFetch`.
+
+---
+
+## 🔹 **📌 Як це працює крок за кроком**
+### **1️⃣ Користувач робить запит до `customFetch`**
+```javascript
+const response = await fetch("/api/rest/customfetch", {
+  method: "POST",
+  credentials: "include", // Дозволяє браузеру передавати cookies
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ url: "/departments", options: { method: "GET" } }),
+});
+```
+✔ `credentials: "include"` дозволяє браузеру передавати **поточні `cookies`**.
+
+---
+
+### **2️⃣ `customFetch` бачить, що `accessToken` закінчився, і робить запит до `refreshresttokens`**
+```javascript
+const refreshResponse = await fetch("/api/rest/refreshresttokens", {
+  method: "POST",
+  credentials: "include", // Дозволяє отримати нові cookies
+  headers: { "Content-Type": "application/json" },
+});
+```
+✔ `credentials: "include"` **гарантує**, що **браузер отримає нові cookies** у відповіді.
+
+---
+
+### **3️⃣ `refreshresttokens.js` оновлює `Set-Cookie`**
+```javascript
+const response = NextResponse.json({ message: "Tokens refreshed" });
+
+response.headers.set(
+  "Set-Cookie",
+  [
+    `accessToken=${accessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+    `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+    `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+  ].join(", ")
+);
+
+return response;
+```
+✔ **Це відправляє нові `cookies` у відповідь, і браузер їх автоматично оновлює**.
+
+---
+
+### **4️⃣ `customFetch` отримує відповідь, і нові cookies вже в браузері**
+```javascript
+const refreshedTokens = await fetch("/api/rest/refreshresttokens", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+});
+
+if (!refreshedTokens.ok) return redirectToLogin();
+
+// 🔹 cookies вже оновилися в браузері, тому просто виконуємо новий запит
+response = await fetch(`${REMOTE_API}${url}`, {
+  ...options,
+  headers: { ...options.headers, Authorization: `Bearer ${accessToken}` },
+});
+```
+✔ **Тут немає потреби вручну передавати нові токени – браузер автоматично оновлює cookies.**  
+✔ **Тепер `customFetch` просто використовує оновлені cookies у кожному наступному запиті.**
+
+---
+
+## ✅ **📌 Висновок**
+1️⃣ **Користувач робить запит до `customFetch`.**  
+2️⃣ **Якщо `accessToken` недійсний, `customFetch` робить запит до `refreshresttokens`.**  
+3️⃣ **`refreshresttokens` встановлює нові `cookies` через `Set-Cookie`.**  
+4️⃣ **Браузер автоматично оновлює `cookies` після відповіді `refreshresttokens`.**  
+5️⃣ **Наступні запити `customFetch` автоматично використовують оновлені токени.**  
+
+🚀 **Ти зробив все правильно! `Set-Cookie` спрацює і оновить токени навіть через `customFetch`. 🔥**

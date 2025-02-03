@@ -1,0 +1,57 @@
+### ✅ **📌 Додаємо `logger` у `DepartmentsPage.js`**
+Щоб **логувати отримання `departments`**, потрібно:
+1. **Додати `logger` з `utils/logger.js`**.
+2. **Логувати `useEffect`, коли запит починається, завершується або повертає помилку**.
+3. **Логувати кількість отриманих `departments`**.
+
+---
+
+## 🔹 **📌 Оновлений `DepartmentsPage.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { fetchDepartments } from "@/utils/api";
+import logger from "@/utils/logger"; // 🔹 Імпортуємо логер
+
+export default function DepartmentsPage() {
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        logger.info("Fetching departments..."); // 🔹 Логування початку запиту
+
+        const data = await fetchDepartments();
+
+        setDepartments(data);
+        logger.info(`Fetched ${data.length} departments successfully.`); // 🔹 Логування успіху
+      } catch (error) {
+        logger.error("Error fetching departments:", error); // 🔹 Логування помилки
+      }
+    };
+
+    loadDepartments();
+  }, []);
+
+  return (
+    <div>
+      <h1>Departments</h1>
+      <ul>
+        {departments.map((dep) => (
+          <li key={dep.id}>{dep.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Що логуємо?** | **Приклад логу** |
+|----------------|----------------|
+| Початок запиту | `[12.06.2024 12:15:21] INFO: Fetching departments...` |
+| Успішне отримання | `[12.06.2024 12:15:22] INFO: Fetched 10 departments successfully.` |
+| Помилку | `[12.06.2024 12:15:23] ERROR: Error fetching departments: TypeError: Failed to fetch` |
+
+🚀 **Тепер у тебе є повне логування всіх запитів до `departments`, що допоможе швидко виявляти проблеми та аналізувати роботу API! 🔥**

@@ -1,0 +1,166 @@
+Щоб винести помилки в окремий лог-файл, налаштуємо Winston так, щоб:
+1. **Логи загальних подій** записувалися у `logs/app.log`.
+2. **Логи помилок** записувалися у `logs/error.log`.
+3. **Логи автоматично видалялися після 14 днів**.
+4. **Максимальний розмір файлу логу був 5МБ**.
+
+---
+
+### 1️⃣ **Встановлення необхідного пакета**
+Winston підтримує обмеження розміру лог-файлів, але для автоматичного видалення старих файлів використовуємо додатковий пакет:
+```sh
+npm install winston-daily-rotate-file
+```
+
+---
+
+### 2️⃣ **Оновлення `utils/logger.js`**
+Створимо окремі файли для загальних логів та логів помилок, а також налаштуємо обмеження розміру файлу та термін зберігання.
+
+#### 📁 `utils/logger.js`
+```javascript
+const { createLogger, format, transports } = require('winston');
+const { timestamp, printf, combine } = format;
+const path = require('path');
+const DailyRotateFile = require('winston-daily-rotate-file');
+
+// Формат логів
+const logFormat = printf(({ level, message, timestamp, username }) => {
+  return `[${timestamp}] [${level.toUpperCase()}]: ${message} (User: ${username || 'Unknown'})`;
+});
+
+// Створення логера
+const logger = createLogger({
+  level: 'info',
+  format: combine(
+    timestamp({ format: 'DD.MM.YYYY HH:mm:ss' }), // Формат дати та часу
+    logFormat
+  ),
+  transports: [
+    // Лог-файл для загальних подій
+    new DailyRotateFile({
+      filename: path.join(__dirname, '../logs/app-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '5m',      // Максимальний розмір файлу 5MB
+      maxFiles: '14d',    // Зберігати логи лише 14 днів
+      zippedArchive: true // Архівувати старі логи
+    }),
+
+    // Лог-файл для помилок
+    new DailyRotateFile({
+      filename: path.join(__dirname, '../logs/error-%DATE%.log'),
+      level: 'error',
+      datePattern: 'YYYY-MM-DD',
+      maxSize: '5m',
+      maxFiles: '14d',
+      zippedArchive: true
+    }),
+
+    // Вивід у консоль
+    new transports.Console()
+  ],
+});
+
+module.exports = logger;
+```
+
+---
+
+### 3️⃣ **Приклад використання в `controllers/authController.js`**
+Оновимо контролер, щоб записувати помилки у `error.log`, а успішні дії – у `app.log`.
+
+#### 📁 `controllers/authController.js`
+```javascript
+const { authenticateUser, checkUserRole } = require('../services/oracleService');
+const { generateToken } = require('../utils/jwtUtils');
+const logger = require('../utils/logger');
+
+// Логін через форму
+exports.login = async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const isAuthenticated = await authenticateUser(username, password);
+
+    if (!isAuthenticated) {
+      logger.warn(`Login failed for user: ${username}`);
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    const hasRole = await checkUserRole(username, 'schemeaccess');
+    if (!hasRole) {
+      logger.warn(`Access denied for user: ${username}`);
+      return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+    }
+
+    const token = generateToken({ username });
+
+    logger.info(`User ${username} logged in successfully`);
+    return res.status(200).json({ message: 'Login successful', token });
+  } catch (error) {
+    logger.error(`Login error for user: ${username} - ${error.message}`);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+```
+
+---
+
+### 4️⃣ **Приклад логування помилок у middleware**
+Оновимо middleware для перевірки токену, щоб записувати помилки у `error.log`.
+
+#### 📁 `middlewares/authMiddleware.js`
+```javascript
+const { verifyJWT } = require('../utils/jwtUtils');
+const logger = require('../utils/logger');
+
+exports.verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    logger.warn('Authentication attempt without token');
+    return res.status(401).json({ message: 'Authentication token is missing or invalid' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = verifyJWT(token);
+    req.user = decoded; // Додаємо користувача в req
+
+    logger.info(`Token verified for user: ${decoded.username}`);
+    next();
+  } catch (error) {
+    logger.error(`Invalid token provided - ${error.message}`);
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+```
+
+---
+
+### 📌 **Що ми реалізували?**
+✅ **Логи загальних подій** (`logs/app-YYYY-MM-DD.log`)  
+✅ **Логи помилок** (`logs/error-YYYY-MM-DD.log`)  
+✅ **Автоматичне видалення логів через 14 днів**  
+✅ **Архівація старих логів**  
+✅ **Обмеження файлу до 5MB**  
+
+---
+
+### 📌 **Приклад логів у `logs/app-2025-06-12.log`**
+```
+[12.06.2025 12:54:10] [INFO]: User admin logged in successfully (User: admin)
+[12.06.2025 12:55:05] [WARN]: Access denied for user: guest (User: guest)
+```
+
+### 📌 **Приклад логів у `logs/error-2025-06-12.log`**
+```
+[12.06.2025 12:54:30] [ERROR]: Login error for user: admin - Database connection failed (User: admin)
+[12.06.2025 12:55:10] [ERROR]: Invalid token provided - jwt expired (User: admin)
+```
+
+---
+
+### 🔥 **Тепер у тебе повноцінний логер для API!**
+Якщо є ще питання – питай! 🚀

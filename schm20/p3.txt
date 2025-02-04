@@ -1,0 +1,102 @@
+### ✅ **📌 Логіка для `/login` в `middleware.js`**  
+Щоб правильно обробляти `/login`, треба:  
+1. **Якщо `accessTokenEtls` валідний → редірект на `/` (користувач автентифікований).**  
+2. **Якщо `accessTokenEtls` недійсний, але `refreshTokenEtls` валідний → оновити `accessTokenEtls` через `/api/auth/refreshtoken`, а потім редірект на `/`.**  
+3. **Якщо `refreshTokenEtls` теж недійсний → очищаємо всі `cookies`, дозволяємо користувачеві залишитися на `/login`.**  
+
+---
+
+## 🔹 **📌 Оновлення `middleware.js` тільки для `/login`**  
+🔹 **Використовуємо `if (req.nextUrl.pathname === "/login")`** для обробки тільки `/login`.  
+🔹 **Додаємо перевірку обох токенів та логіку редіректу.**  
+
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
+import logger from "@/utils/logger";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+
+export async function middleware(req) {
+  if (req.nextUrl.pathname === "/login") {
+    const cookieStore = cookies();
+    const accessTokenEtls = cookieStore.get("accessTokenEtls")?.value;
+    const refreshTokenEtls = cookieStore.get("refreshTokenEtls")?.value;
+
+    // 🔹 Перевіряємо accessTokenEtls
+    if (accessTokenEtls) {
+      try {
+        await jwtVerify(accessTokenEtls, ETLS_ACCESS);
+        logger.info("User already authenticated via accessTokenEtls, redirecting to /");
+        return NextResponse.redirect(new URL("/", req.url));
+      } catch (error) {
+        logger.warn("accessTokenEtls expired or invalid, checking refreshTokenEtls...");
+      }
+    }
+
+    // 🔹 Якщо accessTokenEtls невалідний → перевіряємо refreshTokenEtls
+    if (refreshTokenEtls) {
+      try {
+        await jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+        logger.info("refreshTokenEtls is valid, requesting new accessTokenEtls...");
+
+        // 🔹 Виконуємо оновлення токенів через API
+        const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: req.headers.get("cookie") || "",
+          },
+        });
+
+        if (refreshResponse.ok) {
+          logger.info("Successfully refreshed tokens, redirecting to /");
+          return NextResponse.redirect(new URL("/", req.url));
+        } else {
+          logger.error("Failed to refresh tokens, user must log in again.");
+        }
+      } catch (error) {
+        logger.error(`Error refreshing tokens: ${error.message}`);
+      }
+    }
+
+    // 🔹 Якщо refreshTokenEtls теж недійсний → Очистка cookies
+    logger.warn("No valid tokens found, clearing cookies and staying on /login.");
+    return NextResponse.next({
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+          "etlsUser=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  }
+
+  return NextResponse.next(); // 🔹 Для інших сторінок обробка йде стандартно
+}
+```
+
+---
+
+## ✅ **📌 Що тут зроблено?**
+| **Сценарій** | **Що станеться?** |
+|-------------|----------------|
+| ✅ `accessTokenEtls` валідний | 🔹 Користувач автентифікований → редірект на `/` |
+| ❌ `accessTokenEtls` недійсний, але ✅ `refreshTokenEtls` валідний | 🔹 Виконується оновлення токенів → редірект на `/` |
+| ❌ Обидва токени недійсні | 🔹 Очищуємо `cookies`, залишаємо користувача на `/login` |
+
+---
+
+## ✅ **📌 Підсумок**
+✔ **Додаємо перевірку `accessTokenEtls` + `refreshTokenEtls` тільки для `/login`.**  
+✔ **Автоматично оновлюємо токени, якщо можливо.**  
+✔ **Розлогінюємо користувача, якщо обидва токени недійсні.**  
+✔ **Використовуємо `if (req.nextUrl.pathname === "/login")`, щоб не змінювати загальний `middleware.js`.**  
+
+🚀 **Тепер сторінка `/login` працює правильно та обробляє всі можливі сценарії! 🔥**

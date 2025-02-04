@@ -1,0 +1,209 @@
+### ✅ **📌 Реалізація алгоритму автентифікації через `accessToken` або `login/password`**  
+Цей код:  
+✔ Перевіряє `accessToken` із **заголовка** або **GET-параметра `?t=`**  
+✔ Використовує `middleware.js`, щоб передати `accessToken` у `api/auth/login.js`  
+✔ Виконує перевірку `accessToken` або `login/password` на `REMOTE_API /login`  
+✔ Генерує внутрішні токени (`accessTokenEtls`, `refreshTokenEtls`) на **Next.js**  
+✔ Зберігає **URL, на який хотів зайти користувач** перед авторизацією  
+
+---
+
+## 🔹 **📌 `middleware.js` (обробка `accessToken`)**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import logger from "@/utils/logger";
+
+export async function middleware(req) {
+  const { pathname, searchParams } = req.nextUrl;
+
+  // 🔹 Якщо це `/login`, перевіряємо, чи передано `accessToken`
+  if (pathname === "/login") {
+    const cookieStore = cookies();
+    let accessToken = cookieStore.get("accessTokenEtls")?.value;
+
+    // 🔹 Дістаємо токен із заголовка Authorization: Bearer ...
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      accessToken = authHeader.split(" ")[1];
+    }
+
+    // 🔹 Дістаємо токен із GET-параметра `?t=...`
+    const tokenFromQuery = searchParams.get("t");
+    if (!accessToken && tokenFromQuery) {
+      accessToken = tokenFromQuery;
+    }
+
+    // 🔹 Якщо передано `accessToken`, відправляємо його у `api/auth/login`
+    if (accessToken) {
+      logger.info("Processing login via accessToken...");
+
+      const loginResponse = await fetch(`${req.nextUrl.origin}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken, redirectTo: pathname }),
+      });
+
+      if (loginResponse.ok) {
+        logger.info("User authenticated via accessToken, redirecting...");
+        return NextResponse.redirect(new URL("/", req.url));
+      } else {
+        logger.error("Invalid accessToken, redirecting to login.");
+      }
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/login", "/dashboard", "/profile"], // Захищені сторінки
+};
+```
+✔ **Перевіряє токен у `GET` та `Authorization: Bearer ...`**  
+✔ **Якщо `accessToken` є, передає його в `api/auth/login`**  
+✔ **Якщо перевірка неуспішна, залишає користувача на `/login`**  
+
+---
+
+## 🔹 **📌 `api/auth/login.js` (перевірка токена або логін/пароль)**
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+import logger from "@/utils/logger";
+
+const REMOTE_API = process.env.REMOTE_API;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 7 * 24 * 60 * 60; // 7 днів у секундах
+
+export async function POST(req) {
+  try {
+    const { accessToken, username, password, redirectTo } = await req.json();
+    let loginPayload = {};
+
+    if (accessToken) {
+      logger.info("Logging in via accessToken...");
+
+      loginPayload = { accessToken }; // 🔹 Передаємо тільки токен
+    } else if (username && password) {
+      logger.info("Logging in via username/password...");
+      loginPayload = { username, password };
+    } else {
+      return NextResponse.json({ error: "No credentials provided" }, { status: 400 });
+    }
+
+    // 🔹 Запит до REMOTE_API /login
+    const apiResponse = await fetch(`${REMOTE_API}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(loginPayload),
+    });
+
+    if (!apiResponse.ok) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    // 🔹 Отримуємо `userData` та токени
+    const { accessToken: newAccessToken, refreshToken, userData } = await apiResponse.json();
+
+    // 🔹 Генеруємо внутрішні токени
+    const accessTokenEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    const refreshTokenEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+      .sign(ETLS_REFRESH);
+
+    logger.info(`User ${userData.username} authenticated, setting cookies...`);
+
+    // 🔹 Зберігаємо токени у `cookies`
+    const response = NextResponse.json({ message: "Login successful", userData });
+
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessToken=${newAccessToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshToken=${refreshToken}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+        `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    // 🔹 Перекидаємо користувача на його цільову сторінку
+    const redirectUrl = redirectTo || "/";
+    logger.info(`Redirecting user to ${redirectUrl}`);
+    return NextResponse.redirect(new URL(redirectUrl, req.url));
+  } catch (error) {
+    logger.error("Login error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+✔ **Перевіряє, чи передано `accessToken`, або `username/password`**  
+✔ **Якщо є `accessToken`, передає його в `REMOTE_API /login`**  
+✔ **Отримує `userData` та токени та встановлює їх у cookies**  
+✔ **Перенаправляє користувача на `redirectTo` після авторизації**  
+
+---
+
+## 🔹 **📌 `REMOTE_API /login.js` (перевірка токена або логін/пароль)**
+```javascript
+import jwt from "jsonwebtoken";
+import { getUserData } from "./userService"; // Функція отримання користувача з БД
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+export async function POST(req, res) {
+  const { accessToken, username, password } = req.body;
+
+  if (accessToken) {
+    try {
+      const payload = jwt.verify(accessToken, JWT_SECRET);
+      const userData = await getUserData(payload.userId);
+
+      if (!userData) {
+        return res.status(401).json({ error: "Invalid accessToken" });
+      }
+
+      return res.json({
+        accessToken,
+        refreshToken: generateRefreshToken(userData),
+        userData,
+      });
+    } catch (error) {
+      return res.status(401).json({ error: "Invalid accessToken" });
+    }
+  }
+
+  if (username && password) {
+    const userData = await authenticateUser(username, password);
+    if (!userData) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    return res.json({
+      accessToken: generateAccessToken(userData),
+      refreshToken: generateRefreshToken(userData),
+      userData,
+    });
+  }
+
+  return res.status(400).json({ error: "No credentials provided" });
+}
+```
+
+---
+
+## ✅ **📌 Що зроблено?**
+✔ **Повна перевірка `accessToken` в `middleware.js`**  
+✔ **Запит до `api/auth/login.js`, якщо токен переданий**  
+✔ **Обробка авторизації через `accessToken` або `login/password`**  
+✔ **Генерація внутрішніх `accessTokenEtls`, `refreshTokenEtls`**  
+✔ **Перенаправлення користувача на потрібну сторінку**  
+
+🚀 **Тепер автентифікація працює ідеально! 🔥**

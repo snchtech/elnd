@@ -1,0 +1,194 @@
+Ось як можна інтегрувати **Winston** і **Morgan** у твій API-сервер на **Node.js + Express**, щоб логувати запити та помилки з урахуванням імені користувача, дати та часу.
+
+---
+
+### 1️⃣ **Встановлення бібліотек**
+Встанови **winston** і **morgan** через `npm`:
+```sh
+npm install winston morgan
+```
+
+---
+
+### 2️⃣ **Налаштування Winston Logger**
+Створимо окремий файл для логера:  
+#### 📁 `utils/logger.js`
+```javascript
+const { createLogger, format, transports } = require('winston');
+const { timestamp, printf, combine } = format;
+const path = require('path');
+
+// Формат логу: [Дата Час] [Рівень]: Повідомлення (User: {username})
+const logFormat = printf(({ level, message, timestamp, username }) => {
+  return `[${timestamp}] [${level.toUpperCase()}]: ${message} (User: ${username || 'Unknown'})`;
+});
+
+const logger = createLogger({
+  level: 'info',
+  format: combine(
+    timestamp({ format: 'DD.MM.YYYY HH:mm:ss' }), // Формат дати та часу
+    logFormat
+  ),
+  transports: [
+    new transports.Console(), // Вивід у консоль
+    new transports.File({ filename: path.join(__dirname, '../logs/app.log') }) // Збереження в файл
+  ],
+});
+
+module.exports = logger;
+```
+
+---
+
+### 3️⃣ **Додавання Morgan для HTTP-запитів**
+Створимо middleware для логування запитів.
+
+#### 📁 `middlewares/loggerMiddleware.js`
+```javascript
+const morgan = require('morgan');
+const logger = require('../utils/logger');
+
+// Кастомний формат Morgan з ім'ям користувача, якщо є
+morgan.token('username', (req) => req.user ? req.user.username : 'Guest');
+
+const requestLogger = morgan(
+  ':method :url :status - :response-time ms (User: :username)',
+  {
+    stream: {
+      write: (message) => logger.info(message.trim())
+    }
+  }
+);
+
+module.exports = requestLogger;
+```
+
+---
+
+### 4️⃣ **Підключення логера до `server.js`**
+#### 📁 `server.js`
+```javascript
+const express = require('express');
+const requestLogger = require('./middlewares/loggerMiddleware');
+const authRoute = require('./routes/authRoute');
+
+const app = express();
+
+app.use(express.json());
+
+// Додаємо middleware для логування HTTP-запитів
+app.use(requestLogger);
+
+app.use('/api/auth', authRoute);
+
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+```
+
+---
+
+### 5️⃣ **Додавання логування у контролер**
+#### 📁 `controllers/authController.js`
+```javascript
+const { authenticateUser, checkUserRole } = require('../services/oracleService');
+const { generateToken } = require('../utils/jwtUtils');
+const logger = require('../utils/logger');
+
+// Логін через форму
+exports.login = async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const isAuthenticated = await authenticateUser(username, password);
+
+    if (!isAuthenticated) {
+      logger.warn(`Login failed for user: ${username}`);
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    const hasRole = await checkUserRole(username, 'schemeaccess');
+    if (!hasRole) {
+      logger.warn(`Access denied for user: ${username}`);
+      return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+    }
+
+    const token = generateToken({ username });
+
+    logger.info(`User ${username} logged in successfully`);
+    return res.status(200).json({ message: 'Login successful', token });
+  } catch (error) {
+    logger.error(`Login error for user: ${username} - ${error.message}`);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Логін через токен
+exports.tokenLogin = async (req, res) => {
+  const { username } = req.user; 
+
+  try {
+    const hasRole = await checkUserRole(username, 'schemeaccess');
+    if (!hasRole) {
+      logger.warn(`Token login denied for user: ${username}`);
+      return res.status(403).json({ message: 'Access denied. Missing role: schemeaccess' });
+    }
+
+    logger.info(`User ${username} authenticated successfully via token`);
+    return res.status(200).json({ message: 'Authenticated successfully' });
+  } catch (error) {
+    logger.error(`Token login error for user: ${username} - ${error.message}`);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+```
+
+---
+
+### 6️⃣ **Додавання логування у Middleware для токена**
+#### 📁 `middlewares/authMiddleware.js`
+```javascript
+const { verifyJWT } = require('../utils/jwtUtils');
+const logger = require('../utils/logger');
+
+exports.verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    logger.warn('Authentication attempt without token');
+    return res.status(401).json({ message: 'Authentication token is missing or invalid' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = verifyJWT(token);
+    req.user = decoded; // Додаємо користувача в req
+
+    logger.info(`Token verified for user: ${decoded.username}`);
+    next();
+  } catch (error) {
+    logger.warn(`Invalid token provided - ${error.message}`);
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+```
+
+---
+
+### 📌 **Що ми реалізували?**
+✅ **Winston** для логування помилок, авторизації, дій користувачів.  
+✅ **Morgan** для логування всіх HTTP-запитів (метод, URL, статус, час).  
+✅ **Інтеграція логування у middleware та контролери**.  
+✅ **Лог-файл** зберігається в `logs/app.log`.  
+
+Тепер у логах ти побачиш щось на зразок:
+```
+[12.06.2025 12:54:10] [INFO]: User admin logged in successfully (User: admin)
+[12.06.2025 12:54:15] [WARN]: Token login denied for user: guest (User: guest)
+[12.06.2025 12:54:20] [ERROR]: Login error for user: admin - Database connection failed (User: admin)
+```
+Якщо потрібно змінити формат або зберігати логи в окремих файлах, можемо налаштувати ще гнучкіше.
+
+Якщо є ще питання — питай! 🚀

@@ -1,0 +1,193 @@
+### ✅ **📌 Побудова системи ролей та доступу в Next.js + Oracle**
+Ця система підтримує:  
+✔ **Динамічні ролі** (Viewer, Editor, Administrator, Department-roles, наприклад `29`, `18`)  
+✔ **Користувач може мати кілька ролей**  
+✔ **Гнучке управління ролями через базу даних**  
+✔ **HOC (`withRoleAccess`) для захисту сторінок та окремих компонентів**  
+
+---
+
+## 🔹 **📌 1. Організація ролей у базі даних (Oracle)**
+### 🔹 **Структура бази даних**
+В Oracle створюємо три таблиці:
+```sql
+-- 🔹 Таблиця користувачів
+CREATE TABLE users (
+    id NUMBER PRIMARY KEY,
+    username VARCHAR2(100) UNIQUE NOT NULL
+);
+
+-- 🔹 Таблиця ролей
+CREATE TABLE roles (
+    id NUMBER PRIMARY KEY,
+    role_name VARCHAR2(100) UNIQUE NOT NULL
+);
+
+-- 🔹 Проміжна таблиця "користувач-роль"
+CREATE TABLE user_roles (
+    user_id NUMBER REFERENCES users(id) ON DELETE CASCADE,
+    role_id NUMBER REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+```
+✔ Один користувач може мати **кілька ролей**  
+✔ Роль може бути **глобальною** (Viewer, Editor, Administrator) або **прив’язаною до департаменту** (`29`, `18` тощо)  
+
+---
+
+### 🔹 **Приклад наповнення ролями**
+```sql
+INSERT INTO users (id, username) VALUES (1, 'user1');
+INSERT INTO users (id, username) VALUES (2, 'user2');
+
+INSERT INTO roles (id, role_name) VALUES (1, 'Viewer');
+INSERT INTO roles (id, role_name) VALUES (2, 'Editor');
+INSERT INTO roles (id, role_name) VALUES (3, 'Administrator');
+INSERT INTO roles (id, role_name) VALUES (4, '29'); -- Роль за департаментом
+INSERT INTO roles (id, role_name) VALUES (5, '18'); -- Роль за департаментом
+
+INSERT INTO user_roles (user_id, role_id) VALUES (1, 1); -- user1 -> Viewer
+INSERT INTO user_roles (user_id, role_id) VALUES (1, 4); -- user1 -> 29
+INSERT INTO user_roles (user_id, role_id) VALUES (2, 1); -- user2 -> Viewer
+INSERT INTO user_roles (user_id, role_id) VALUES (2, 2); -- user2 -> Editor
+INSERT INTO user_roles (user_id, role_id) VALUES (2, 5); -- user2 -> 18
+```
+
+---
+
+### 🔹 **Запит для отримання ролей користувача**
+```sql
+SELECT r.role_name
+FROM user_roles ur
+JOIN roles r ON ur.role_id = r.id
+WHERE ur.user_id = :userId;
+```
+✔ Повертає список ролей користувача (наприклад, `[Viewer, 29]` або `[Viewer, Editor, 18]`).
+
+---
+
+## 🔹 **📌 2. Як правильно працювати з ролями у Next.js**
+У Next.js при логіні **отримуємо список ролей** і зберігаємо їх у `userDataEtls` (JWT-токен у cookies).
+
+### 🔹 **Додавання ролей у `userDataEtls` під час логіну**
+Файл `api/auth/login.js`
+```javascript
+import { NextResponse } from "next/server";
+import { SignJWT } from "jose";
+
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const EXPIRES_IN_ACCESS_ETLS = 15 * 60; // 15 хв у секундах
+
+export async function POST(req) {
+  try {
+    const { username, password } = await req.json();
+
+    const apiResponse = await fetch(`${process.env.REMOTE_API}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!apiResponse.ok) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const { userId, roles } = await apiResponse.json(); // 🔹 Отримуємо список ролей
+
+    const userDataEtls = await new SignJWT({ userId, username, roles })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_ACCESS_ETLS)
+      .sign(ETLS_ACCESS);
+
+    const response = NextResponse.json({ message: "Login successful", roles });
+
+    response.headers.set(
+      "Set-Cookie",
+      `userDataEtls=${userDataEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`
+    );
+
+    return response;
+  } catch (error) {
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+✔ **При логіні зберігаємо список ролей користувача у `userDataEtls` (JWT у cookies)**  
+✔ **Ролі можна зчитувати на фронтенді або перевіряти у `middleware.js`**  
+
+---
+
+## 🔹 **📌 3. Реалізація HOC `withRoleAccess` у Next.js**
+Створимо HOC для **захисту сторінок і компонентів**.
+
+```javascript
+// 🔹 utils/withRoleAccess.js
+import { useAuth } from "@/context/AuthContext";
+
+export function withRoleAccess(WrappedComponent, allowedRoles = []) {
+  return function RoleProtectedComponent(props) {
+    const { user } = useAuth();
+
+    if (!user || !user.roles) {
+      return <p>Access Denied</p>;
+    }
+
+    const hasAccess = user.roles.some((role) => allowedRoles.includes(role));
+
+    if (!hasAccess) {
+      return <p>Access Denied</p>;
+    }
+
+    return <WrappedComponent {...props} />;
+  };
+}
+```
+✔ **Перевіряє, чи у користувача є потрібна роль**  
+✔ **Якщо ролі немає → показує "Access Denied"**  
+✔ **Можна використовувати для компонентів і сторінок**  
+
+---
+
+### 🔹 **📌 Використання HOC для захисту сторінок**
+```javascript
+// pages/admin.js
+import { withRoleAccess } from "@/utils/withRoleAccess";
+
+function AdminPage() {
+  return <h1>Welcome, Admin!</h1>;
+}
+
+export default withRoleAccess(AdminPage, ["Administrator"]);
+```
+✔ Сторінка `/admin` доступна тільки для `Administrator`.  
+
+---
+
+### 🔹 **📌 Використання HOC для окремого компонента**
+```javascript
+// components/DeleteButton.js
+import { withRoleAccess } from "@/utils/withRoleAccess";
+
+function DeleteButton() {
+  return <button>Delete</button>;
+}
+
+export default withRoleAccess(DeleteButton, ["Administrator", "Editor"]);
+```
+✔ **Кнопка "Delete" доступна лише `Administrator` та `Editor`**  
+
+---
+
+## ✅ **📌 Підсумок**
+| **Що зроблено?** | **Реалізація** |
+|------------------|------------------------------|
+| **Ролі у БД (Oracle)** | Таблиці `users`, `roles`, `user_roles` |
+| **Отримання ролей при логіні** | SQL-запит на `REMOTE_API` |
+| **Збереження ролей у `JWT` (cookies)** | `userDataEtls` у `cookies` |
+| **Перевірка ролей на фронтенді** | `useAuth().user.roles` |
+| **Захист сторінок та компонентів** | HOC `withRoleAccess` |
+
+🚀 **Тепер твоя система ролей готова до роботи!**  
+✔ Масштабована **(можна легко додати нові ролі)**  
+✔ Гнучка **(доступ на рівні сторінок та окремих компонентів)**  
+✔ Безпечна **(ролі зберігаються у cookies як JWT)**  

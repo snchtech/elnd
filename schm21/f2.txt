@@ -1,0 +1,70 @@
+Ось оновлена функція `logoutUser`, яка робить запит до стороннього API (`REMOTE_API/api/auth/logout`), а потім очищає cookies і перенаправляє користувача на `/login`.  
+
+---
+
+### ✅ **📌 Оновлений `logoutUser`**
+```javascript
+import { NextResponse } from "next/server";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+export async function logoutUser(req) {
+  try {
+    // 🔹 Виконуємо запит на `REMOTE_API/api/auth/logout`
+    const logoutResponse = await fetch(`${REMOTE_API}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: req.headers.get("cookie") || "",
+      },
+    });
+
+    if (!logoutResponse.ok) {
+      console.error("Failed to logout on remote API, proceeding with local logout.");
+    }
+
+    console.info("User logged out successfully, clearing cookies...");
+
+    // 🔹 Очищаємо cookies і робимо редірект на `/login`
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+          "etlsUser=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    // 🔹 У разі помилки все одно очищаємо cookies і робимо редірект
+    return NextResponse.redirect(new URL("/login", req.url), {
+      headers: {
+        "Set-Cookie": [
+          "accessTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "refreshTokenEtls=; HttpOnly; Path=/; Max-Age=0",
+          "userDataEtls=; HttpOnly; Path=/; Max-Age=0",
+          "etlsUser=; HttpOnly; Path=/; Max-Age=0",
+          "accessToken=; HttpOnly; Path=/; Max-Age=0",
+          "refreshToken=; HttpOnly; Path=/; Max-Age=0",
+        ].join(", "),
+      },
+    });
+  }
+}
+```
+
+---
+
+### ✅ **📌 Що тут зроблено?**
+1️⃣ **Робимо `POST`-запит на `REMOTE_API/api/auth/logout`**  
+2️⃣ **Якщо відповідь `ok`, очищаємо cookies і редіректимо на `/login`**  
+3️⃣ **Якщо відповідь `error`, все одно очищаємо cookies і редіректимо на `/login`**  
+4️⃣ **Обробляємо можливі помилки в `try/catch`, щоб уникнути збоїв у логіці**  
+
+🚀 **Тепер вихід з акаунту працює правильно та синхронізовано! 🔥**

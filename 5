@@ -1,0 +1,174 @@
+Щоб виконання коду продовжувалося після виконання запиту з черги (після того, як токен буде оновлений), тобі потрібно правильно організувати логіку, де:
+
+1. Запити ставляться в чергу, якщо токен оновлюється.
+2. Коли токен оновлено, всі запити з черги мають бути виконані.
+3. Після виконання запиту необхідно продовжити виконання коду далі.
+
+Для цього можна використати **Promise**, щоб забезпечити правильний порядок виконання запитів. Я покажу тобі, як це можна реалізувати, зокрема, як правильно обробити чергу запитів після оновлення токенів і як продовжити виконання коду після цього.
+
+### Оновлений код
+
+1. Ми додамо **Promise** в чергу.
+2. Як тільки токени оновлено, всі запити з черги будуть виконані.
+3. Після виконання всіх запитів можна продовжити виконання коду далі.
+
+### Приклад реалізації:
+
+```js
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+// Глобальні змінні для контролю одночасного оновлення токенів
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+// Функція для оновлення токенів
+const refreshTokens = async (req) => {
+  const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+  });
+
+  if (!refreshResponse.ok) return null;
+
+  const { accessToken: newAccessToken } = await refreshResponse.json();
+  return newAccessToken;
+};
+
+// Функція для обробки черги запитів
+const processRefreshQueue = (newAccessToken) => {
+  refreshSubscribers.forEach((callback) => callback(newAccessToken));
+  refreshSubscribers = [];
+};
+
+// Основна логіка для обробки запитів
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    // Якщо немає accessToken, спочатку пробуємо оновити токени
+    if (!accessToken) {
+      if (!refreshToken) return redirectToLogin();
+
+      // Якщо токен ще не оновлюється, починаємо оновлення
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newAccessToken = await refreshTokens(req);
+        
+        if (!newAccessToken) return redirectToLogin();
+
+        // Оновлюємо accessToken на сервері
+        accessToken = newAccessToken;
+
+        // Після того, як токен оновлений, обробляємо всі відкладені запити
+        processRefreshQueue(newAccessToken);
+        isRefreshing = false;
+      }
+
+      // Якщо токен вже оновлюється, ставимо запит у чергу
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          refreshSubscribers.push(async (newToken) => {
+            const response = await fetch(`${REMOTE_API}${url}`, {
+              ...options,
+              headers: {
+                ...options.headers,
+                Authorization: `Bearer ${newToken}`,
+              },
+            });
+
+            // Після того, як запит виконано, можна продовжити виконання
+            const clonedResponse = response.clone();
+            const jsonResponse = await clonedResponse.json();  // Використовуємо json() або інший метод для обробки відповіді
+
+            resolve(NextResponse.json(jsonResponse));  // Резолвимо Promise з результатом
+          });
+        });
+      }
+    }
+
+    // Виконуємо початковий запит із отриманим токеном
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    // Якщо отримали 401, пробуємо оновити токени і повторити запит
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) return redirectToLogin();
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+
+      // Повторюємо запит із новим токеном
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${newAccessToken}` },
+      });
+    }
+
+    // Якщо все успішно, відправляємо відповідь
+    const clonedResponse = response.clone();
+    const jsonResponse = await clonedResponse.json();
+
+    return NextResponse.json(jsonResponse);
+  } catch (error) {
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+```
+
+### Як це працює:
+
+1. **Запити в чергу**: Коли `isRefreshing` встановлений в `true` (тобто токен зараз оновлюється), інші запити ставляться в чергу через Promise:
+   ```js
+   if (isRefreshing) {
+     return new Promise((resolve) => {
+       refreshSubscribers.push(async (newToken) => {
+         // Виконання запиту з новим токеном
+         const response = await fetch(`${REMOTE_API}${url}`, {
+           ...options,
+           headers: {
+             ...options.headers,
+             Authorization: `Bearer ${newToken}`,
+           },
+         });
+
+         // Після виконання запиту
+         const clonedResponse = response.clone();
+         const jsonResponse = await clonedResponse.json();
+
+         resolve(NextResponse.json(jsonResponse));  // Резолвимо Promise
+       });
+     });
+   }
+   ```
+
+2. **Процес оновлення токенів**: Як тільки новий токен отримано, ми викликаємо `processRefreshQueue(newAccessToken)`, що викликає кожен запит, який чекає на новий токен:
+   ```js
+   const processRefreshQueue = (newAccessToken) => {
+     refreshSubscribers.forEach((callback) => callback(newAccessToken));  // Викликаємо всі функції в черзі
+     refreshSubscribers = [];  // Очищаємо чергу
+   };
+   ```
+
+3. **Продолження виконання**: Коли токен оновлено, і Promise, що чекає в черзі, отримує новий токен, він виконується і передає результат (в даному випадку, JSON-відповідь) через `resolve(NextResponse.json(jsonResponse))`. Це дає можливість продовжити виконання коду, обробити запит і повернути відповідь.
+
+### Висновок:
+
+Використовуючи чергу запитів і `resolve()` в Promise, ти можеш гарантувати, що після того, як токен оновлено, всі запити з черги виконуються, і код може продовжити виконання, повертаючи результат. Таким чином, твоя логіка працює асинхронно і чекає на успішне оновлення токенів, перш ніж виконати запити з черги.

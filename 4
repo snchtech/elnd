@@ -1,0 +1,130 @@
+Для того, щоб впровадити принцип одночасного оновлення токенів у твій код, можна внести зміни так, щоб лише один запит одночасно обробляв оновлення токенів, а інші чекали цього процесу. Це дозволяє уникнути паралельного оновлення токенів, яке може призвести до помилок синхронізації.
+
+Ось як можна реалізувати таку логіку:
+
+1. **Створимо глобальні змінні** для збереження статусу оновлення токенів і черги запитів, які чекають на новий токен.
+2. **Кожен запит** буде перевіряти, чи не відбувається оновлення токенів. Якщо оновлення вже виконується, запит ставиться в чергу на виконання, поки нові токени не будуть отримані.
+
+### Оновлений код:
+
+```js
+import { NextResponse } from "next/server";
+import { parse } from "cookie";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+// Глобальні змінні для контролю одночасного оновлення токенів
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+// Функція для оновлення токенів
+const refreshTokens = async (req) => {
+  const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+  });
+
+  if (!refreshResponse.ok) return null;
+
+  const { accessToken: newAccessToken } = await refreshResponse.json();
+  return newAccessToken;
+};
+
+// Функція для обробки черги запитів
+const processRefreshQueue = (newAccessToken) => {
+  refreshSubscribers.forEach((callback) => callback(newAccessToken));
+  refreshSubscribers = [];
+};
+
+// Основна логіка для обробки запитів
+export async function POST(req) {
+  try {
+    const { url, options } = await req.json();
+    const cookies = parse(req.headers.get("cookie") || "");
+
+    let accessToken = cookies.accessToken;
+    const refreshToken = cookies.refreshToken;
+
+    // Якщо немає accessToken, спочатку пробуємо оновити токени
+    if (!accessToken) {
+      if (!refreshToken) return redirectToLogin();
+
+      // Якщо токен ще не оновлюється, починаємо оновлення
+      if (!isRefreshing) {
+        isRefreshing = true;
+        const newAccessToken = await refreshTokens(req);
+        
+        if (!newAccessToken) return redirectToLogin();
+
+        // Оновлюємо accessToken на сервері
+        accessToken = newAccessToken;
+
+        // Після того, як токен оновлений, обробляємо всі відкладені запити
+        processRefreshQueue(newAccessToken);
+        isRefreshing = false;
+      }
+
+      // Якщо токен вже оновлюється, ставимо запит у чергу
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          refreshSubscribers.push(async (newToken) => {
+            const response = await fetch(`${REMOTE_API}${url}`, {
+              ...options,
+              headers: {
+                ...options.headers,
+                Authorization: `Bearer ${newToken}`,
+              },
+            });
+            resolve(response);
+          });
+        });
+      }
+    }
+
+    // Виконуємо початковий запит із отриманим токеном
+    let response = await fetch(`${REMOTE_API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    // Якщо отримали 401, пробуємо оновити токени і повторити запит
+    if (response.status === 401) {
+      const refreshResponse = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+      });
+
+      if (!refreshResponse.ok) return redirectToLogin();
+
+      const { accessToken: newAccessToken } = await refreshResponse.json();
+
+      response = await fetch(`${REMOTE_API}${url}`, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${newAccessToken}` },
+      });
+    }
+
+    return NextResponse.json(await response.json());
+  } catch (error) {
+    return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  }
+}
+```
+
+### Ключові моменти в коді:
+1. **`isRefreshing`** — перевіряє, чи вже відбувається процес оновлення токенів. Якщо так, то інші запити стають в чергу.
+2. **`refreshSubscribers`** — черга запитів, які чекають на новий токен.
+3. **`processRefreshQueue`** — після оновлення токенів обробляє всі запити, які чекали на оновлення токена.
+4. Якщо токен ще не існує, і він оновлюється, запити потрапляють у чергу, і лише після отримання нового токену вони виконуються з новим токеном.
+
+### Як це працює:
+- Коли відправляється запит без accessToken, система перевіряє, чи відбувається вже оновлення токену:
+  - Якщо **не відбувається**, токени оновлюються, і всі запити, які чекали на новий токен, обробляються після успішного оновлення.
+  - Якщо **оновлення вже відбувається**, нові запити ставляться в чергу і чекають завершення процесу оновлення.
+  
+Цей підхід дозволяє уникнути одночасного оновлення токенів, яке може призвести до помилок або несинхронізованих даних.

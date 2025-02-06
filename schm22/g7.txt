@@ -1,0 +1,182 @@
+## ✅ **📌 Як правильно працювати з `logger` у Next.js + Node.js**
+Щоб **правильно інтегрувати логування**, потрібно:
+1. **Розуміти, що і де логувати**
+2. **Дотримуватися структури логів (інфо, помилки, запити, події тощо)**
+3. **Логувати на сервері (API, Middleware, Background Jobs)**
+4. **Використовувати логгер у правильних місцях**
+
+---
+
+## ✅ **📌 1. Основні принципи логування**
+🔹 **Що логувати?**
+- **Інформацію про події** – дії користувача, процеси (наприклад, успішний логін, оновлення даних)
+- **Попередження** – потенційні проблеми (наприклад, "Токен скоро закінчиться")
+- **Помилки** – виняткові ситуації (`catch(error)` блоки)
+- **Запити API** – які дані прийшли, хто викликав запит
+- **Аутентифікацію** – успішні/невдалі входи, оновлення токенів
+- **Бекграунд-процеси** – крон-джоби, автоматичні оновлення
+
+---
+
+## ✅ **📌 2. Де ставити `logger`?**
+
+| **Де?** | **Що логувати?** | **Приклад** |
+|----------|-----------------|-------------|
+| **Middleware (`middleware.js`)** | Запити на захищені сторінки, редіректи, перевірку токенів | Логувати кожен запит (URL, метод, користувач) |
+| **API Routes (`/api/...`)** | Вхідні дані, помилки, респонси API | Логувати дані від клієнта та відповідь |
+| **Auth (Логін, токени)** | Вхід, вихід, поновлення токенів | Хто зайшов, помилки при верифікації токена |
+| **Background Jobs (cron, WebSockets)** | Фонові завдання, помилки | Автооновлення даних, помилки в бекграунді |
+
+---
+
+## ✅ **📌 3. Приклади використання `logger` у Next.js**
+
+### **📍 3.1 Логування у `middleware.js`**
+**Що тут відбувається?**
+1. Логування кожного запиту (`pathname`, `IP`, `UserAgent`)
+2. Отримання `etlsUser` із cookies і перевірка токена
+3. Логування успішної перевірки / помилки
+4. Якщо `accessTokenEtls` недійсний → логуємо `Unauthorized` і редіректимо на логін
+
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { logToFile } from "@/utils/logServerAction"; // 🔹 Логування у файли
+import { jwtVerify } from "jose";
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value;
+  const ip = req.headers.get("x-forwarded-for") || req.ip || "Unknown IP";
+  const userAgent = req.headers.get("user-agent") || "Unknown User-Agent";
+
+  try {
+    // 🔹 Логуємо вхідний запит
+    await logToFile("info", `Request: ${pathname}, IP: ${ip}, UA: ${userAgent}`, userToken);
+
+    // 🔹 Перевірка токена
+    if (userToken) {
+      const secretKey = new TextEncoder().encode(process.env.ETLS_ACCESS);
+      const { payload } = await jwtVerify(userToken, secretKey);
+      await logToFile("info", `Authenticated user: ${payload.username}`, userToken);
+    } else {
+      await logToFile("warn", `Unauthorized access to ${pathname}`, userToken);
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    await logToFile("error", `Middleware error: ${error.message}`, userToken);
+    return NextResponse.error();
+  }
+}
+
+export const config = {
+  matcher: ["/dashboard", "/profile"], // Захищені сторінки
+};
+```
+
+---
+
+### **📍 3.2 Логування у `API` Next.js**
+**Що тут відбувається?**
+1. Логуємо **отримані дані** у `body`
+2. Логуємо **відповідь API** (успішну або помилку)
+3. Якщо помилка → записуємо `error` лог
+
+```javascript
+import { NextResponse } from "next/server";
+import { logToFile } from "@/utils/logServerAction";
+import { cookies } from "next/headers";
+
+export async function POST(req) {
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value;
+
+  try {
+    const body = await req.json();
+    await logToFile("info", `API Request: ${JSON.stringify(body)}`, userToken);
+
+    // 🔹 Ваш основний код обробки запиту
+    const responseData = { message: "Success" };
+
+    await logToFile("info", `API Response: ${JSON.stringify(responseData)}`, userToken);
+    return NextResponse.json(responseData);
+  } catch (error) {
+    await logToFile("error", `API error: ${error.message}`, userToken);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+### **📍 3.3 Логування помилок у `Auth API`**
+**Що тут відбувається?**
+1. Логуємо **спробу логіну**
+2. Логуємо **успішний логін**
+3. Логуємо **невдалий логін**
+4. Логуємо **оновлення токена** або помилку
+
+```javascript
+import { NextResponse } from "next/server";
+import { logToFile } from "@/utils/logServerAction";
+import { SignJWT } from "jose";
+
+export async function POST(req) {
+  try {
+    const { username, password } = await req.json();
+    await logToFile("info", `Login attempt: ${username}`);
+
+    // 🔹 Запит до `REMOTE_API`
+    const apiResponse = await fetch(`${process.env.REMOTE_API}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!apiResponse.ok) {
+      await logToFile("warn", `Login failed: ${username}`);
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    const { accessToken, refreshToken, userData } = await apiResponse.json();
+
+    // 🔹 Генеруємо внутрішній токен
+    const accessTokenEtls = await new SignJWT(userData)
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("15m")
+      .sign(new TextEncoder().encode(process.env.ETLS_ACCESS));
+
+    await logToFile("info", `Login successful: ${userData.username}`);
+
+    // 🔹 Відповідь + Cookies
+    const response = NextResponse.json({ message: "Login successful", userData });
+    response.headers.set(
+      "Set-Cookie",
+      [
+        `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Secure; SameSite=Strict`,
+      ].join(", ")
+    );
+
+    return response;
+  } catch (error) {
+    await logToFile("error", `Auth error: ${error.message}`);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Висновок**
+| **Що зроблено?** | **Де?** | **Що логувати?** |
+|------------------|--------|-----------------|
+| **Логування запитів та автентифікації** | `middleware.js` | `pathname`, `IP`, `UserAgent`, `Token` |
+| **Логування API-запитів** | `api/...` | Вхідні `body`, `response`, `error` |
+| **Логування логіну/реєстрації** | `api/auth/login` | `Username`, `Login status`, `Tokens` |
+| **Логування оновлення токенів** | `api/auth/refresh` | `Old Token`, `New Token`, `Expiration` |
+| **Розділення логів** | `logs/app-YYYY-MM-DD.log`, `logs/errors-YYYY-MM-DD.log` | Основні події / Помилки |
+
+🚀 **Тепер ти можеш легко інтегрувати `logger` у Next.js і бачити всі дії користувачів! 🔥**

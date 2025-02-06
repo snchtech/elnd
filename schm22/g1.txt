@@ -1,0 +1,154 @@
+### ✅ **📌 Оновлений `TopNavBar` з кнопкою Logout та відображенням логіна користувача**  
+🔹 **Додаємо кнопку `Logout`**  
+🔹 **Відображаємо логін користувача з `AuthContext`**  
+🔹 **Викликаємо `logoutUser` з `utils/auth.js` при натисканні**  
+
+---
+
+### ✅ **📌 Оновлений код `TopNavBar.js`**
+```javascript
+import Link from "next/link";
+import { useAuth } from "@/context/AuthContext"; // 🔹 Імпортуємо контекст авторизації
+import { logoutUser } from "@/utils/auth"; // 🔹 Функція виходу користувача
+
+const TopNavBar = () => {
+  const { user } = useAuth(); // 🔹 Отримуємо інформацію про користувача з контексту
+
+  const handleLogout = async () => {
+    await logoutUser(); // 🔹 Викликаємо функцію logout
+  };
+
+  return (
+    <div style={navBarStyle}>
+      {/* 🔹 Ліва частина навбару (меню) */}
+      <div style={menuStyle}>
+        <Link href="/" passHref>
+          <span style={menuItemStyle}>Main</span>
+        </Link>
+        <Link href="/schemes" passHref>
+          <span style={menuItemStyle}>Scheme Catalog</span>
+        </Link>
+        <Link href="/editor" passHref>
+          <span style={menuItemStyle}>Editor</span>
+        </Link>
+        <Link href="/create-scheme" passHref>
+          <span style={menuItemStyle}>Add New</span>
+        </Link>
+      </div>
+
+      {/* 🔹 Права частина навбару (логін користувача + Logout) */}
+      <div style={userInfoStyle}>
+        {user?.login && <span style={userNameStyle}>{user.login}</span>}
+        <button onClick={handleLogout} style={logoutButtonStyle}>Logout</button>
+      </div>
+    </div>
+  );
+};
+
+// 🔹 Стилі для навбару
+const navBarStyle = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "60px",
+  backgroundColor: "#333",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  padding: "0 20px",
+  boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)",
+  zIndex: 1000,
+};
+
+// 🔹 Стилі для меню
+const menuStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "20px",
+};
+
+// 🔹 Стилі для кожного пункту меню
+const menuItemStyle = {
+  color: "#fff",
+  textDecoration: "none",
+  fontSize: "16px",
+  fontWeight: "bold",
+  cursor: "pointer",
+  transition: "color 0.3s",
+};
+
+// 🔹 Стилі для блоку з логіном та кнопкою Logout
+const userInfoStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "15px",
+};
+
+// 🔹 Стилі для відображення імені користувача
+const userNameStyle = {
+  fontSize: "16px",
+  fontWeight: "bold",
+  color: "#fff",
+};
+
+// 🔹 Стилі для кнопки Logout
+const logoutButtonStyle = {
+  backgroundColor: "red",
+  color: "white",
+  border: "none",
+  padding: "8px 12px",
+  fontSize: "14px",
+  fontWeight: "bold",
+  cursor: "pointer",
+  borderRadius: "5px",
+  transition: "background-color 0.3s",
+};
+
+export default TopNavBar;
+```
+
+---
+
+### ✅ **📌 Що зроблено в коді?**
+✔ **Додає логін користувача (`user.login`) з `AuthContext`**  
+✔ **Додає кнопку `Logout` праворуч**  
+✔ **Викликає `logoutUser` з `utils/auth.js` при натисканні**  
+
+---
+
+### ✅ **📌 Додатково: Код `logoutUser` у `utils/auth.js`**
+Якщо `logoutUser` ще не реалізований, ось його код:
+```javascript
+import { NextResponse } from "next/server";
+
+const REMOTE_API = process.env.REMOTE_API;
+
+export async function logoutUser() {
+  try {
+    await fetch(`${REMOTE_API}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    window.location.href = "/login"; // 🔹 Перенаправлення на сторінку логіну
+  } catch (error) {
+    console.error("Logout error:", error);
+    window.location.href = "/login"; // 🔹 У разі помилки все одно перекидаємо на логін
+  }
+}
+```
+
+---
+
+### ✅ **📌 Підсумок**
+| **Що зроблено?** | **Реалізація** |
+|------------------|------------------------------|
+| **Відображення логіна користувача** | Отримується з `AuthContext` (`user.login`) |
+| **Додавання кнопки Logout** | Вправо, поруч із логіном |
+| **Обробка виходу** | Викликає `logoutUser` з `utils/auth.js` |
+| **Перенаправлення на логін після виходу** | `window.location.href = "/login"` |
+
+🚀 **Тепер `TopNavBar` відображає логін користувача та має кнопку Logout! 🔥**

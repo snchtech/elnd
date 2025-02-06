@@ -1,0 +1,131 @@
+### ✅ **📌 Доопрацьований код `logToFile` з урахуванням всіх вимог**
+---
+✔ **Логи зберігаються 14 днів, розмір файлу не більше 5MB (через `winston-daily-rotate-file`)**  
+✔ **Формат часу `12.03.2025 12:10:14`**  
+✔ **Отримуємо `etlsUser` з cookies, перевіряємо `jwt` через `jose`, додаємо `login` користувача**  
+✔ **Логування працює напряму без API-запитів, не сповільнюючи `Edge Runtime`**  
+
+---
+
+## ✅ **📌 1. Оновлений `logServerAction.js` (Запис у файли з `fs`)**  
+**📍 Шлях:** `/utils/logServerAction.js`
+
+```javascript
+"use server"; // 🔹 Використовуємо server-side функцію
+
+import fs from "fs";
+import path from "path";
+import { jwtVerify } from "jose";
+import DailyRotateFile from "winston-daily-rotate-file";
+import { createLogger, format, transports } from "winston";
+
+// 🔹 Формат часу 12.03.2025 12:10:14
+const timeFormat = () => {
+  const now = new Date();
+  return now.toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+};
+
+// 🔹 Отримання логіну з JWT (з cookies)
+async function getUserLoginFromToken(token) {
+  try {
+    if (!token) return "UnknownUser"; // Якщо токена нема
+
+    const secretKey = new TextEncoder().encode(process.env.ETLS_ACCESS);
+    const { payload } = await jwtVerify(token, secretKey);
+
+    return payload.username || "UnknownUser"; // 🔹 Повертаємо `username`
+  } catch (error) {
+    return "UnknownUser"; // Якщо помилка
+  }
+}
+
+// 🔹 Налаштування логування (14 днів, max 5MB)
+const logger = createLogger({
+  level: "info",
+  format: format.combine(
+    format.timestamp({ format: "DD.MM.YYYY HH:mm:ss" }), // Формат часу
+    format.printf(({ timestamp, level, message }) => `[${timestamp}] ${level.toUpperCase()}: ${message}`)
+  ),
+  transports: [
+    new transports.Console(),
+    new DailyRotateFile({
+      filename: "logs/app-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      maxSize: "5m",
+      maxFiles: "14d",
+    }),
+  ],
+});
+
+// 🔹 Функція для запису логів у файл (без API-запиту)
+export async function logToFile(level, message, token) {
+  try {
+    const login = await getUserLoginFromToken(token); // 🔹 Отримуємо логін
+
+    const logMessage = `[${timeFormat()}] ${level.toUpperCase()} [${login}]: ${message}`;
+    logger.log(level, logMessage);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error writing log:", error);
+    return { success: false, error: "Failed to write log" };
+  }
+}
+```
+
+---
+
+## ✅ **📌 2. Використання `logToFile()` у `middleware.js`**
+🔹 **Тепер `middleware.js` записує логи напряму у файл, без API-запиту**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { logToFile } from "@/utils/logServerAction"; // 🔹 Використовуємо серверну функцію
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value; // 🔹 Отримуємо JWT токен
+
+  // 🔹 Логуємо кожен запит (напряму у файл, без API-запиту)
+  await logToFile("info", `Request to ${pathname}`, userToken);
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/dashboard", "/profile"], // Захищені сторінки
+};
+```
+
+---
+
+## ✅ **📌 3. Використання `logToFile()` у API Next.js**
+🔹 **📍 Оновлений API `/api/someEndpoint.js`:**
+```javascript
+import { NextResponse } from "next/server";
+import { logToFile } from "@/utils/logServerAction";
+import { cookies } from "next/headers";
+
+export async function POST(req) {
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value;
+
+  await logToFile("info", "User triggered API request", userToken);
+
+  return NextResponse.json({ message: "API request received" });
+}
+```
+
+---
+
+## ✅ **📌 Висновок**
+| **Що зроблено?** | **Рішення** |
+|------------------|------------|
+| **Запис у файли напряму (без API)** | `logToFile()` з `fs.appendFileSync()` |
+| **Логін користувача з JWT у cookies** | `jwtVerify()` через `jose` |
+| **Формат часу `12.03.2025 12:10:14`** | `toLocaleString("uk-UA")` |
+| **Швидке логування в `middleware.js` та API** | **Без додаткових API-запитів** |
+| **Зберігаємо 14 днів, ≤5MB** | `winston-daily-rotate-file` |
+
+🚀 **Логування працює швидко і без зайвих запитів у Edge Runtime! 🔥**

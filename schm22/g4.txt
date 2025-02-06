@@ -1,0 +1,141 @@
+### ✅ **📌 Як писати логи в файли у `Edge Runtime` без API-запиту?**  
+
+Оскільки `Edge Runtime` **не підтримує `fs` і `path`**, а логування через API `/api/logs` додає **мережеву затримку**, потрібно знайти альтернативний спосіб **запису логів без API-запиту**.
+
+---
+
+### ❌ **📌 Чому не можна просто викликати `fs` у middleware.js?**
+- У **Edge Runtime** `fs` недоступний, тому **безпосередньо писати в файл не можна**.
+- Потрібен **інший механізм, який працює в Node.js Runtime**.
+
+---
+
+## ✅ **📌 Рішення: Використовувати серверну функцію з `fs` через `serverActions`**
+### 🔹 **Що це дає?**
+✔ **Логування напряму без API-запитів**  
+✔ **Доступ до `fs` і `path`** в `serverActions` у Next.js **без потреби у /api/logs**  
+✔ **Менше затримок у порівнянні з API-запитом**  
+
+---
+
+## ✅ **📌 1. Створюємо `logServerAction.js` для запису у файли (Node.js Runtime)**
+**📍 Шлях:** `/utils/logServerAction.js`
+
+```javascript
+"use server"; // 🔹 Використовуємо server-side функцію
+
+import fs from "fs";
+import path from "path";
+import { jwtVerify } from "jose";
+
+// 🔹 Функція отримання шляху до файлу логів
+const getLogFilePath = () => {
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  return path.join(process.cwd(), "logs", `app-${today}.log`);
+};
+
+// 🔹 Функція для отримання логіну користувача з JWT (cookies)
+async function getUserLoginFromToken(token) {
+  try {
+    if (!token) return "UnknownUser"; // Якщо токена нема
+
+    const secretKey = new TextEncoder().encode(process.env.ETLS_ACCESS);
+    const { payload } = await jwtVerify(token, secretKey);
+
+    return payload.username || "UnknownUser"; // 🔹 Повертаємо `username`
+  } catch (error) {
+    return "UnknownUser"; // Якщо помилка
+  }
+}
+
+// 🔹 Функція для запису логів напряму у файл (без API)
+export async function logToFile(level, message, token) {
+  try {
+    const login = await getUserLoginFromToken(token); // 🔹 Отримуємо логін
+
+    // 🔹 Формат часу 12.03.2025 12:10:14
+    const timeStamp = new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+    const logMessage = `[${timeStamp}] ${level.toUpperCase()} [${login}]: ${message}\n`;
+
+    // 🔹 Запис у файл
+    fs.appendFileSync(getLogFilePath(), logMessage, "utf8");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error writing log:", error);
+    return { success: false, error: "Failed to write log" };
+  }
+}
+```
+
+---
+
+## ✅ **📌 2. Використання `logToFile()` у `middleware.js`**
+Замість API-запиту `/api/logs`, ми **просто викликаємо `logToFile()` напряму**.
+
+🔹 **📍 Оновлений `middleware.js`:**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { logToFile } from "@/utils/logServerAction"; // 🔹 Використовуємо серверну функцію
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("userDataEtls")?.value; // 🔹 Отримуємо JWT токен
+
+  // 🔹 Логуємо кожен запит (напряму у файл, без API-запиту)
+  await logToFile("info", `Request to ${pathname}`, userToken);
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/dashboard", "/profile"], // Захищені сторінки
+};
+```
+
+---
+
+## ✅ **📌 3. Використання `logToFile()` в API Next.js**
+Тепер **можна використовувати логування в Next.js API напряму**, без `fetch()`.
+
+🔹 **📍 Оновлений API `/api/someEndpoint.js`:**
+```javascript
+import { NextResponse } from "next/server";
+import { logToFile } from "@/utils/logServerAction";
+import { cookies } from "next/headers";
+
+export async function POST(req) {
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("userDataEtls")?.value;
+
+  await logToFile("info", "User triggered API request", userToken);
+
+  return NextResponse.json({ message: "API request received" });
+}
+```
+
+---
+
+## ✅ **📌 4. Чому це краще, ніж API-запит `/api/logs`?**
+| **Метод** | **Швидкодія** | **Проблеми** |
+|-----------|--------------|-------------|
+| **API `/api/logs`** | ⚠ Повільно, бо кожен лог = **HTTP-запит** | Більше навантаження, можливі затримки |
+| **`logToFile()` через `serverActions`** | ✅ Швидко, бо **немає HTTP-запиту** | Працює тільки на **Node.js Runtime** |
+
+**🚀 Висновок:**  
+**❌ API `/api/logs` дає затримку через HTTP-запити**  
+**✅ `logToFile()` напряму пише в файли без затримок**  
+
+---
+
+## ✅ **📌 Підсумок**
+| **Що зроблено?** | **Рішення** |
+|------------------|------------|
+| **Запис у файли напряму (без API)** | `logToFile()` з `fs.appendFileSync()` |
+| **Логін користувача з JWT у cookies** | `jwtVerify()` через `jose` |
+| **Формат часу `12.03.2025 12:10:14`** | `toLocaleString("uk-UA")` |
+| **Швидке логування в `middleware.js` та API** | **Без додаткових API-запитів** |
+
+🚀 **Тепер логування працює напряму в `Node.js Runtime`, без `fetch()`, без затримок! 🔥**

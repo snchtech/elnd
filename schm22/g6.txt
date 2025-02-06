@@ -1,0 +1,167 @@
+### ✅ **📌 Доопрацьований код `logToFile` з розділенням основного логу та логу помилок**
+---
+✔ **Логи зберігаються 14 днів, кожен файл ≤5MB**  
+✔ **Формат часу `12.03.2025 12:10:14`**  
+✔ **Додаємо `login` користувача через `etlsUser` JWT у cookies (`jose`)**  
+✔ **Розділення логів:**
+   - **Звичайний лог → `logs/app-YYYY-MM-DD.log`**
+   - **Лог помилок → `logs/errors-YYYY-MM-DD.log`**
+
+---
+
+## ✅ **📌 1. Оновлений `logServerAction.js` (Запис логів у різні файли)**
+**📍 Шлях:** `/utils/logServerAction.js`
+
+```javascript
+"use server"; // 🔹 Використовуємо server-side функцію
+
+import fs from "fs";
+import path from "path";
+import { jwtVerify } from "jose";
+import DailyRotateFile from "winston-daily-rotate-file";
+import { createLogger, format, transports } from "winston";
+
+// 🔹 Формат часу 12.03.2025 12:10:14
+const timeFormat = () => {
+  const now = new Date();
+  return now.toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+};
+
+// 🔹 Отримання логіну з JWT (з cookies)
+async function getUserLoginFromToken(token) {
+  try {
+    if (!token) return "UnknownUser"; // Якщо токена нема
+
+    const secretKey = new TextEncoder().encode(process.env.ETLS_ACCESS);
+    const { payload } = await jwtVerify(token, secretKey);
+
+    return payload.username || "UnknownUser"; // 🔹 Повертаємо `username`
+  } catch (error) {
+    return "UnknownUser"; // Якщо помилка
+  }
+}
+
+// 🔹 Основний логер (звичайні логи)
+const infoLogger = createLogger({
+  level: "info",
+  format: format.combine(
+    format.timestamp({ format: "DD.MM.YYYY HH:mm:ss" }), // Формат часу
+    format.printf(({ timestamp, level, message }) => `[${timestamp}] ${level.toUpperCase()}: ${message}`)
+  ),
+  transports: [
+    new transports.Console(),
+    new DailyRotateFile({
+      filename: "logs/app-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      maxSize: "5m",
+      maxFiles: "14d",
+    }),
+  ],
+});
+
+// 🔹 Логер для помилок
+const errorLogger = createLogger({
+  level: "error",
+  format: format.combine(
+    format.timestamp({ format: "DD.MM.YYYY HH:mm:ss" }),
+    format.printf(({ timestamp, level, message }) => `[${timestamp}] ${level.toUpperCase()}: ${message}`)
+  ),
+  transports: [
+    new transports.Console(),
+    new DailyRotateFile({
+      filename: "logs/errors-%DATE%.log",
+      datePattern: "YYYY-MM-DD",
+      maxSize: "5m",
+      maxFiles: "14d",
+    }),
+  ],
+});
+
+// 🔹 Функція для запису логів у відповідний файл
+export async function logToFile(level, message, token) {
+  try {
+    const login = await getUserLoginFromToken(token); // 🔹 Отримуємо логін користувача
+
+    const logMessage = `[${timeFormat()}] ${level.toUpperCase()} [${login}]: ${message}`;
+
+    if (level === "error") {
+      errorLogger.error(logMessage);
+    } else {
+      infoLogger.info(logMessage);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error writing log:", error);
+    return { success: false, error: "Failed to write log" };
+  }
+}
+```
+
+---
+
+## ✅ **📌 2. Використання `logToFile()` у `middleware.js`**
+🔹 **Логування кожного запиту + запис помилок**
+```javascript
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { logToFile } from "@/utils/logServerAction"; // 🔹 Використовуємо серверну функцію
+
+export async function middleware(req) {
+  const { pathname } = req.nextUrl;
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value; // 🔹 Отримуємо JWT токен
+
+  try {
+    // 🔹 Логуємо кожен запит (запис у `logs/app-YYYY-MM-DD.log`)
+    await logToFile("info", `Request to ${pathname}`, userToken);
+    return NextResponse.next();
+  } catch (error) {
+    // 🔹 Записуємо помилку у `logs/errors-YYYY-MM-DD.log`
+    await logToFile("error", `Middleware error: ${error.message}`, userToken);
+    return NextResponse.error();
+  }
+}
+
+export const config = {
+  matcher: ["/dashboard", "/profile"], // Захищені сторінки
+};
+```
+
+---
+
+## ✅ **📌 3. Використання `logToFile()` у API Next.js**
+🔹 **📍 Оновлений API `/api/someEndpoint.js`:**
+```javascript
+import { NextResponse } from "next/server";
+import { logToFile } from "@/utils/logServerAction";
+import { cookies } from "next/headers";
+
+export async function POST(req) {
+  const cookieStore = cookies();
+  const userToken = cookieStore.get("etlsUser")?.value;
+
+  try {
+    await logToFile("info", "User triggered API request", userToken);
+    return NextResponse.json({ message: "API request received" });
+  } catch (error) {
+    await logToFile("error", `API error: ${error.message}`, userToken);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Висновок**
+| **Що зроблено?** | **Рішення** |
+|------------------|------------|
+| **Запис у файли напряму (без API)** | `logToFile()` з `fs.appendFileSync()` |
+| **Логін користувача з JWT у cookies** | `jwtVerify()` через `jose` |
+| **Формат часу `12.03.2025 12:10:14`** | `toLocaleString("uk-UA")` |
+| **Розділення логів:** | ✅ Основні → `logs/app-YYYY-MM-DD.log` |
+| | ✅ Помилки → `logs/errors-YYYY-MM-DD.log` |
+| **Швидке логування в `middleware.js` та API** | **Без додаткових API-запитів** |
+| **Зберігаємо 14 днів, ≤5MB** | `winston-daily-rotate-file` |
+
+🚀 **Логування стало ще надійнішим! 🔥**

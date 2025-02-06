@@ -1,0 +1,170 @@
+### ✅ **📌 Доопрацьований код логування з урахуванням всіх вимог**
+
+---
+
+### 🔹 **📌 Що змінено?**
+✔ **Зберігаємо логи 14 днів, не більше 5MB на файл (через `winston-daily-rotate-file`)**  
+✔ **Формат часу `12.03.2025 12:10:14` у кожному лог-записі**  
+✔ **Отримуємо `jwt token` з cookies, перевіряємо через `jose`, додаємо `login` у лог**  
+✔ **Аналіз швидкодії `/api/logs` у `Edge Runtime` та рекомендації**
+
+---
+
+## ✅ **📌 1. Оновлений `logger.js` (Логування у файли)**
+🔹 **Оновлюємо логер для Node.js Runtime**
+```javascript
+import { createLogger, format, transports } from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
+
+// 🔹 Формат часу 12.03.2025 12:10:14
+const timeFormat = () => {
+  const now = new Date();
+  return now.toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+};
+
+// 🔹 Форматування логів
+const logFormat = format.printf(({ level, message }) => `[${timeFormat()}] ${level.toUpperCase()}: ${message}`);
+
+// 🔹 Визначаємо, чи Next.js працює в Edge Runtime
+const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
+
+// 🔹 Налаштування збереження логів (14 днів, макс. 5MB)
+const fileTransport = new DailyRotateFile({
+  filename: "logs/app-%DATE%.log",
+  datePattern: "YYYY-MM-DD",
+  maxSize: "5m",
+  maxFiles: "14d",
+});
+
+// 🔹 Якщо це `Edge Runtime`, логи надсилаються у Next.js API `/api/logs`
+const logToApi = async (level, message) => {
+  try {
+    await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, message }),
+    });
+  } catch (error) {
+    console.error("Failed to send log to API:", error);
+  }
+};
+
+// 🔹 Логер для `Node.js Runtime`
+const nodeLogger = createLogger({
+  level: "info",
+  format: format.combine(format.colorize(), logFormat),
+  transports: [new transports.Console(), fileTransport],
+});
+
+// 🔹 Якщо Edge Runtime → Використовуємо API-запит, інакше пишемо через Winston
+const logger = {
+  info: (message) => (isEdgeRuntime ? logToApi("info", message) : nodeLogger.info(message)),
+  error: (message) => (isEdgeRuntime ? logToApi("error", message) : nodeLogger.error(message)),
+  warn: (message) => (isEdgeRuntime ? logToApi("warn", message) : nodeLogger.warn(message)),
+};
+
+export default logger;
+```
+
+---
+
+## ✅ **📌 2. Оновлений `api/logs.js` (Запис логів з Edge Runtime у файл)**  
+🔹 **Додаємо перевірку `jwt token` з cookies через `jose`, отримуємо `login`**  
+🔹 **Додаємо `login` у повідомлення логів**  
+🔹 **Записуємо у файли `logs/app-YYYY-MM-DD.log`**  
+
+**📍 Шлях: `/pages/api/logs.js`**
+```javascript
+import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+import { jwtVerify } from "jose";
+
+// 🔹 Шлях до лог-файлу (динамічно за датою)
+const getLogFilePath = () => {
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  return path.join(process.cwd(), "logs", `app-${today}.log`);
+};
+
+// 🔹 Функція для отримання логіну з cookies (JWT)
+async function getUserLoginFromCookies(req) {
+  try {
+    const cookies = req.headers.get("cookie") || "";
+    const match = cookies.match(/userDataEtls=([^;]+)/); // Отримуємо JWT токен
+
+    if (!match) return "UnknownUser"; // Якщо нема токена
+
+    const token = match[1];
+    const secretKey = new TextEncoder().encode(process.env.ETLS_ACCESS); // 🔹 Ключ з .env
+    const { payload } = await jwtVerify(token, secretKey);
+
+    return payload.username || "UnknownUser"; // 🔹 Повертаємо `username`
+  } catch (error) {
+    return "UnknownUser"; // Якщо помилка
+  }
+}
+
+// 🔹 API-ендпоінт для запису логів
+export async function POST(req) {
+  try {
+    const { level, message } = await req.json();
+    const login = await getUserLoginFromCookies(req); // 🔹 Отримуємо логін користувача
+
+    if (!level || !message) {
+      return NextResponse.json({ error: "Invalid log format" }, { status: 400 });
+    }
+
+    // 🔹 Формат часу 12.03.2025 12:10:14
+    const timeStamp = new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+    const logMessage = `[${timeStamp}] ${level.toUpperCase()} [${login}]: ${message}\n`;
+
+    // 🔹 Запис у файл
+    fs.appendFileSync(getLogFilePath(), logMessage, "utf8");
+
+    return NextResponse.json({ message: "Log saved" }, { status: 200 });
+  } catch (error) {
+    console.error("Error writing log:", error);
+    return NextResponse.json({ error: "Failed to write log" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 3. Чи варто використовувати `/api/logs` у `Edge Runtime`?**
+### 📌 **Проблеми логування через API у Edge Runtime**
+1. **Додатковий HTTP-запит для кожного логу**  
+   - Навантаження на сервер через велику кількість запитів.  
+   - Може **сповільнювати роботу** у високонавантажених додатках.  
+   - Якщо **логів багато** (наприклад, 100+ на секунду), це **недоцільно**.  
+   
+2. **Затримка між записом та обробкою**  
+   - API `/api/logs.js` працює **асинхронно**, тому логи записуються з невеликою затримкою.
+
+---
+
+### ✅ **📌 Коли API `/api/logs` варто використовувати?**
+✔ Якщо **треба логувати з `middleware.js` або frontend** (де `fs` недоступний).  
+✔ Якщо **логів мало** (наприклад, `10-20` запитів на хвилину).  
+
+---
+
+### ❌ **📌 Коли варто відмовитися від API `/api/logs`?**
+🔹 **Якщо треба зберігати багато логів** (наприклад, `100+` логів на секунду).  
+🔹 **Якщо сервер перевантажений** через API-запити.  
+🔹 **Якщо можна використати альтернативи**:
+   - Логування безпосередньо у `Cloud Logging` (наприклад, AWS CloudWatch, Google Cloud Logging).  
+   - Використання **віддаленого лог-сервера (ELK, Logstash, Fluentd, Loki).**  
+
+---
+
+## ✅ **📌 Висновок**
+| **Що зроблено?** | **Рішення** |
+|------------------|------------------------------|
+| **Логи зберігаються 14 днів** | Використано `winston-daily-rotate-file` |
+| **Файл логів ≤ 5MB** | Автоматично створюється новий файл |
+| **Додаємо час `12.03.2025 12:10:14`** | Форматуємо через `toLocaleString("uk-UA")` |
+| **Отримуємо `login` з JWT (cookies)** | Використано `jose.jwtVerify()` |
+| **Чи варто `/api/logs` у Edge Runtime?** | Використовувати **тільки якщо логів мало** |
+
+🚀 **Тепер твоя система логів працює оптимально і безпечно! 🔥**

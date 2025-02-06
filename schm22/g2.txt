@@ -1,0 +1,140 @@
+### ✅ **📌 Як зберігати логи у файлі у `Edge Runtime` в Next.js?**
+
+Оскільки **`Edge Runtime` не підтримує `fs` і `path`**, а `winston` для запису у файли використовує `fs`, **потрібно реалізувати альтернативний підхід для збереження логів**.
+
+---
+
+### 🔹 **📌 Рішення:**  
+1️⃣ **Логи у `Edge Runtime` → API-запит до Next.js API `/api/logs`**  
+2️⃣ **У Next.js API `/api/logs.js` → використовуємо `fs` для запису у файл (на сервері)**  
+3️⃣ **Для `Node.js Runtime` логи пишемо через `winston` безпосередньо**  
+
+---
+
+## ✅ **📌 1. Оновлюємо `logger.js` у `utils/logger.js`**
+Змінюємо логер так, щоб:  
+✔ **Якщо `Edge Runtime` → надсилає API-запит `/api/logs`**  
+✔ **Якщо `Node.js Runtime` → записує логи у файли через `winston`**
+
+```javascript
+import { createLogger, format, transports } from "winston";
+
+// 🔹 Формат часу: 12.06.2024 12:15:21
+const timeFormat = () => {
+  const now = new Date();
+  return now.toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+};
+
+// 🔹 Форматування логів
+const logFormat = format.printf(({ level, message }) => `[${timeFormat()}] ${level.toUpperCase()}: ${message}`);
+
+// 🔹 Визначаємо, чи Next.js працює в Edge Runtime
+const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
+
+// 🔹 Якщо це `Edge Runtime`, логи відправляються у Next.js API `/api/logs`
+const logToApi = async (level, message) => {
+  try {
+    await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ level, message }),
+    });
+  } catch (error) {
+    console.error("Failed to send log to API:", error);
+  }
+};
+
+// 🔹 Логер для `Node.js Runtime`
+const nodeLogger = createLogger({
+  level: "info",
+  format: format.combine(format.colorize(), logFormat),
+  transports: [
+    new transports.Console(),
+    new transports.File({ filename: "logs/requests.log", level: "info" }),
+    new transports.File({ filename: "logs/errors.log", level: "error" }),
+  ],
+});
+
+// 🔹 Якщо Edge Runtime → Використовуємо API-запит, інакше пишемо через Winston
+const logger = {
+  info: (message) => (isEdgeRuntime ? logToApi("info", message) : nodeLogger.info(message)),
+  error: (message) => (isEdgeRuntime ? logToApi("error", message) : nodeLogger.error(message)),
+  warn: (message) => (isEdgeRuntime ? logToApi("warn", message) : nodeLogger.warn(message)),
+};
+
+export default logger;
+```
+
+---
+
+## ✅ **📌 2. Створюємо Next.js API `/api/logs.js` для збереження логів у файл**
+Оскільки **API Next.js працює у Node.js Runtime**, можна тут використовувати `fs`.
+
+🔹 **Шлях у проєкті: `/pages/api/logs.js`**
+```javascript
+import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
+
+// 🔹 Файл логів (зберігається у `/logs/requests.log`)
+const logFilePath = path.join(process.cwd(), "logs", "requests.log");
+
+// 🔹 Обробник API-запиту для запису логів
+export async function POST(req) {
+  try {
+    const { level, message } = await req.json();
+
+    if (!level || !message) {
+      return NextResponse.json({ error: "Invalid log format" }, { status: 400 });
+    }
+
+    // 🔹 Формат часу
+    const timeStamp = new Date().toLocaleString("uk-UA", { timeZone: "Europe/Kiev" }).replace(",", "");
+    const logMessage = `[${timeStamp}] ${level.toUpperCase()}: ${message}\n`;
+
+    // 🔹 Записуємо у файл
+    fs.appendFileSync(logFilePath, logMessage, "utf8");
+
+    return NextResponse.json({ message: "Log saved" }, { status: 200 });
+  } catch (error) {
+    console.error("Error writing log:", error);
+    return NextResponse.json({ error: "Failed to write log" }, { status: 500 });
+  }
+}
+```
+
+---
+
+## ✅ **📌 Як це працює?**
+| **Середовище** | **Що відбувається?** |
+|---------------|---------------------|
+| **Node.js Runtime (API, серверні запити)** | Логи пишуться у файли через `winston` |
+| **Edge Runtime (фронтенд, middleware)** | Логи надсилаються у API `/api/logs.js`, яке зберігає їх у файлі |
+
+---
+
+### ✅ **📌 Перевірка**
+#### 🔹 **Тестуємо логування в Edge Runtime (клієнтський код)**
+```javascript
+import logger from "@/utils/logger";
+
+function TestComponent() {
+  logger.info("User opened TestComponent");
+  return <h1>Testing Logging</h1>;
+}
+
+export default TestComponent;
+```
+
+🔹 **В результаті лог буде записаний у `logs/requests.log`, навіть якщо компонент працює в `Edge Runtime`.**
+
+---
+
+### ✅ **📌 Підсумок**
+| **Що вирішено?** | **Рішення** |
+|------------------|------------------------------|
+| `Edge Runtime` не підтримує `fs` | Використовуємо API `/api/logs` для запису логів |
+| `winston` працює тільки в `Node.js` | У `Edge Runtime` логи надсилаються в API |
+| Логи з `middleware.js` не записуються | API `/api/logs` отримує логи та зберігає їх |
+
+🚀 **Тепер логи будуть зберігатися у файлах навіть у `Edge Runtime`! 🔥**

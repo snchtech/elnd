@@ -1,0 +1,89 @@
+To use the `logoutUser` function in a button handler, you need to ensure that the function is triggered from the frontend, where the request (with cookies) is being sent to the server. However, as you correctly pointed out, the error `req.nextUrl` occurs because `req` is not available in the client-side JavaScript context, since `req` is a server-side object.
+
+To make this work, you need to trigger the `logoutUser` function through an API route or handler that can process the request on the server side. Here's how you can implement the logout functionality with the button handler:
+
+### Steps:
+1. **Create an API Route** in Next.js that calls your `logoutUser` function.
+2. **Call the API route** from the button handler on the client side using `fetch`.
+
+### Step 1: Create an API Route
+
+Create a new API route, for example `pages/api/logout.js`, that will handle the logout logic:
+
+```javascript
+// pages/api/logout.js
+
+import { logoutUser } from '../../path-to-logoutUser-function';
+
+export async function handler(req, res) {
+  if (req.method === "POST") {
+    try {
+      // Call the logoutUser function with the request object
+      const response = await logoutUser(req);
+
+      // Return the appropriate response to the frontend
+      res.status(200).json({ message: "Logout successful" });
+    } catch (error) {
+      res.status(500).json({ message: "Logout failed", error: error.message });
+    }
+  } else {
+    res.status(405).json({ message: "Method Not Allowed" });
+  }
+}
+```
+
+### Step 2: Call the API Route from the Client Side
+
+Now, in your button handler, you can call this API route using `fetch`:
+
+```javascript
+// Your button handler on the frontend (React component)
+
+import { useState } from 'react';
+
+export default function LogoutButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleLogout = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST',
+        credentials: 'include', // Ensure cookies are included in the request
+      });
+
+      if (!response.ok) {
+        throw new Error('Logout failed');
+      }
+
+      // Redirect or handle success (e.g., show a message)
+      window.location.href = '/login'; // Redirect to login page
+    } catch (err) {
+      setError('Logout failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button onClick={handleLogout} disabled={loading}>
+      {loading ? 'Logging out...' : 'Logout'}
+      {error && <div>{error}</div>}
+    </button>
+  );
+}
+```
+
+### Explanation:
+1. **API Route (`/api/logout`)**: This route is responsible for calling the `logoutUser` function. It uses the `req` object, which is available on the server side. This allows you to send cookies, handle authentication, and perform the necessary logic in the backend.
+   
+2. **Frontend Button (`LogoutButton`)**: The button sends a `POST` request to the `/api/logout` endpoint when clicked. It uses `fetch` to send the request, including cookies (`credentials: 'include'`) to ensure the session is correctly terminated. If successful, it redirects the user to the login page.
+
+3. **Handling Loading and Errors**: The button can show a loading state while the request is in progress and handle errors that may occur during the logout process.
+
+### Conclusion:
+- You cannot directly pass the `req` object to the client-side logic because it is server-side only. Instead, you should handle the logout logic on the server using an API route, and then call that API route from your frontend using `fetch` in the button handler.
+- This approach ensures that your user is logged out both locally (clearing cookies) and remotely (via the external API), and it avoids the issue of accessing server-side variables in the client-side environment.

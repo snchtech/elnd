@@ -1,0 +1,218 @@
+Почнемо розробку сторінки `/albums` з урахуванням Material-UI, Next.js та параметра `mode`.
+
+### **Етапи реалізації:**
+1. **Додавання API-запитів для отримання даних**  
+   - Отримання відділів (`departments`)
+   - Отримання підрозділів (`units`)
+   - Отримання альбомів (`albums`)
+   - Отримання схем (`schemes`)
+   - Отримання статусів (`ALBUM_STATUS`)
+   - Отримання останніх змін
+
+2. **Розробка сторінки `/albums`**  
+   - **Ліва панель (деревовидна навігація)**  
+   - **Основна частина сторінки**  
+     - Блок пошуку  
+     - Фільтри  
+     - Таблиця альбомів (з пагінацією)  
+     - Блок останніх змін  
+
+---
+
+## **1. Додавання API-запитів (`utils/api.js`)**
+
+Додамо необхідні функції в `utils/api.js`:
+
+```javascript
+// Отримання списку відділів
+export const fetchDepartments = async () => {
+  return fetchData("/departments", { method: "GET" });
+};
+
+// Отримання списку підрозділів (unit)
+export const fetchUnits = async () => {
+  return fetchData("/units", { method: "GET" });
+};
+
+// Отримання списку альбомів
+export const fetchAlbums = async () => {
+  return fetchData("/albums", { method: "GET" });
+};
+
+// Отримання списку схем
+export const fetchSchemes = async () => {
+  return fetchData("/schemes", { method: "GET" });
+};
+
+// Отримання статусів альбомів
+export const fetchAlbumStatuses = async () => {
+  return fetchData("/album_statuses", { method: "GET" });
+};
+
+// Отримання останніх 5 змін в альбомах
+export const fetchRecentChanges = async () => {
+  return fetchData("/recent_changes", { method: "GET" });
+};
+```
+
+---
+
+## **2. Реалізація сторінки `/albums`**
+
+Створюємо сторінку `/albums.tsx` з урахуванням Material-UI.
+
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, fetchSchemes, fetchAlbumStatuses, fetchRecentChanges } from "@/utils/api";
+import { Container, Grid, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton } from "@mui/material";
+import { Add, Print, Visibility, Edit, Delete, Description } from "@mui/icons-material";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query; // Отримуємо mode з URL
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [recentChanges, setRecentChanges] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+      setSchemes(await fetchSchemes());
+      setStatuses(await fetchAlbumStatuses());
+      setRecentChanges(await fetchRecentChanges());
+    }
+    loadData();
+  }, []);
+
+  return (
+    <Container maxWidth="xl">
+      <Grid container spacing={3}>
+        
+        {/* Ліва панель (дерево навігації) */}
+        <Grid item xs={3}>
+          <Paper style={{ padding: 16 }}>
+            <h3>Навігація</h3>
+            {/* Тут буде компонент дерева (TreeView) */}
+          </Paper>
+        </Grid>
+
+        {/* Основний контент */}
+        <Grid item xs={9}>
+          
+          {/* Верхня панель */}
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={8}>
+              <TextField label="Пошук" variant="outlined" fullWidth />
+            </Grid>
+            {mode === "editor" && (
+              <Grid item xs={4} style={{ textAlign: "right" }}>
+                <Button variant="contained" color="success" startIcon={<Add />}>
+                  Новий альбом
+                </Button>
+              </Grid>
+            )}
+          </Grid>
+
+          {/* Фільтри */}
+          <Grid container spacing={2} style={{ marginTop: 16 }}>
+            <Grid item xs={6}>
+              <TextField select label="Відділ" fullWidth>
+                {departments.map((dep) => (
+                  <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={6}>
+              <TextField select label="Підрозділ" fullWidth>
+                {units.map((unit) => (
+                  <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          </Grid>
+
+          {/* Таблиця альбомів */}
+          <TableContainer component={Paper} style={{ marginTop: 16 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Відділ</TableCell>
+                  <TableCell>Unit</TableCell>
+                  <TableCell>Назва</TableCell>
+                  <TableCell>Опис</TableCell>
+                  <TableCell>Дата оновлення</TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell>Дії</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {albums.map((album) => (
+                  <TableRow key={album.id}>
+                    <TableCell>{album.id}</TableCell>
+                    <TableCell>{album.department_name}</TableCell>
+                    <TableCell>{album.unit_name}</TableCell>
+                    <TableCell>{album.name}</TableCell>
+                    <TableCell>{album.description}</TableCell>
+                    <TableCell>{album.date_update || album.date_create}</TableCell>
+                    <TableCell>{statuses.find((s) => s.id === album.status_id)?.name}</TableCell>
+                    <TableCell>
+                      <IconButton color="primary"><Print /></IconButton>
+                      <IconButton color="secondary"><Description /></IconButton>
+                      {mode === "viewer" && <IconButton color="info"><Visibility /></IconButton>}
+                      {mode === "editor" && <>
+                        <IconButton color="warning"><Edit /></IconButton>
+                        <IconButton color="error"><Delete /></IconButton>
+                      </>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Блок останніх змін */}
+          <Paper style={{ marginTop: 16, padding: 16 }}>
+            <h3>Останні 5 змін</h3>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Дата</TableCell>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Відділ</TableCell>
+                    <TableCell>Unit</TableCell>
+                    <TableCell>Назва</TableCell>
+                    <TableCell>Зміни виконав</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {recentChanges.map((change) => (
+                    <TableRow key={change.id}>
+                      <TableCell>{change.date}</TableCell>
+                      <TableCell>{change.album_id}</TableCell>
+                      <TableCell>{change.department_name}</TableCell>
+                      <TableCell>{change.unit_name}</TableCell>
+                      <TableCell>{change.name}</TableCell>
+                      <TableCell>{change.editor_name}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+
+        </Grid>
+      </Grid>
+    </Container>
+  );
+}
+```
+
+Це базова структура. Далі можемо деталізувати пошук, дерево навігації та інші функціональні можливості. 🚀

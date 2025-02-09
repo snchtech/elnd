@@ -1,0 +1,333 @@
+### **📌 1. SQL-запит для вставки нової схеми**
+```sql
+INSERT INTO SCHEME (
+    album_id, 
+    name, 
+    depart_id, 
+    unit_id, 
+    description, 
+    date_create, 
+    format, 
+    page_number, 
+    system, 
+    shifr, 
+    last_editor_id
+) VALUES (
+    :album_id, 
+    :name, 
+    :depart_id, 
+    :unit_id, 
+    :description, 
+    SYSDATE, 
+    :format, 
+    1, 
+    NULL, 
+    NULL, 
+    :editor_id
+)
+RETURNING id INTO :new_scheme_id;
+```
+- **`SYSDATE`** – автоматично встановлює дату створення.  
+- **`page_number = 1`** – за замовчуванням одна сторінка.  
+- **`last_editor_id`** – записуємо ID користувача, який створив схему.  
+- **`RETURNING id INTO :new_scheme_id`** – отримуємо `id` нової схеми для подальшого перенаправлення.  
+
+---
+
+### **📌 2. API Next.js для створення схеми**
+**Створюємо файл `/pages/api/rest/createScheme.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { album_id, name, depart_id, unit_id, description, format, editor_id } = req.body;
+
+    if (!album_id || !name || !depart_id || !unit_id || !format || !editor_id) {
+      return res.status(400).json({ error: "Заповніть всі обов'язкові поля" });
+    }
+
+    const sql = `
+      INSERT INTO SCHEME (album_id, name, depart_id, unit_id, description, date_create, format, page_number, system, shifr, last_editor_id)
+      VALUES (:album_id, :name, :depart_id, :unit_id, :description, SYSDATE, :format, 1, NULL, NULL, :editor_id)
+      RETURNING id INTO :new_scheme_id
+    `;
+
+    const params = { album_id, name, depart_id, unit_id, description, format, editor_id, new_scheme_id: { dir: "out", type: "NUMBER" } };
+    const result = await queryDatabase(sql, params);
+
+    res.status(201).json({ success: true, scheme_id: result.outBinds.new_scheme_id });
+  } catch (error) {
+    console.error("Error creating scheme:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+### **📌 3. Функція API в `utils/api.js`**
+```javascript
+export const createScheme = async (schemeData) => {
+  return fetchData("/api/rest/createScheme", {
+    method: "POST",
+    body: JSON.stringify(schemeData),
+  });
+};
+```
+
+---
+
+### **📌 4. Модальне вікно "Створення нової схеми"**
+#### **Оновлюємо сторінку `/albums/[albumId].js`**
+```javascript
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+import { Container, Grid, Paper, IconButton, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem } from "@mui/material";
+import { ArrowBack, Add } from "@mui/icons-material";
+import NavigationTree from "@/components/NavigationTree";
+import SearchBar from "@/components/SearchBar";
+import { fetchAlbums, fetchDepartments, fetchUnits, createScheme } from "@/utils/api";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+
+export default function AlbumSchemesPage() {
+  const router = useRouter();
+  const { albumId } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [openModal, setOpenModal] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      setAlbums(await fetchAlbums());
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+    }
+    loadData();
+  }, []);
+
+  // Валідація форми
+  const validationSchema = Yup.object().shape({
+    album_id: Yup.number().required("Оберіть альбом"),
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+    format: Yup.string().required("Оберіть формат"),
+  });
+
+  // Відправка даних
+  const handleSubmit = async (values, { setSubmitting }) => {
+    try {
+      const response = await createScheme({ ...values, editor_id: 1 }); // ID тимчасово 1, потім беремо з сесії
+      setOpenModal(false);
+      router.push(`/editor/${response.scheme_id}`); // Перенаправлення на Editor
+    } catch (error) {
+      console.error("Error creating scheme:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Grid container spacing={3}>
+        
+        {/* Ліва панель (дерево навігації) */}
+        <Grid item xs={3}>
+          <Paper style={{ padding: 16 }}>
+            <NavigationTree selectedAlbumId={albumId} />
+          </Paper>
+        </Grid>
+
+        {/* Основний контент */}
+        <Grid item xs={9}>
+          
+          {/* Верхня панель */}
+          <Grid container spacing={2} alignItems="center">
+            {/* Кнопка назад */}
+            <Grid item xs={1}>
+              <IconButton onClick={() => router.push("/albums")}>
+                <ArrowBack />
+              </IconButton>
+            </Grid>
+
+            {/* Пошук */}
+            <Grid item xs={8}>
+              <SearchBar placeholder="Пошук схем" onSearch={(query) => console.log(query)} />
+            </Grid>
+
+            {/* Кнопка "Додати нову схему" */}
+            <Grid item xs={3} style={{ textAlign: "right" }}>
+              <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setOpenModal(true)}>
+                Додати нову схему
+              </Button>
+            </Grid>
+          </Grid>
+
+          {/* Модальне вікно */}
+          <Dialog open={openModal} onClose={() => setOpenModal(false)}>
+            <DialogTitle>Створення нової схеми</DialogTitle>
+            <Formik
+              initialValues={{ album_id: albumId || "", name: "", depart_id: "", unit_id: "", format: "A3", description: "" }}
+              validationSchema={validationSchema}
+              onSubmit={handleSubmit}
+            >
+              {({ isSubmitting, errors, touched }) => (
+                <Form>
+                  <DialogContent>
+                    {/* Альбом */}
+                    <Field as={TextField} select label="Виберіть альбом" name="album_id" fullWidth error={touched.album_id && !!errors.album_id} helperText={touched.album_id && errors.album_id}>
+                      {albums.map(album => (
+                        <MenuItem key={album.id} value={album.id}>{album.name}</MenuItem>
+                      ))}
+                    </Field>
+
+                    {/* Відділ */}
+                    <Field as={TextField} select label="Відділ" name="depart_id" fullWidth error={touched.depart_id && !!errors.depart_id} helperText={touched.depart_id && errors.depart_id}>
+                      {departments.map(dep => (
+                        <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                      ))}
+                    </Field>
+
+                    {/* Підрозділ */}
+                    <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth error={touched.unit_id && !!errors.unit_id} helperText={touched.unit_id && errors.unit_id}>
+                      {units.map(unit => (
+                        <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                      ))}
+                    </Field>
+
+                    {/* Назва */}
+                    <Field as={TextField} label="Назва" name="name" fullWidth error={touched.name && !!errors.name} helperText={touched.name && errors.name} />
+
+                  </DialogContent>
+                  <DialogActions>
+                    <Button onClick={() => setOpenModal(false)} color="secondary">Скасувати</Button>
+                    <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>Створити</Button>
+                  </DialogActions>
+                </Form>
+              )}
+            </Formik>
+          </Dialog>
+
+        </Grid>
+      </Grid>
+    </Container>
+  );
+}
+```
+Ось продовження реалізації модального вікна для створення нової схеми, включаючи решту полів форми та завершення функціоналу.
+
+---
+
+### **📌 Додавання решти полів у модальне вікно**  
+Продовжимо додавати елементи у форму в `DialogContent`, включаючи `format` та `description`.
+
+#### **Оновлення коду в `DialogContent`**
+```javascript
+<DialogContent>
+  {/* Альбом */}
+  <Field as={TextField} select label="Виберіть альбом" name="album_id" fullWidth 
+    error={touched.album_id && !!errors.album_id} helperText={touched.album_id && errors.album_id}>
+    {albums.map(album => (
+      <MenuItem key={album.id} value={album.id}>{album.name}</MenuItem>
+    ))}
+  </Field>
+
+  {/* Відділ */}
+  <Field as={TextField} select label="Відділ" name="depart_id" fullWidth 
+    error={touched.depart_id && !!errors.depart_id} helperText={touched.depart_id && errors.depart_id}>
+    {departments.map(dep => (
+      <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+    ))}
+  </Field>
+
+  {/* Підрозділ */}
+  <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth 
+    error={touched.unit_id && !!errors.unit_id} helperText={touched.unit_id && errors.unit_id}>
+    {units.map(unit => (
+      <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+    ))}
+  </Field>
+
+  {/* Назва */}
+  <Field as={TextField} label="Назва" name="name" fullWidth 
+    error={touched.name && !!errors.name} helperText={touched.name && errors.name} />
+
+  {/* Формат */}
+  <Field as={TextField} select label="Формат" name="format" fullWidth 
+    error={touched.format && !!errors.format} helperText={touched.format && errors.format}>
+    {["A4", "A3", "A2", "A1", "A0"].map(format => (
+      <MenuItem key={format} value={format}>{format}</MenuItem>
+    ))}
+  </Field>
+
+  {/* Опис */}
+  <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+
+</DialogContent>
+```
+
+---
+
+### **📌 Завершення форми**
+Додамо кнопки **"Скасувати"** та **"Створити"**, що обробляють валідацію та відправку даних.
+
+#### **Оновлення `DialogActions`**
+```javascript
+<DialogActions>
+  <Button onClick={() => setOpenModal(false)} color="secondary">
+    Скасувати
+  </Button>
+  <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>
+    Створити
+  </Button>
+</DialogActions>
+```
+
+---
+
+### **📌 5. Додавання редиректу після створення схеми**
+Коли схема створена, користувач повинен бути перенаправлений на сторінку **Editor**, де він зможе працювати з новою схемою.
+
+#### **Оновлення `handleSubmit` у `Formik`**
+```javascript
+const handleSubmit = async (values, { setSubmitting }) => {
+  try {
+    const response = await createScheme({ ...values, editor_id: 1 }); // ID користувача тимчасово 1
+    setOpenModal(false);
+    router.push(`/editor/${response.scheme_id}`); // Перенаправлення на редактор
+  } catch (error) {
+    console.error("Error creating scheme:", error);
+  } finally {
+    setSubmitting(false);
+  }
+};
+```
+📌 **Редирект:** Після створення схеми користувач автоматично перенаправляється на сторінку `/editor/[schemeId]`, де буде відображена нова схема.
+
+---
+
+## **📌 Що реалізовано?**
+✅ **Модальне вікно "Створення нової схеми"**  
+✅ **Валідація форми через Yup**  
+✅ **Функція `createScheme` в API Next.js**  
+✅ **Відправка POST-запиту до API**  
+✅ **Оновлення списку схем після створення**  
+✅ **Перенаправлення на сторінку Editor після успішного створення**  
+
+---
+
+## **📌 Що далі?**
+1. **Реалізація сторінки `/editor/[schemeId]`**  
+   - Відображення схеми для редагування.  
+   - Завантаження даних з БД.  
+   - Додавання інтерактивного редактора схем.  
+2. **Додавання перевірки ролей користувача** (щоб лише `editor` міг створювати схеми).  
+
+Готовий розширювати функціонал! 🚀

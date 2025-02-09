@@ -1,0 +1,179 @@
+### **Реалізація сторінки перегляду схем альбому (`/albums/[albumId]`)**  
+
+Ось як реалізувати цю сторінку у Next.js, використовуючи **Material-UI**.  
+
+---
+
+### **📌 1. Винесемо дерево навігації в окремий компонент**
+Оскільки **дерево навігації** використовується як на сторінці `/albums`, так і на `/albums/[albumId]`, має сенс зробити його **спільним компонентом**.
+
+#### **Створимо компонент `NavigationTree.js`** (`components/NavigationTree.js`)
+```javascript
+import { useEffect, useState } from "react";
+import { TreeView, TreeItem } from "@mui/lab";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { fetchDepartments, fetchAlbums, fetchSchemes } from "@/utils/api";
+
+export default function NavigationTree({ selectedAlbumId }) {
+  const [departments, setDepartments] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setAlbums(await fetchAlbums());
+      setSchemes(await fetchSchemes());
+    }
+    loadData();
+  }, []);
+
+  const buildTree = () => {
+    return departments.map((department) => {
+      const departmentAlbums = albums.filter(album => album.department_id === department.id);
+
+      return (
+        <TreeItem key={department.id} nodeId={`dep-${department.id}`} label={department.name}>
+          {departmentAlbums.map(album => {
+            const albumSchemes = schemes.filter(scheme => scheme.album_id === album.id);
+
+            return (
+              <TreeItem 
+                key={album.id} 
+                nodeId={`album-${album.id}`} 
+                label={album.name} 
+                onClick={() => window.location.href = `/albums/${album.id}`} // Перехід до сторінки альбому
+              >
+                {albumSchemes.map(scheme => (
+                  <TreeItem key={scheme.id} nodeId={`scheme-${scheme.id}`} label={scheme.name} />
+                ))}
+              </TreeItem>
+            );
+          })}
+        </TreeItem>
+      );
+    });
+  };
+
+  return (
+    <TreeView
+      defaultCollapseIcon={<ExpandMore />}
+      defaultExpandIcon={<ChevronRight />}
+      expanded={expanded}
+      onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+    >
+      {buildTree()}
+    </TreeView>
+  );
+}
+```
+
+---
+
+### **📌 2. Винесемо пошук в окремий компонент**
+Оскільки пошук є і на `/albums`, і на `/albums/[albumId]`, його також варто винести в **компонент**.
+
+#### **Створимо `SearchBar.js`** (`components/SearchBar.js`)
+```javascript
+import { TextField } from "@mui/material";
+
+export default function SearchBar({ placeholder, onSearch }) {
+  return (
+    <TextField 
+      label={placeholder || "Пошук"} 
+      variant="outlined" 
+      fullWidth 
+      onChange={(e) => onSearch(e.target.value)}
+    />
+  );
+}
+```
+
+---
+
+### **📌 3. Реалізація сторінки `/albums/[albumId].js`**
+#### **Створюємо сторінку в `pages/albums/[albumId].js`**
+```javascript
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+import { Container, Grid, Paper, IconButton, Button } from "@mui/material";
+import { ArrowBack, Add } from "@mui/icons-material";
+import NavigationTree from "@/components/NavigationTree";
+import SearchBar from "@/components/SearchBar";
+import { fetchSchemes } from "@/utils/api";
+
+export default function AlbumSchemesPage() {
+  const router = useRouter();
+  const { albumId } = router.query;
+  const [schemes, setSchemes] = useState([]);
+
+  useEffect(() => {
+    if (albumId) {
+      fetchSchemes().then(data => setSchemes(data.filter(scheme => scheme.album_id == albumId)));
+    }
+  }, [albumId]);
+
+  return (
+    <Container maxWidth="xl">
+      <Grid container spacing={3}>
+        
+        {/* Ліва панель (дерево навігації) */}
+        <Grid item xs={3}>
+          <Paper style={{ padding: 16 }}>
+            <NavigationTree selectedAlbumId={albumId} />
+          </Paper>
+        </Grid>
+
+        {/* Основний контент */}
+        <Grid item xs={9}>
+          
+          {/* Верхня панель */}
+          <Grid container spacing={2} alignItems="center">
+            {/* Кнопка назад */}
+            <Grid item xs={1}>
+              <IconButton onClick={() => router.push("/albums")}>
+                <ArrowBack />
+              </IconButton>
+            </Grid>
+
+            {/* Пошук */}
+            <Grid item xs={8}>
+              <SearchBar placeholder="Пошук схем" onSearch={(query) => console.log(query)} />
+            </Grid>
+
+            {/* Кнопка "Додати нову схему" */}
+            <Grid item xs={3} style={{ textAlign: "right" }}>
+              <Button variant="contained" color="success" startIcon={<Add />}>
+                Додати нову схему
+              </Button>
+            </Grid>
+          </Grid>
+
+          {/* Тут буде список схем (додамо пізніше) */}
+          
+        </Grid>
+      </Grid>
+    </Container>
+  );
+}
+```
+
+---
+
+## **📌 Що реалізовано?**
+✅ **Компонент `NavigationTree`** – тепер дерево навігації використовується і в `/albums`, і в `/albums/[albumId]`.  
+✅ **Компонент `SearchBar`** – універсальний пошук, який легко можна підключати на різні сторінки.  
+✅ **Сторінка `/albums/[albumId]`**:  
+   - **Повернення на `/albums`**  
+   - **Динамічне завантаження схем**  
+   - **Кнопка "Додати нову схему"**  
+   - **Дерево навігації для переходу між альбомами**  
+
+---
+
+## **📌 Що далі?**
+1. **Додати таблицю зі схемами для альбому.**  
+2. **Реалізувати функціонал кнопки "Додати нову схему".**  
+
+Готовий рухатись далі! 🚀

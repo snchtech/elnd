@@ -1,0 +1,208 @@
+Ось повний набір оновлень для реалізації функціоналу **створення нового альбому** через **модальне вікно**, **валидацію**, **POST-запит до API Next.js** і **SQL-запит для вставки даних** у базу.
+
+---
+
+## 🔹 **1. SQL-запит для вставки нового альбому**
+```sql
+INSERT INTO ALBUM (
+    name, 
+    depart_id, 
+    unit_id, 
+    description, 
+    date_create, 
+    version, 
+    stable, 
+    creator_id, 
+    last_editor_id
+) VALUES (
+    :name, 
+    :depart_id, 
+    :unit_id, 
+    :description, 
+    SYSDATE, 
+    1, 
+    1, 
+    :creator_id, 
+    :creator_id
+)
+RETURNING id INTO :new_id;
+```
+- **`SYSDATE`** — автоматично додає дату створення.
+- **`version = 1`** — початкова версія альбому.
+- **`stable = 1`** — за замовчуванням альбом стабільний.
+- **`creator_id` та `last_editor_id`** — записуємо ID поточного користувача.
+
+---
+
+## 🔹 **2. API-ендпоінт Next.js для створення альбому**  
+Створюємо новий файл **`/pages/api/rest/createAlbum.js`**:
+
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { name, depart_id, unit_id, description, creator_id } = req.body;
+
+    if (!name || !depart_id || !unit_id || !creator_id) {
+      return res.status(400).json({ error: "Заповніть всі обов'язкові поля" });
+    }
+
+    const sql = `
+      INSERT INTO ALBUM (name, depart_id, unit_id, description, date_create, version, stable, creator_id, last_editor_id)
+      VALUES (:name, :depart_id, :unit_id, :description, SYSDATE, 1, 1, :creator_id, :creator_id)
+      RETURNING id INTO :new_id
+    `;
+
+    const params = { name, depart_id, unit_id, description, creator_id, new_id: { dir: "out", type: "NUMBER" } };
+    const result = await queryDatabase(sql, params);
+
+    res.status(201).json({ success: true, album_id: result.outBinds.new_id });
+  } catch (error) {
+    console.error("Error creating album:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## 🔹 **3. Додаємо функцію в `utils/api.js`**
+```javascript
+export const createAlbum = async (albumData) => {
+  return fetchData("/api/rest/createAlbum", {
+    method: "POST",
+    body: JSON.stringify(albumData),
+  });
+};
+```
+
+---
+
+## 🔹 **4. Модальне вікно для створення альбому**
+Додаємо кнопку "Новий альбом", яка відкриває **Material-UI Modal**, з **валідацією** через `Formik` + `Yup`.
+
+### **Оновлюємо сторінку `/albums.tsx`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, createAlbum } from "@/utils/api";
+import { Container, Grid, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { Add } from "@mui/icons-material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [openModal, setOpenModal] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+    }
+    loadData();
+  }, []);
+
+  // Форма валідації через Yup
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+  });
+
+  // Відправка нового альбому
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      await createAlbum({ ...values, creator_id: 1 }); // ID користувача тимчасово 1, потім беремо з сесії
+      setOpenModal(false);
+      setAlbums(await fetchAlbums()); // Оновлення списку альбомів після додавання
+      resetForm();
+    } catch (error) {
+      console.error("Error creating album:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Grid container spacing={3}>
+        {/* Верхня панель */}
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={8}>
+            <TextField label="Пошук" variant="outlined" fullWidth />
+          </Grid>
+          {mode === "editor" && (
+            <Grid item xs={4} style={{ textAlign: "right" }}>
+              <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setOpenModal(true)}>
+                Новий альбом
+              </Button>
+            </Grid>
+          )}
+        </Grid>
+
+        {/* Модальне вікно */}
+        <Dialog open={openModal} onClose={() => setOpenModal(false)}>
+          <DialogTitle>Новий альбом</DialogTitle>
+          <Formik
+            initialValues={{ name: "", depart_id: "", unit_id: "", description: "" }}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+          >
+            {({ isSubmitting, errors, touched }) => (
+              <Form>
+                <DialogContent>
+                  {/* Відділ */}
+                  <Field as={TextField} select label="Відділ" name="depart_id" fullWidth error={touched.depart_id && !!errors.depart_id} helperText={touched.depart_id && errors.depart_id}>
+                    {departments.map(dep => (
+                      <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                    ))}
+                  </Field>
+
+                  {/* Підрозділ */}
+                  <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth error={touched.unit_id && !!errors.unit_id} helperText={touched.unit_id && errors.unit_id}>
+                    {units.map(unit => (
+                      <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                    ))}
+                  </Field>
+
+                  {/* Назва */}
+                  <Field as={TextField} label="Назва" name="name" fullWidth error={touched.name && !!errors.name} helperText={touched.name && errors.name} />
+
+                  {/* Опис */}
+                  <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setOpenModal(false)} color="secondary">Скасувати</Button>
+                  <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>Додати</Button>
+                </DialogActions>
+              </Form>
+            )}
+          </Formik>
+        </Dialog>
+      </Grid>
+    </Container>
+  );
+}
+```
+
+---
+
+## 🔹 **Що реалізовано?**
+✅ **Модальне вікно** з формою створення альбому  
+✅ **Валідація через `Yup`** (обов’язкові поля)  
+✅ **Збереження в базу через API Next.js**  
+✅ **Оновлення таблиці без перезавантаження**  
+
+Готовий до розширення функціоналу! 🚀

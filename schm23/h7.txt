@@ -1,0 +1,96 @@
+Твоя функція `fetchData` зараз налаштована для отримання даних (`GET`-запити), але вона також може бути адаптована для **видалення (DELETE), оновлення (PUT/PATCH) та вставки (POST) даних**.  
+
+### **📌 Чи підійде `fetchData` для всіх операцій CRUD?**
+Так, якщо додати підтримку **методів HTTP (POST, PUT, PATCH, DELETE)**, `fetchData` може працювати і для **оновлення, вставки та видалення** даних.
+
+### **📌 Як адаптувати `fetchData` для всіх CRUD-операцій?**
+Оновлений варіант `fetchData`, який підтримує всі методи:
+
+```javascript
+export const fetchData = async (url, method = "GET", data = null) => {
+  try {
+    const options = {
+      method,
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    };
+
+    if (data) {
+      options.body = JSON.stringify(data);
+    }
+
+    const res = await fetch("/api/rest/customfetch", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, options }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error(`Error fetching ${url}:`, error);
+    return { error: error.message };
+  }
+};
+```
+
+---
+
+## **📌 Як використовувати `fetchData` для різних операцій?**
+### 🔹 **1. Отримання даних (GET)**
+```javascript
+const albums = await fetchData("/albums"); // GET-запит
+```
+
+### 🔹 **2. Вставка нових даних (POST)**
+```javascript
+const newAlbum = {
+  name: "Новий альбом",
+  depart_id: 1,
+  unit_id: 2,
+  description: "Тестовий альбом",
+  creator_id: 1
+};
+
+const response = await fetchData("/albums", "POST", newAlbum);
+console.log(response);
+```
+
+### 🔹 **3. Оновлення існуючих даних (PUT)**
+```javascript
+const updatedAlbum = {
+  id: 5,
+  name: "Оновлена назва альбому",
+  description: "Оновлений опис",
+};
+
+const response = await fetchData(`/albums/${updatedAlbum.id}`, "PUT", updatedAlbum);
+console.log(response);
+```
+
+### 🔹 **4. Часткове оновлення (PATCH)**
+```javascript
+const partialUpdate = { description: "Оновлений опис" };
+
+const response = await fetchData("/albums/5", "PATCH", partialUpdate);
+console.log(response);
+```
+
+### 🔹 **5. Видалення (DELETE)**
+```javascript
+const response = await fetchData("/albums/5", "DELETE");
+console.log(response);
+```
+
+---
+
+## **📌 Висновок**
+Твоя функція `fetchData` **може використовуватися для всіх CRUD-операцій**, якщо оновити її так, як я показав вище.  
+🔹 **Переваги:** ✅ **Єдиний підхід** для всіх типів запитів, ✅ **Менше дублікації коду**.  
+🔹 **Недоліки:** 🔸 Якщо серверні API зміняться, потрібно буде адаптувати `fetchData`.  
+
+Цей підхід добре працює, якщо всі запити йдуть через `/api/rest/customfetch`. Якщо буде складна логіка обробки на стороні Next.js API, можна зробити окремі ендпоінти для кожної операції (`createAlbum.js`, `deleteAlbum.js`, тощо). 🚀

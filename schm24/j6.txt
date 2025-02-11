@@ -1,0 +1,29 @@
+import { Stage, Layer, Line, Circle } from 'react-konva';
+
+const SymbolComponent = () => {
+  return (
+    <Stage width={200} height={200}>
+      <Layer>
+        {/* Vertical Line */}
+        <Line
+          points={[100, 20, 100, 80]}
+          stroke="black"
+          strokeWidth={4}
+        />
+
+        {/* Two angled lines forming a bowtie shape */}
+        <Line
+          points={[50, 80, 100, 120, 150, 80]}
+          stroke="black"
+          strokeWidth={4}
+          closed={false}
+        />
+
+        {/* Central node */}
+        <Circle x={100} y={80} radius={5} fill="black" />
+      </Layer>
+    </Stage>
+  );
+};
+
+export default SymbolComponent;

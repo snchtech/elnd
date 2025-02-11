@@ -1,0 +1,15 @@
+ALTER TABLE GROUP_ELEMENT ADD (
+    description VARCHAR2(1000), -- Опис групи
+    created_by NUMBER, -- Користувач, який створив групу
+    date_created TIMESTAMP DEFAULT SYSTIMESTAMP, -- Час створення
+    updated_by NUMBER, -- Користувач, який востаннє оновив
+    date_updated TIMESTAMP, -- Час останнього оновлення
+    parent_group_id NUMBER, -- Ієрархічний зв’язок між групами
+    CONSTRAINT fk_group_element_parent FOREIGN KEY (parent_group_id) REFERENCES GROUP_ELEMENT(id)
+);
+
+ALTER TABLE GROUP_TYPE ADD (
+    created_by NUMBER, -- Користувач, який створив тип
+    date_created TIMESTAMP DEFAULT SYSTIMESTAMP, -- Час створення
+    is_active NUMBER(1) DEFAULT 1 -- 1 - активний, 0 - неактивний
+);

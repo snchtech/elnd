@@ -1,0 +1,48 @@
+Ось два варіанти коду на JavaScript:
+
+### **1. Перевірка `status === 1` і `errorcode` для рядка, де `errormessage` містить `IDTYPE2`**
+```javascript
+const response = {
+    "response": {
+        "status": 1,
+        "errors": [
+            {"id": "Type1", errorcode: 1, "errormessage": "Error in IDTYPE1, another text"},
+            {"id": "Type2", errorcode: 1, "errormessage": "Error in IDTYPE2, another text"},
+            {"id": "Type3", errorcode: 0, "errormessage": ""}
+        ]
+    }
+};
+
+if (response.response.status === 1) {
+    const hasErrorForIDTYPE2 = response.response.errors.some(error => 
+        error.errormessage.includes("IDTYPE2") && error.errorcode === 1
+    );
+
+    if (hasErrorForIDTYPE2) {
+        console.log("Є помилка для IDTYPE2 з errorcode 1");
+    } else {
+        console.log("Немає помилки для IDTYPE2 з errorcode 1");
+    }
+}
+```
+
+---
+
+### **2. Перевірка `status === 1` і `errorcode` для рядка, де `id === 'Type2'`**
+```javascript
+if (response.response.status === 1) {
+    const errorForType2 = response.response.errors.find(error => error.id === "Type2");
+
+    if (errorForType2 && errorForType2.errorcode === 1) {
+        console.log("Є помилка для id Type2 з errorcode 1");
+    } else {
+        console.log("Немає помилки для id Type2 з errorcode 1");
+    }
+}
+```
+
+---
+
+### **Різниця між двома варіантами**:
+- **Перший варіант** перевіряє, чи в `errormessage` є `"IDTYPE2"` і чи `errorcode === 1`.
+- **Другий варіант** шукає саме об'єкт з `id === "Type2"` і перевіряє його `errorcode`.

@@ -1,0 +1,92 @@
+Твій код виглядає правильно, але проблема, ймовірно, полягає у типі даних, які повертає `oracledb`. 
+
+## 🔍 **Можливі причини та рішення:**
+
+### 1️⃣ **Перевірка вихідних даних**
+Перш за все, подивися, що саме повертає `console.log(result);`:
+```js
+console.log(result);
+console.log(result.rows);
+console.log(result.metaData);
+```
+Якщо `color`, `class` або `url` зберігаються у форматі `BLOB`, то вони будуть відображені як `Buffer` замість `string`.
+
+---
+
+### 2️⃣ **Включення `outFormat: oracledb.OUT_FORMAT_OBJECT`**
+За замовчуванням `oracledb.execute` повертає масиви (`rows` як `[[val1, val2, ...]]`). Щоб отримати дані у вигляді об'єктів (`[{appid: 3, param1: "...", ...}]`), потрібно додати `outFormat: oracledb.OUT_FORMAT_OBJECT`:
+```js
+const result = await connection.execute(`
+  SELECT
+    appid,
+    param1,
+    param2,
+    param3,
+    color,
+    class,
+    url
+  FROM your_data_view
+  WHERE appid = 3
+`, [], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+console.log(result);
+return result.rows;
+```
+Якщо так зробити, не потрібно буде перетворювати `rows` вручну.
+
+---
+
+### 3️⃣ **Перетворення `BLOB` у `VARCHAR` у SQL-запиті**
+Якщо `color`, `class` або `url` є `BLOB`, то у SQL-запиті явно конвертуй їх у `VARCHAR`:
+```sql
+SELECT
+  appid,
+  param1,
+  param2,
+  param3,
+  TO_CHAR(color) AS color,
+  TO_CHAR(class) AS class,
+  TO_CHAR(url) AS url
+FROM your_data_view
+WHERE appid = 3
+```
+Або використовуй `DBMS_LOB.SUBSTR`:
+```sql
+SELECT
+  appid,
+  param1,
+  param2,
+  param3,
+  DBMS_LOB.SUBSTR(color, 4000, 1) AS color,
+  DBMS_LOB.SUBSTR(class, 4000, 1) AS class,
+  DBMS_LOB.SUBSTR(url, 4000, 1) AS url
+FROM your_data_view
+WHERE appid = 3
+```
+Це дозволить уникнути проблеми з `BLOB`.
+
+---
+
+### 4️⃣ **Перетворення `BLOB` у `string` у Node.js**
+Якщо ти вже отримав `Buffer`, перетвори його у `string`:
+```js
+const data = result.rows.map(row => ({
+  appid: row[0],
+  param1: row[1],
+  param2: row[2],
+  param3: row[3],
+  color: row[4] instanceof Buffer ? row[4].toString('utf8') : row[4],
+  class: row[5] instanceof Buffer ? row[5].toString('utf8') : row[5],
+  url: row[6] instanceof Buffer ? row[6].toString('utf8') : row[6]
+}));
+```
+
+---
+
+## ✅ **Що робити далі?**
+1. Додай `console.log(result);` і перевір, що приходить.
+2. Додай `outFormat: oracledb.OUT_FORMAT_OBJECT`, щоб отримувати дані у вигляді об'єктів.
+3. Якщо `color`, `class` або `url` зберігаються як `BLOB`, використай `TO_CHAR` або `DBMS_LOB.SUBSTR` у SQL.
+4. Якщо в `Node.js` приходить `Buffer`, конвертуй його через `.toString('utf8')`.
+
+Якщо після цього проблема залишиться, скинь, що саме повертає `console.log(result);`, і я допоможу розібратися! 🚀

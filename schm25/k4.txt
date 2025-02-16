@@ -1,0 +1,239 @@
+Ось правильний підхід до **компонентного об'єднання** коду сторінки **`albums.js`** і спливаючого вікна створення нового альбому в **Next.js**.
+
+---
+
+## **📌 Загальний підхід**
+✅ **Винесемо дерево навігації** в окремий компонент `NavigationTree.js`.  
+✅ **Винесемо пошук** в окремий компонент `SearchBar.js`.  
+✅ **Форму створення нового альбому** винесемо в компонент `NewAlbumModal.js`.  
+✅ **Оновимо `albums.js`**, щоб об’єднати всі компоненти.
+
+---
+
+## **🔹 1. Створюємо компонент `NavigationTree.js`**
+Цей компонент буде використовуватися не тільки на сторінці `/albums`, але й у перегляді схем `/albums/[albumId]`.
+
+### 📁 **`components/NavigationTree.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { TreeView, TreeItem } from "@mui/x-tree-view";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { fetchDepartments, fetchAlbums, fetchSchemes } from "@/utils/api";
+
+export default function NavigationTree() {
+  const [departments, setDepartments] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setAlbums(await fetchAlbums());
+      setSchemes(await fetchSchemes());
+    }
+    loadData();
+  }, []);
+
+  const buildTree = () => {
+    return departments.map((department) => {
+      const departmentAlbums = albums.filter(album => album.department_id === department.id);
+
+      return (
+        <TreeItem key={department.id} nodeId={`dep-${department.id}`} label={department.name}>
+          {departmentAlbums.map(album => {
+            const albumSchemes = schemes.filter(scheme => scheme.album_id === album.id);
+
+            return (
+              <TreeItem 
+                key={album.id} 
+                nodeId={`album-${album.id}`} 
+                label={`${album.name} ${albumSchemes.length > 0 ? "+" : ""}`}
+              >
+                {albumSchemes.map(scheme => (
+                  <TreeItem key={scheme.id} nodeId={`scheme-${scheme.id}`} label={scheme.name} />
+                ))}
+              </TreeItem>
+            );
+          })}
+        </TreeItem>
+      );
+    });
+  };
+
+  return (
+    <TreeView
+      defaultCollapseIcon={<ExpandMore />}
+      defaultExpandIcon={<ChevronRight />}
+      expanded={expanded}
+      onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+    >
+      {buildTree()}
+    </TreeView>
+  );
+}
+```
+
+---
+
+## **🔹 2. Створюємо компонент `SearchBar.js`**
+Цей компонент також можна використовувати на інших сторінках.
+
+### 📁 **`components/SearchBar.js`**
+```javascript
+import { TextField } from "@mui/material";
+
+export default function SearchBar({ placeholder, onSearch }) {
+  return (
+    <TextField 
+      label={placeholder || "Пошук"} 
+      variant="outlined" 
+      fullWidth 
+      onChange={(e) => onSearch(e.target.value)}
+    />
+  );
+}
+```
+
+---
+
+## **🔹 3. Створюємо компонент `NewAlbumModal.js`**
+Цей компонент буде використовуватися для відкриття форми **створення нового альбому**.
+
+### 📁 **`components/NewAlbumModal.js`**
+```javascript
+import { useState, useEffect } from "react";
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem } from "@mui/material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+import { fetchDepartments, fetchUnits, createAlbum } from "@/utils/api";
+
+export default function NewAlbumModal({ open, onClose, onAlbumCreated }) {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+    }
+    loadData();
+  }, []);
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+  });
+
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      await createAlbum({ ...values, creator_id: 1 }); // ID тимчасово 1
+      onClose();
+      onAlbumCreated();
+      resetForm();
+    } catch (error) {
+      console.error("Error creating album:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>Новий альбом</DialogTitle>
+      <Formik initialValues={{ name: "", depart_id: "", unit_id: "", description: "" }} validationSchema={validationSchema} onSubmit={handleSubmit}>
+        {({ isSubmitting, errors, touched }) => (
+          <Form>
+            <DialogContent>
+              <Field as={TextField} select label="Відділ" name="depart_id" fullWidth error={touched.depart_id && !!errors.depart_id} helperText={touched.depart_id && errors.depart_id}>
+                {departments.map(dep => (
+                  <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                ))}
+              </Field>
+              <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth error={touched.unit_id && !!errors.unit_id} helperText={touched.unit_id && errors.unit_id}>
+                {units.map(unit => (
+                  <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                ))}
+              </Field>
+              <Field as={TextField} label="Назва" name="name" fullWidth error={touched.name && !!errors.name} helperText={touched.name && errors.name} />
+              <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={onClose} color="secondary">Скасувати</Button>
+              <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>Додати</Button>
+            </DialogActions>
+          </Form>
+        )}
+      </Formik>
+    </Dialog>
+  );
+}
+```
+
+---
+
+## **🔹 4. Оновлення сторінки `albums.js`**
+### 📁 **`pages/albums.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchAlbums } from "@/utils/api";
+import { Container, Box, Stack, Button, Paper } from "@mui/material";
+import { Add } from "@mui/icons-material";
+import NavigationTree from "@/components/NavigationTree";
+import SearchBar from "@/components/SearchBar";
+import NewAlbumModal from "@/components/NewAlbumModal";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [openModal, setOpenModal] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      setAlbums(await fetchAlbums());
+    }
+    loadData();
+  }, []);
+
+  return (
+    <Container maxWidth="xl">
+      <Box display="flex" gap={3}>
+        {/* Ліва панель */}
+        <Box width="25%">
+          <Paper sx={{ padding: 2 }}>
+            <h3>Навігація</h3>
+            <NavigationTree />
+          </Paper>
+        </Box>
+
+        {/* Основний контент */}
+        <Box flex={1}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <SearchBar placeholder="Пошук альбомів" />
+            {mode === "editor" && (
+              <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setOpenModal(true)}>
+                Новий альбом
+              </Button>
+            )}
+          </Stack>
+
+          {/* Модальне вікно */}
+          <NewAlbumModal open={openModal} onClose={() => setOpenModal(false)} onAlbumCreated={() => setAlbums(fetchAlbums())} />
+        </Box>
+      </Box>
+    </Container>
+  );
+}
+```
+
+---
+
+## **📌 Висновок**
+✅ **Компоненти розділено логічно**.  
+✅ **Код став більш структурованим та повторно використовуваним**.  
+✅ **Оновлення списку альбомів після створення нового**.  
+
+🚀 **Готовий до розширення та використання на інших сторінках!**

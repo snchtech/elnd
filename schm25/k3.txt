@@ -1,0 +1,128 @@
+Оновлений код сторінки `/albums.tsx`, де **`Grid` замінено на `Box` та `Stack`**, відповідно до **нових стандартів Material-UI**.
+
+---
+
+### **📌 Оновлений код `/albums.tsx`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, createAlbum } from "@/utils/api";
+import { Container, Box, Stack, Button, TextField, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Paper } from "@mui/material";
+import { Add } from "@mui/icons-material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [openModal, setOpenModal] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+    }
+    loadData();
+  }, []);
+
+  // Форма валідації через Yup
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+  });
+
+  // Відправка нового альбому
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      await createAlbum({ ...values, creator_id: 1 }); // ID користувача тимчасово 1, потім беремо з сесії
+      setOpenModal(false);
+      setAlbums(await fetchAlbums()); // Оновлення списку альбомів після додавання
+      resetForm();
+    } catch (error) {
+      console.error("Error creating album:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box display="flex" flexDirection="column" gap={3}>
+        
+        {/* Верхня панель */}
+        <Stack direction="row" spacing={2} alignItems="center">
+          <TextField label="Пошук" variant="outlined" fullWidth />
+          {mode === "editor" && (
+            <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setOpenModal(true)}>
+              Новий альбом
+            </Button>
+          )}
+        </Stack>
+
+        {/* Модальне вікно */}
+        <Dialog open={openModal} onClose={() => setOpenModal(false)}>
+          <DialogTitle>Новий альбом</DialogTitle>
+          <Formik
+            initialValues={{ name: "", depart_id: "", unit_id: "", description: "" }}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+          >
+            {({ isSubmitting, errors, touched }) => (
+              <Form>
+                <DialogContent>
+                  <Stack spacing={2}>
+                    {/* Відділ */}
+                    <Field as={TextField} select label="Відділ" name="depart_id" fullWidth 
+                      error={touched.depart_id && !!errors.depart_id} 
+                      helperText={touched.depart_id && errors.depart_id}>
+                      {departments.map(dep => (
+                        <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                      ))}
+                    </Field>
+
+                    {/* Підрозділ */}
+                    <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth 
+                      error={touched.unit_id && !!errors.unit_id} 
+                      helperText={touched.unit_id && errors.unit_id}>
+                      {units.map(unit => (
+                        <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                      ))}
+                    </Field>
+
+                    {/* Назва */}
+                    <Field as={TextField} label="Назва" name="name" fullWidth 
+                      error={touched.name && !!errors.name} 
+                      helperText={touched.name && errors.name} />
+
+                    {/* Опис */}
+                    <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+                  </Stack>
+                </DialogContent>
+
+                <DialogActions>
+                  <Button onClick={() => setOpenModal(false)} color="secondary">Скасувати</Button>
+                  <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>Додати</Button>
+                </DialogActions>
+              </Form>
+            )}
+          </Formik>
+        </Dialog>
+      </Box>
+    </Container>
+  );
+}
+```
+
+---
+
+## **🔹 Що оновлено?**
+✅ **Замінив `Grid` на `Box` та `Stack`** (відповідає новим стандартам MUI).  
+✅ **Додав `Stack spacing={2}`** для зручного вирівнювання елементів.  
+✅ **Залишив `Container maxWidth="xl"` для коректного масштабування.**  
+
+🚀 **Тепер код відповідає останнім стандартам Material-UI та виглядає більш сучасно!**

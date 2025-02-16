@@ -1,0 +1,86 @@
+Ось відповідні **SQL-запити** для кожного з `fetch`-запитів, згідно з наданими таблицями.
+
+---
+
+### **📌 1. Отримання списку альбомів (`fetchAlbums`)**
+```sql
+SELECT 
+    a.id, 
+    a.name, 
+    d.name AS department_name, 
+    u.name AS unit_name, 
+    a.description, 
+    a.date_update, 
+    a.date_create, 
+    a.status_id
+FROM ALBUM a
+LEFT JOIN DEPARTMENT d ON a.depart_id = d.id
+LEFT JOIN UNIT u ON a.unit_id = u.id
+ORDER BY a.date_create DESC;
+```
+- **`LEFT JOIN DEPARTMENT`** – додає назву відділу.
+- **`LEFT JOIN UNIT`** – додає назву підрозділу.
+- **Сортування за `date_create`**, щоб спочатку відображалися найновіші альбоми.
+
+---
+
+### **📌 2. Отримання списку схем (`fetchSchemes`)**
+```sql
+SELECT 
+    s.id, 
+    s.album_id, 
+    s.name, 
+    d.name AS department_name, 
+    u.name AS unit_name, 
+    s.description, 
+    s.date_update, 
+    s.date_create, 
+    s.format
+FROM SCHEME s
+LEFT JOIN DEPARTMENT d ON s.depart_id = d.id
+LEFT JOIN UNIT u ON s.unit_id = u.id
+ORDER BY s.date_create DESC;
+```
+- Додаємо **назву відділу** (`department_name`) та **підрозділу** (`unit_name`).
+- Сортування за датою створення.
+
+---
+
+### **📌 3. Отримання статусів альбомів (`fetchAlbumStatuses`)**
+```sql
+SELECT id, name 
+FROM ALBUM_STATUS;
+```
+- Тут простий `SELECT`, оскільки **таблиця `ALBUM_STATUS` містить лише ID та назву статусу**.
+
+---
+
+### **📌 4. Отримання останніх 5 змін в альбомах (`fetchRecentChanges`)**
+```sql
+SELECT 
+    v.date_update, 
+    v.scheme_id AS album_id, 
+    d.name AS department_name, 
+    u.name AS unit_name, 
+    s.name, 
+    e.name AS editor_name
+FROM SCHEME_VERSION v
+LEFT JOIN SCHEME s ON v.scheme_id = s.id
+LEFT JOIN DEPARTMENT d ON s.depart_id = d.id
+LEFT JOIN UNIT u ON s.unit_id = u.id
+LEFT JOIN EMPLOYEE e ON v.editor_id = e.id
+ORDER BY v.date_update DESC
+FETCH FIRST 5 ROWS ONLY;
+```
+- Витягуємо **5 останніх змін** (`FETCH FIRST 5 ROWS ONLY`).
+- Додаємо **назву схеми, відділ, підрозділ**.
+- Додаємо **ім'я користувача**, який зробив зміну (`editor_name` з таблиці `EMPLOYEE`).
+
+---
+
+## **📌 Підсумок**
+✅ **SQL-запити враховують структуру бази даних**.  
+✅ **Об’єднання таблиць (`JOIN`) забезпечує зручний формат даних**.  
+✅ **Додаємо сортування за датами**, щоб відображати найновіші альбоми, схеми та зміни першими.  
+
+🔹 **Готовий інтегрувати ці SQL-запити в Next.js API?** 🚀

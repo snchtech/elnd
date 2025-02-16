@@ -1,0 +1,205 @@
+### **Оновлення коду сторінки `/albums` відповідно до нових змін у MUI**  
+
+#### **📌 Оновлення 1: Використання `import { TreeView, TreeItem } from "@mui/x-tree-view";`**
+MUI переніс `TreeView` у новий пакет **`@mui/x-tree-view`**, тому тепер потрібно використовувати:
+```javascript
+import { TreeView, TreeItem } from "@mui/x-tree-view";
+```
+
+#### **📌 Оновлення 2: `Grid` є застарілим (deprecated)**
+В **MUI v6** компонент `Grid` замінили на **`Box` + `CSS Grid`** або на **`Stack`** для більшої гнучкості.  
+Замінимо `Grid` на `Box` для основного контейнера та `Stack` для гнучких секцій.
+
+---
+
+## **🔹 Оновлений код сторінки `/albums.tsx`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, fetchSchemes, fetchAlbumStatuses, fetchRecentChanges } from "@/utils/api";
+import { Container, Box, Stack, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton } from "@mui/material";
+import { Add, Print, Visibility, Edit, Delete, Description, ExpandMore, ChevronRight } from "@mui/icons-material";
+import { TreeView, TreeItem } from "@mui/x-tree-view";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [recentChanges, setRecentChanges] = useState([]);
+  const [expanded, setExpanded] = useState([]); // Контроль розкриття гілок
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+      setSchemes(await fetchSchemes());
+      setStatuses(await fetchAlbumStatuses());
+      setRecentChanges(await fetchRecentChanges());
+    }
+    loadData();
+  }, []);
+
+  // Функція створення дерева навігації
+  const buildTree = () => {
+    return departments.map((department) => {
+      const departmentAlbums = albums.filter(album => album.department_id === department.id);
+      
+      return (
+        <TreeItem key={department.id} nodeId={`dep-${department.id}`} label={department.name}>
+          {departmentAlbums.map(album => {
+            const albumSchemes = schemes.filter(scheme => scheme.album_id === album.id);
+            
+            return (
+              <TreeItem 
+                key={album.id} 
+                nodeId={`album-${album.id}`} 
+                label={`${album.name} ${albumSchemes.length > 0 ? "+" : ""}`}
+              >
+                {albumSchemes.map(scheme => (
+                  <TreeItem key={scheme.id} nodeId={`scheme-${scheme.id}`} label={scheme.name} />
+                ))}
+              </TreeItem>
+            );
+          })}
+        </TreeItem>
+      );
+    });
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box display="flex" gap={3}>
+
+        {/* Ліва панель (дерево навігації) */}
+        <Box width="25%">
+          <Paper sx={{ padding: 2 }}>
+            <h3>Навігація</h3>
+            <TreeView
+              defaultCollapseIcon={<ExpandMore />}
+              defaultExpandIcon={<ChevronRight />}
+              expanded={expanded}
+              onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+            >
+              {buildTree()}
+            </TreeView>
+          </Paper>
+        </Box>
+
+        {/* Основний контент */}
+        <Box flex={1}>
+
+          {/* Верхня панель */}
+          <Stack direction="row" spacing={2} alignItems="center">
+            <TextField label="Пошук" variant="outlined" fullWidth />
+            {mode === "editor" && (
+              <Button variant="contained" color="success" startIcon={<Add />}>
+                Новий альбом
+              </Button>
+            )}
+          </Stack>
+
+          {/* Фільтри */}
+          <Stack direction="row" spacing={2} mt={2}>
+            <TextField select label="Відділ" fullWidth>
+              {departments.map((dep) => (
+                <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField select label="Підрозділ" fullWidth>
+              {units.map((unit) => (
+                <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+
+          {/* Таблиця альбомів */}
+          <TableContainer component={Paper} sx={{ mt: 2 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Відділ</TableCell>
+                  <TableCell>Unit</TableCell>
+                  <TableCell>Назва</TableCell>
+                  <TableCell>Опис</TableCell>
+                  <TableCell>Дата оновлення</TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell>Дії</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {albums.map((album) => (
+                  <TableRow key={album.id}>
+                    <TableCell>{album.id}</TableCell>
+                    <TableCell>{album.department_name}</TableCell>
+                    <TableCell>{album.unit_name}</TableCell>
+                    <TableCell>{album.name}</TableCell>
+                    <TableCell>{album.description}</TableCell>
+                    <TableCell>{album.date_update || album.date_create}</TableCell>
+                    <TableCell>{statuses.find((s) => s.id === album.status_id)?.name}</TableCell>
+                    <TableCell>
+                      <IconButton color="primary"><Print /></IconButton>
+                      <IconButton color="secondary"><Description /></IconButton>
+                      {mode === "viewer" && <IconButton color="info"><Visibility /></IconButton>}
+                      {mode === "editor" && <>
+                        <IconButton color="warning"><Edit /></IconButton>
+                        <IconButton color="error"><Delete /></IconButton>
+                      </>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Блок останніх змін */}
+          <Paper sx={{ mt: 2, padding: 2 }}>
+            <h3>Останні 5 змін</h3>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Дата</TableCell>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Відділ</TableCell>
+                    <TableCell>Unit</TableCell>
+                    <TableCell>Назва</TableCell>
+                    <TableCell>Зміни виконав</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {recentChanges.map((change) => (
+                    <TableRow key={change.id}>
+                      <TableCell>{change.date}</TableCell>
+                      <TableCell>{change.album_id}</TableCell>
+                      <TableCell>{change.department_name}</TableCell>
+                      <TableCell>{change.unit_name}</TableCell>
+                      <TableCell>{change.name}</TableCell>
+                      <TableCell>{change.editor_name}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+
+        </Box>
+      </Box>
+    </Container>
+  );
+}
+```
+
+---
+
+## **🔹 Що оновлено?**
+✅ **Замінив `Grid` на `Box` і `Stack`** (сучасний підхід у MUI).  
+✅ **Оновив `TreeView` до `@mui/x-tree-view`** (усунув попередження про застарілі компоненти).  
+✅ **Додав `sx` (стилі через MUI) для покращеної адаптивності**.  
+
+Тепер код відповідає останнім стандартам **Material-UI v6+**. 🚀

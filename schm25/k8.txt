@@ -1,0 +1,35 @@
+Так, `TEXT_TABLE` враховує кількість рядків (`row_count`) та колонок (`column_count`), а `TEXT_TABLE_CELL` використовується для збереження вмісту кожної комірки таблиці.
+
+Ось приклад **SQL-запиту** для створення таблиці з використанням цих структур:
+
+```sql
+-- Створення нового текстового елемента
+INSERT INTO ELEMENT_TEXT (text_element_id, element_id, text_content, text_type, font_size, font_color, background_color, alignment, is_bold, is_italic, is_underlined)
+VALUES (1, 100, NULL, 'TABLE', 12, 'black', 'white', 'CENTER', 0, 0, 0)
+RETURNING id INTO :new_text_element_id;
+
+-- Створення таблиці для текстового елемента
+INSERT INTO TEXT_TABLE (element_text_id, row_count, column_count, border_color, cell_padding, cell_spacing)
+VALUES (:new_text_element_id, 3, 4, 'black', 2, 1)
+RETURNING id INTO :new_text_table_id;
+
+-- Заповнення комірок таблиці
+INSERT INTO TEXT_TABLE_CELL (text_table_id, row_number, column_number, cell_content, cell_background_color, cell_text_color)
+VALUES (:new_text_table_id, 1, 1, 'Заголовок 1', 'gray', 'black');
+
+INSERT INTO TEXT_TABLE_CELL (text_table_id, row_number, column_number, cell_content, cell_background_color, cell_text_color)
+VALUES (:new_text_table_id, 1, 2, 'Заголовок 2', 'gray', 'black');
+
+INSERT INTO TEXT_TABLE_CELL (text_table_id, row_number, column_number, cell_content, cell_background_color, cell_text_color)
+VALUES (:new_text_table_id, 2, 1, 'Текст у першій комірці', 'white', 'black');
+
+INSERT INTO TEXT_TABLE_CELL (text_table_id, row_number, column_number, cell_content, cell_background_color, cell_text_color)
+VALUES (:new_text_table_id, 2, 2, 'Ще текст', 'white', 'black');
+```
+
+📌 **Що цей код робить?**  
+✅ **Створює текстовий елемент** з типом `TABLE`.  
+✅ **Створює таблицю для текстового елемента** з 3 рядками та 4 колонками.  
+✅ **Заповнює комірки таблиці** даними.
+
+Якщо потрібно ще доопрацювання або інші запити – дай знати! 😊

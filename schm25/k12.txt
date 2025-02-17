@@ -1,0 +1,133 @@
+### **Як реалізувати дублювання всіх елементів схеми при створенні нової версії на рівні БД Oracle**
+При створенні нової версії схеми нам потрібно **автоматично копіювати всі підв’язані елементи** (`ELEMENT`, `ELEMENT_TEXT`, `ZVT`, `REF_ELEMENT` тощо), щоб нова версія мала ті ж самі дані, але могла бути змінена незалежно від стабільної версії.
+
+---
+
+### **1. Додавання `scheme_version_id` у всі таблиці, пов'язані зі схемою**
+Щоб кожен елемент був прив’язаний до певної версії схеми, у відповідні таблиці (`ELEMENT`, `ELEMENT_TEXT`, `ZVT`, `REF_ELEMENT` тощо) потрібно додати `scheme_version_id`:
+```sql
+ALTER TABLE ELEMENT ADD scheme_version_id NUMBER REFERENCES SCHEME_VERSION(id);
+ALTER TABLE ELEMENT_TEXT ADD scheme_version_id NUMBER REFERENCES SCHEME_VERSION(id);
+ALTER TABLE ZVT ADD scheme_version_id NUMBER REFERENCES SCHEME_VERSION(id);
+ALTER TABLE REF_ELEMENT ADD scheme_version_id NUMBER REFERENCES SCHEME_VERSION(id);
+```
+
+---
+
+### **2. Створення процедури `clone_scheme_version`**
+Для копіювання всіх елементів схеми при створенні нової версії можна використати PL/SQL-процедуру:
+```sql
+CREATE OR REPLACE PROCEDURE clone_scheme_version (
+    p_old_version_id NUMBER,
+    p_new_version_id NUMBER
+) AS
+BEGIN
+    -- Копіюємо всі графічні елементи
+    INSERT INTO ELEMENT (scheme_version_id, name, status_id, department_id, unit_id, date_update, group_id, element_type, x_position, y_position, width, height, radius, fill_color, created_at, element_blob, show_status)
+    SELECT p_new_version_id, name, status_id, department_id, unit_id, date_update, group_id, element_type, x_position, y_position, width, height, radius, fill_color, created_at, element_blob, show_status
+    FROM ELEMENT WHERE scheme_version_id = p_old_version_id;
+
+    -- Копіюємо текстові елементи
+    INSERT INTO ELEMENT_TEXT (scheme_version_id, text_element_id, element_id, text_content, text_type, font_size, font_color, background_color, alignment, is_bold, is_italic, is_underlined)
+    SELECT p_new_version_id, text_element_id, element_id, text_content, text_type, font_size, font_color, background_color, alignment, is_bold, is_italic, is_underlined
+    FROM ELEMENT_TEXT WHERE scheme_version_id = p_old_version_id;
+
+    -- Копіюємо ZVT елементи
+    INSERT INTO ZVT (scheme_version_id, param_type_id, location_id, indicator_id, ios_status, x_position, y_position, width, height, color_id, created_at, updated_at, created_by, updated_by)
+    SELECT p_new_version_id, param_type_id, location_id, indicator_id, ios_status, x_position, y_position, width, height, color_id, created_at, updated_at, created_by, updated_by
+    FROM ZVT WHERE scheme_version_id = p_old_version_id;
+
+    -- Копіюємо референсні елементи
+    INSERT INTO REF_ELEMENT (scheme_version_id, reference_type, element_id, name, point_from, point_to, coordinate_x, coordinate_y, image_src, file_blob, date_update, scheme_id, album_id, color_id)
+    SELECT p_new_version_id, reference_type, element_id, name, point_from, point_to, coordinate_x, coordinate_y, image_src, file_blob, date_update, scheme_id, album_id, color_id
+    FROM REF_ELEMENT WHERE scheme_version_id = p_old_version_id;
+
+    COMMIT;
+END clone_scheme_version;
+/
+```
+
+---
+
+### **3. Використання процедури при створенні нової версії**
+Коли користувач починає редагувати стабільну версію:
+1. Створюється **нова версія схеми**:
+   ```sql
+   DECLARE v_new_version_id NUMBER;
+   BEGIN
+       INSERT INTO SCHEME_VERSION (scheme_id, version_number, is_stable, is_archived, created_by)
+       VALUES (:scheme_id, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM SCHEME_VERSION WHERE scheme_id = :scheme_id), 0, 0, :user_id)
+       RETURNING id INTO v_new_version_id;
+
+       -- Викликаємо процедуру для копіювання всіх елементів
+       clone_scheme_version(:old_version_id, v_new_version_id);
+   END;
+   ```
+2. Тепер у новій версії (`scheme_version_id`) є всі елементи оригінальної версії.
+
+---
+
+### **Як реалізувати в Next.js при підвантаженні схем**
+1. **Отримання стабільної версії**
+   ```javascript
+   const fetchStableScheme = async (schemeId) => {
+       const response = await fetch(`/api/schemes/${schemeId}?stable=1`);
+       return await response.json();
+   };
+   ```
+   - Виконується SQL-запит:
+     ```sql
+     SELECT * FROM SCHEME_VERSION WHERE scheme_id = :scheme_id AND is_stable = 1;
+     ```
+
+2. **Редагування схеми:**
+   - Якщо немає незавершеної версії (`is_stable = 0`), то створюємо нову версію та копіюємо всі елементи через API-запит:
+     ```javascript
+     const createNewVersion = async (schemeId) => {
+         const response = await fetch(`/api/schemes/${schemeId}/new-version`, { method: 'POST' });
+         return await response.json();
+     };
+     ```
+   - Це викличе SQL-процедуру `clone_scheme_version`.
+
+3. **Збереження змін у поточній версії**
+   - При збереженні змін оновлюємо елементи нової версії (`scheme_version_id`):
+     ```javascript
+     const updateElement = async (elementId, updatedData) => {
+         await fetch(`/api/elements/${elementId}`, {
+             method: 'PUT',
+             body: JSON.stringify(updatedData),
+         });
+     };
+     ```
+   - Використовується SQL-запит:
+     ```sql
+     UPDATE ELEMENT SET x_position = :x, y_position = :y, updated_by = :user_id WHERE id = :element_id;
+     ```
+
+4. **Завершення редагування**
+   - При натисканні "Завершити редагування":
+     ```javascript
+     const finalizeVersion = async (schemeId) => {
+         await fetch(`/api/schemes/${schemeId}/finalize`, { method: 'POST' });
+     };
+     ```
+   - SQL-запити:
+     ```sql
+     UPDATE SCHEME_VERSION SET is_stable = 0, is_archived = 1 WHERE scheme_id = :scheme_id AND is_stable = 1;
+     UPDATE SCHEME_VERSION SET is_stable = 1 WHERE id = :version_id;
+     ```
+
+---
+
+### **📌 Підсумок**
+🔹 **На рівні БД:**
+- Додали `scheme_version_id` у всі пов’язані таблиці.
+- Реалізували процедуру `clone_scheme_version`, яка копіює всі елементи при створенні нової версії.
+
+🔹 **На рівні Next.js:**
+- Використовуємо API-запити для створення, редагування та завершення версії.
+- Відображаємо тільки **стабільні версії** у переглядачі.
+- Використовуємо **окремий `scheme_version_id`** для роботи з чернетками, поки схема не стане стабільною.
+
+🚀 **Ця реалізація дозволяє безпечно працювати з версіями схем, уникаючи непотрібного перезапису стабільних даних.** Якщо потрібно ще якісь зміни – дай знати! 😊

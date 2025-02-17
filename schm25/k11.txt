@@ -1,0 +1,34 @@
+Ось оновлений код з перевіркою, чи перший символ у кожному `input` є латинською літерою:  
+
+```javascript
+let newPassFirstChar = newExpPassFirstChar();
+
+if (newPassFirstChar) {
+    return true;
+} else {
+    showConfirmErrPassMessage('Першим символом паролю має бути латинська буква');
+}
+
+function newExpPassFirstChar() {
+    let passInput = document.querySelector('.user-new-pass').value.trim();
+    let confirmPassInput = document.querySelector('.new-user-passord-confirm').value.trim();
+
+    if (passInput !== '' && confirmPassInput !== '') {
+        // Регулярний вираз для перевірки першого символу (латинська літера)
+        let regex = /^[A-Za-z]/;
+
+        // Перевіряємо, чи перший символ відповідає латинській літері
+        return regex.test(passInput) && regex.test(confirmPassInput);
+    }
+
+    return false;
+}
+```
+
+### Що цей код робить:
+✅ **Очищає пробіли** перед перевіркою.  
+✅ **Перевіряє, чи є значення у полях** перед валідацією.  
+✅ **Використовує регулярний вираз (`/^[A-Za-z]/`)**, який перевіряє, чи перший символ латинський (`A-Z` або `a-z`).  
+✅ **Повертає `true`, якщо обидва паролі починаються з латинської букви**, інакше `false`.  
+
+Якщо перший символ у будь-якому полі не є латинською буквою, викликається `showConfirmErrPassMessage()`.

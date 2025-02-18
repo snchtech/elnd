@@ -1,0 +1,76 @@
+Ось оновлена функція `filterData`, яка враховує `PERMITION_ID` відповідно до твоїх вимог:
+
+```javascript
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+
+  return data.filter(function (el) {
+    // Перевірка на унікальність SOURCE_ID
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      return false;
+    }
+    uniqueSourceIDs.add(el.SOURCE_ID);
+
+    let matches = true;
+
+    // Фільтрація по POSITION_ID, DEPARTMENT_ID, U_ID
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+    }
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+    }
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+    }
+
+    // Якщо попередні умови не виконуються, не перевіряємо PERMITION_ID
+    if (!matches) {
+      return false;
+    }
+
+    // Фільтрація по PERMITION_ID
+    if ([545, 812].includes(el.POSITION_ID)) {
+      // Якщо POSITION_ID = 545 або 812 → залишаємо лише ті, де PERMITION_ID містить 2
+      matches = el.PERMITION_ID.includes(2);
+    } else {
+      // Для всіх інших POSITION_ID → залишаємо, якщо PERMITION_ID містить 2 або значення DEPARTMENT_ID
+      matches = el.PERMITION_ID.includes(2) || (el.DEPARTMENT_ID !== null && el.PERMITION_ID.includes(el.DEPARTMENT_ID));
+    }
+
+    return matches;
+  });
+}
+
+// Приклад даних
+const dataTest = [
+  { SOURCE_ID: 100, POSITION_ID: 545, DEPARTMENT_ID: 1100, U_ID: 1, PERMITION_ID: [2, 15] },
+  { SOURCE_ID: 100, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 1, PERMITION_ID: [2, 17] },
+  { SOURCE_ID: 101, POSITION_ID: 545, DEPARTMENT_ID: null, U_ID: 2, PERMITION_ID: [2, 15] },
+  { SOURCE_ID: 101, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2, PERMITION_ID: [2, 17] },
+  { SOURCE_ID: 107, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null, PERMITION_ID: [2, 10] },
+];
+
+// Виклик функції
+const filteredData = filterData(dataTest, null, 1100, null);
+console.log(filteredData);
+```
+
+---
+
+### 🔍 **Опис логіки**
+1. **Перевіряємо унікальність `SOURCE_ID`**, щоб уникнути дублікатів.
+2. **Фільтруємо по `POSITION_ID`, `DEPARTMENT_ID`, `U_ID`**, якщо вони передані.
+3. **Фільтруємо по `PERMITION_ID`**:
+   - Якщо `POSITION_ID` дорівнює **545 або 812**, залишаємо тільки ті, у яких `PERMITION_ID` містить `2`.
+   - Для всіх інших `POSITION_ID` перевіряємо, чи `PERMITION_ID` містить **`2` або `DEPARTMENT_ID`**.
+4. Повертаємо відфільтрований масив.
+
+---
+
+### ✅ **Чому цей код ефективний?**
+✔ Використовує `Set()` для усунення дублікатів.  
+✔ Перевіряє `PERMITION_ID` тільки для тих елементів, які пройшли перший рівень фільтрації.  
+✔ Гнучка логіка – можна легко додати нові правила.  
+
+Тепер `filterData` працює так, як тобі потрібно! 🚀

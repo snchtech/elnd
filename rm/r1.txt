@@ -1,0 +1,70 @@
+У Oracle PL/SQL можна використати оператор `CASE` або перевірку `NVL` у `WHERE`-умові для додавання додаткового фільтра. Нижче представлений правильний синтаксис для вашої функції:
+
+```sql
+CREATE OR REPLACE FUNCTION get_data(depart IN NUMBER, unit IN NUMBER)
+RETURN SYS_REFCURSOR IS
+    result_cursor SYS_REFCURSOR;
+BEGIN
+    OPEN result_cursor FOR
+        SELECT * FROM db_table t
+        WHERE t.date = TRUNC(SYSDATE) 
+        AND (depart IS NULL AND t.perm = 2 OR depart IS NOT NULL AND t.perm IN (2, depart));
+    
+    RETURN result_cursor;
+END get_data;
+/
+```
+
+### **Пояснення коду:**
+1. **Перевірка `depart IS NULL`**:
+   - Якщо `depart` **NULL**, тоді **використовуємо `t.perm = 2`**.
+   - Якщо `depart` **не NULL**, тоді **використовуємо `t.perm IN (2, depart)`**.
+   
+2. **`TRUNC(SYSDATE)`**:
+   - Якщо `t.date` містить `DATE`-значення з часом, важливо усунути час за допомогою `TRUNC(SYSDATE)`, інакше він не відповідатиме `SYSDATE`, який має також годину, хвилину, секунди.
+
+3. **Функція повертає `SYS_REFCURSOR`**:
+   - Це дозволяє її викликати з PL/SQL блоку або в SQL-запиті, отримуючи результати у курсорі.
+
+### **Приклад виклику функції:**
+```sql
+DECLARE
+    v_cursor SYS_REFCURSOR;
+    v_row db_table%ROWTYPE;
+BEGIN
+    v_cursor := get_data(NULL, 1); -- depart = NULL
+    LOOP
+        FETCH v_cursor INTO v_row;
+        EXIT WHEN v_cursor%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(v_row.some_column);
+    END LOOP;
+    CLOSE v_cursor;
+END;
+/
+```
+
+Якщо у вас `Oracle 10g` і ви хочете просто **динамічно будувати SQL-запит**, можна використати `EXECUTE IMMEDIATE`:
+
+```sql
+CREATE OR REPLACE FUNCTION get_data(depart IN NUMBER, unit IN NUMBER)
+RETURN SYS_REFCURSOR IS
+    result_cursor SYS_REFCURSOR;
+    v_sql VARCHAR2(1000);
+BEGIN
+    v_sql := 'SELECT * FROM db_table t WHERE t.date = TRUNC(SYSDATE)';
+
+    IF depart IS NULL THEN
+        v_sql := v_sql || ' AND t.perm = 2';
+    ELSE
+        v_sql := v_sql || ' AND t.perm IN (2, :depart)';
+    END IF;
+
+    OPEN result_cursor FOR v_sql USING depart;
+    RETURN result_cursor;
+END get_data;
+/
+```
+
+Цей варіант підходить, якщо потрібно будувати запит динамічно.
+
+Сподіваюсь, це допоможе! 🚀

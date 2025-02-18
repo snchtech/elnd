@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debugging filterData</title>
+</head>
+<body>
+    TEST
+<script>
+function filterData(data, position, department, unit) {
+  const uniqueSourceIDs = new Set();
+
+  return data.filter(function (el) {
+    console.log(`\nПеревірка запису:`, el);
+
+    // Перевірка на унікальність SOURCE_ID
+    if (uniqueSourceIDs.has(el.SOURCE_ID)) {
+      console.log(`⏩ Пропущено через дублікат SOURCE_ID:`, el.SOURCE_ID);
+      return false;
+    }
+    uniqueSourceIDs.add(el.SOURCE_ID);
+
+    let matches = true;
+
+    // Фільтрація по POSITION_ID, DEPARTMENT_ID, U_ID
+    if (position !== null && position !== undefined) {
+      matches = matches && el.POSITION_ID === position;
+      console.log(`🔍 Перевірка POSITION_ID: ${el.POSITION_ID} === ${position} ->`, matches);
+    }
+    if (department !== null && department !== undefined) {
+      matches = matches && el.DEPARTMENT_ID === department;
+      console.log(`🔍 Перевірка DEPARTMENT_ID: ${el.DEPARTMENT_ID} === ${department} ->`, matches);
+    }
+    if (unit !== null && unit !== undefined) {
+      matches = matches && el.U_ID === unit;
+      console.log(`🔍 Перевірка U_ID: ${el.U_ID} === ${unit} ->`, matches);
+    }
+
+    // Якщо попередні умови не виконуються, не перевіряємо PERMITION_ID
+    if (!matches) {
+      console.log(`❌ Відфільтровано до перевірки PERMITION_ID`);
+      return false;
+    }
+
+    // Фільтрація по PERMITION_ID
+    if (el.POSITION_ID === 545 || el.POSITION_ID === 812) {
+      // Якщо POSITION_ID = 545 або 812 → залишаємо лише ті, де PERMITION_ID містить 2
+      matches = el.PERMITION_ID.includes(2);
+      console.log(`🔍 POSITION_ID 545/812 → перевірка PERMITION_ID.includes(2) ->`, matches);
+    } else {
+      // Для всіх інших POSITION_ID → залишаємо, якщо PERMITION_ID містить 2 або DEPARTMENT_ID (якщо він не null)
+      matches = el.PERMITION_ID.includes(2) || (el.DEPARTMENT_ID !== null && el.PERMITION_ID.includes(el.DEPARTMENT_ID));
+      console.log(`🔍 Інший POSITION_ID → перевірка PERMITION_ID.includes(2) || includes(DEPARTMENT_ID) ->`, matches);
+    }
+
+    return matches;
+  });
+}
+
+// Приклад даних
+const dataTest = [
+  { SOURCE_ID: 100, POSITION_ID: 545, DEPARTMENT_ID: 1100, U_ID: 1, PERMITION_ID: [2, 15] },
+  { SOURCE_ID: 1005, POSITION_ID: 654, DEPARTMENT_ID: 1100, U_ID: 1, PERMITION_ID: [2, 1100] },
+  { SOURCE_ID: 1015, POSITION_ID: 545, DEPARTMENT_ID: null, U_ID: 2, PERMITION_ID: [2, 15] },
+  { SOURCE_ID: 1011, POSITION_ID: 812, DEPARTMENT_ID: null, U_ID: 2, PERMITION_ID: [2, 17] },
+  { SOURCE_ID: 107, POSITION_ID: null, DEPARTMENT_ID: 1100, U_ID: null, PERMITION_ID: [2, 10] },
+];
+
+// Виклик функції
+const filteredData = filterData(dataTest, 654, 1100, null);
+console.log(`\n🎯 Результат фільтрації:`, filteredData);
+</script>
+</body>
+</html>

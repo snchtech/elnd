@@ -1,0 +1,174 @@
+Ось оновлений код для **видалення альбому**, включаючи:  
+✅ **API-запит для видалення альбому**  
+✅ **Функцію `handleDeleteClick`**  
+✅ **Підтверджувальне діалогове вікно перед видаленням**  
+
+---
+
+## **📌 1. Оновлення API-запиту у `api.js`**
+Додаємо функцію для видалення альбому:
+```javascript
+export const deleteAlbum = async (id) => {
+  const response = await fetch(`/api/albums/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Помилка при видаленні альбому");
+  }
+
+  return response.json();
+};
+```
+✅ **Що робить цей код?**  
+- Виконує `DELETE`-запит до `/api/albums/{id}`.  
+- Якщо сервер поверне помилку, вона буде оброблена.
+
+---
+
+## **📌 2. Оновлення `AlbumsPage.js` (додаємо видалення)**
+Додаємо стан для підтвердження видалення.
+
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchAlbums, fetchAlbumStatuses, deleteAlbum } from "@/utils/api";
+import { Container, Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
+import { Edit, Delete } from "@mui/icons-material";
+import NewAlbumModal from "@/components/NewAlbumModal";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [albumToDelete, setAlbumToDelete] = useState(null);
+
+  useEffect(() => {
+    async function loadData() {
+      setAlbums(await fetchAlbums());
+      setStatuses(await fetchAlbumStatuses());
+    }
+    loadData();
+  }, []);
+
+  const handleEditClick = (album) => {
+    setSelectedAlbum(album);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (album) => {
+    setAlbumToDelete(album);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+      await deleteAlbum(albumToDelete.id);
+      setAlbums(albums.filter((a) => a.id !== albumToDelete.id)); // Видаляємо альбом зі списку
+    } catch (error) {
+      console.error("Помилка при видаленні:", error);
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setAlbumToDelete(null);
+    }
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Назва</TableCell>
+                <TableCell>Опис</TableCell>
+                <TableCell>Дата оновлення</TableCell>
+                <TableCell>Статус</TableCell>
+                <TableCell>Дії</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {albums.map((album) => (
+                <TableRow key={album.id}>
+                  <TableCell>{album.id}</TableCell>
+                  <TableCell>{album.name}</TableCell>
+                  <TableCell>{album.description}</TableCell>
+                  <TableCell>{album.date_update || album.date_create}</TableCell>
+                  <TableCell>{statuses.find((s) => s.id === album.status_id)?.name}</TableCell>
+                  <TableCell>
+                    <IconButton color="warning" onClick={() => handleEditClick(album)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton color="error" onClick={() => handleDeleteClick(album)}>
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      {/* Модальне вікно для редагування альбому */}
+      <NewAlbumModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAlbumCreated={() => setAlbums([...albums])}
+        album={selectedAlbum}
+      />
+
+      {/* Діалогове вікно підтвердження видалення */}
+      <Dialog open={isDeleteDialogOpen} onClose={() => setIsDeleteDialogOpen(false)}>
+        <DialogTitle>Підтвердження видалення</DialogTitle>
+        <DialogContent>Ви впевнені, що хочете видалити альбом "{albumToDelete?.name}"?</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsDeleteDialogOpen(false)} color="secondary">Скасувати</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">Видалити</Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  );
+}
+```
+
+---
+
+## **📌 3. Оновлення `pages/api/albums/[id].js` (серверна обробка DELETE-запиту)**
+```javascript
+export default async function handler(req, res) {
+  const { id } = req.query;
+
+  if (req.method === "DELETE") {
+    try {
+      const response = await fetch(`https://external-api.com/albums/${id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: "Помилка при видаленні альбому" });
+      }
+
+      return res.status(200).json({ message: "Альбом успішно видалений" });
+    } catch (error) {
+      return res.status(500).json({ error: "Внутрішня помилка сервера" });
+    }
+  }
+
+  return res.status(405).json({ error: "Метод не дозволений" });
+}
+```
+
+---
+
+## **✅ Що тепер працює?**
+🔹 **При натисканні кнопки Delete** відкривається підтвердження видалення.  
+🔹 **Після підтвердження** виконується `DELETE`-запит.  
+🔹 **Якщо видалення успішне**, альбом **видаляється з UI без перезавантаження**.  
+🔹 **API Next.js** пересилає `DELETE`-запит до **стороннього API**.
+
+🚀 **Тепер ти можеш редагувати та видаляти альбоми прямо з таблиці!**  
+Якщо потрібно щось доопрацювати – питай! 😊

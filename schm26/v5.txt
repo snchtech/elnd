@@ -1,0 +1,220 @@
+Щоб при натисканні кнопки **Edit** відкривалося модальне вікно з даними вибраного альбому, потрібно:
+1. **Додати стан для збереження вибраного альбому**.
+2. **При кліку на "Edit" передавати дані вибраного альбому у модальне вікно**.
+3. **Оновити `NewAlbumModal.js`, щоб він підтримував режим редагування**.
+
+---
+
+### **📌 1. Оновлення `AlbumsPage.js`**
+Додаємо **стан для редагованого альбому** і функцію **відкриття модального вікна**.
+
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, fetchSchemes, fetchAlbumStatuses, fetchRecentChanges } from "@/utils/api";
+import { Container, Box, Stack, Button, TextField, MenuItem, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton } from "@mui/material";
+import { Add, Print, Visibility, Edit, Delete, Description } from "@mui/icons-material";
+import NewAlbumModal from "@/components/NewAlbumModal";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [recentChanges, setRecentChanges] = useState([]);
+  const [selectedAlbum, setSelectedAlbum] = useState(null); // Стан для редагованого альбому
+  const [isModalOpen, setIsModalOpen] = useState(false); // Стан модального вікна
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+      setStatuses(await fetchAlbumStatuses());
+      setRecentChanges(await fetchRecentChanges());
+    }
+    loadData();
+  }, []);
+
+  const handleEditClick = (album) => {
+    setSelectedAlbum(album); // Зберігаємо вибраний альбом
+    setIsModalOpen(true); // Відкриваємо модальне вікно
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Назва</TableCell>
+                <TableCell>Опис</TableCell>
+                <TableCell>Дата оновлення</TableCell>
+                <TableCell>Статус</TableCell>
+                <TableCell>Дії</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {albums.map((album) => (
+                <TableRow key={album.id}>
+                  <TableCell>{album.id}</TableCell>
+                  <TableCell>{album.name}</TableCell>
+                  <TableCell>{album.description}</TableCell>
+                  <TableCell>{album.date_update || album.date_create}</TableCell>
+                  <TableCell>{statuses.find((s) => s.id === album.status_id)?.name}</TableCell>
+                  <TableCell>
+                    <IconButton color="warning" onClick={() => handleEditClick(album)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton color="error">
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      {/* Модальне вікно для створення/редагування альбому */}
+      <NewAlbumModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAlbumCreated={() => setAlbums([...albums])} // Оновлення списку після редагування
+        album={selectedAlbum} // Передаємо вибраний альбом
+      />
+    </Container>
+  );
+}
+```
+✅ **Що ми додали?**
+- `selectedAlbum` – стан для збереження вибраного альбому.
+- `handleEditClick(album)` – функція, яка відкриває модальне вікно та передає альбом для редагування.
+- Передаємо `album={selectedAlbum}` у `NewAlbumModal`, щоб туди завантажились поточні дані.
+
+---
+
+### **📌 2. Оновлення `NewAlbumModal.js` для редагування**
+Тепер, якщо `album` передано, модальне вікно працює в режимі **редагування**.
+
+```javascript
+import { useState, useEffect } from "react";
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem } from "@mui/material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+import { fetchDepartments, fetchUnits, createAlbum, updateAlbum } from "@/utils/api";
+
+export default function NewAlbumModal({ open, onClose, onAlbumCreated, album }) {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+    }
+    loadData();
+  }, []);
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+  });
+
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      if (album) {
+        // Якщо редагуємо існуючий альбом
+        await updateAlbum(album.id, values);
+      } else {
+        // Якщо створюємо новий альбом
+        await createAlbum({ ...values, creator_id: 1 });
+      }
+
+      onClose();
+      onAlbumCreated();
+      resetForm();
+    } catch (error) {
+      console.error("Помилка при збереженні альбому:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>{album ? "Редагування альбому" : "Новий альбом"}</DialogTitle>
+      <Formik
+        initialValues={{
+          name: album?.name || "",
+          depart_id: album?.depart_id || "",
+          unit_id: album?.unit_id || "",
+          description: album?.description || "",
+        }}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+        enableReinitialize
+      >
+        {({ isSubmitting, errors, touched }) => (
+          <Form>
+            <DialogContent>
+              <Field as={TextField} select label="Відділ" name="depart_id" fullWidth>
+                {departments.map(dep => (
+                  <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                ))}
+              </Field>
+              <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth>
+                {units.map(unit => (
+                  <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                ))}
+              </Field>
+              <Field as={TextField} label="Назва" name="name" fullWidth />
+              <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={onClose} color="secondary">Скасувати</Button>
+              <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>
+                {album ? "Оновити" : "Додати"}
+              </Button>
+            </DialogActions>
+          </Form>
+        )}
+      </Formik>
+    </Dialog>
+  );
+}
+```
+✅ **Що ми зробили?**
+- **Якщо `album` передано**, то `initialValues` отримує **поточні дані**.
+- **Якщо `album` немає**, то форма порожня (режим створення).
+- Використовуємо `enableReinitialize`, щоб форма **автоматично оновлювалася при зміні `album`**.
+
+---
+
+### **📌 3. Оновлення API-запиту**
+Файл `api.js`:
+```javascript
+export const updateAlbum = async (id, data) => {
+  const response = await fetch(`/api/albums/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return response.json();
+};
+```
+
+---
+
+### **🚀 Висновок**
+✅ Тепер при натисканні **Edit**, альбом завантажується в **модальне вікно**.  
+✅ **Якщо `album` є**, кнопка змінюється на **"Оновити"**, якщо ні — на **"Додати"**.  
+✅ **Дані редагуються без створення нового запису!**  
+
+Якщо потрібно доопрацювання — питай! 😊

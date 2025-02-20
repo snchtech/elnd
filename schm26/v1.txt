@@ -1,0 +1,69 @@
+Ось два окремі SQL-запити:
+
+---
+
+### **1️⃣ Запит для отримання всіх альбомів з останньою стабільною версією**
+```sql
+SELECT 
+    a.id AS album_id,
+    a.name AS album_name,
+    a.description AS album_description,
+    d.name AS department_name,
+    u.name AS unit_name,
+    es.name AS status_name,
+    sv.id AS album_version_id,
+    sv.version_number AS album_version_number,
+    sv.updated_at AS album_updated_at
+FROM ALBUM a
+JOIN ENTRY_STATUS es ON a.status_id = es.id
+JOIN DEPARTMENT d ON a.depart_id = d.id
+JOIN UNIT u ON a.unit_id = u.id
+JOIN SCHEME_VERSION sv ON a.id = sv.album_id AND sv.is_stable = 1 -- Отримуємо стабільну версію альбому
+ORDER BY sv.updated_at DESC;
+```
+✅ Повертає **тільки альбоми**, де є **остання стабільна версія**.  
+✅ Включає назву **відділу (`DEPARTMENT`)**, **підрозділу (`UNIT`)**, **статусу (`ENTRY_STATUS`)**.  
+✅ **Впорядковує за останнім оновленням версії.**  
+
+---
+
+### **2️⃣ Запит для отримання всіх схем з останньою стабільною версією**
+```sql
+SELECT 
+    s.id AS scheme_id,
+    s.name AS scheme_name,
+    s.description AS scheme_description,
+    d.name AS department_name,
+    u.name AS unit_name,
+    svs.id AS scheme_version_id,
+    svs.version_number AS scheme_version_number,
+    svs.updated_at AS scheme_updated_at
+FROM SCHEME s
+JOIN DEPARTMENT d ON s.depart_id = d.id
+JOIN UNIT u ON s.unit_id = u.id
+JOIN SCHEME_VERSION svs ON s.id = svs.scheme_id AND svs.is_stable = 1 -- Отримуємо стабільну версію схеми
+ORDER BY svs.updated_at DESC;
+```
+✅ Повертає **тільки схеми**, де є **остання стабільна версія**.  
+✅ Включає **назви відділу (`DEPARTMENT`)** і **підрозділу (`UNIT`)**.  
+✅ **Впорядковує за останнім оновленням версії.**  
+
+---
+
+### **Як це використовувати в Next.js**
+```javascript
+// Отримуємо всі альбоми з актуальними версіями
+const fetchAlbums = async () => {
+    const response = await fetch('/api/albums');
+    return await response.json();
+};
+
+// Отримуємо всі схеми з актуальними версіями
+const fetchSchemes = async () => {
+    const response = await fetch('/api/schemes');
+    return await response.json();
+};
+```
+
+🚀 **Таким чином, можна завантажити альбоми та схеми окремо, мінімізуючи навантаження на БД!**  
+Якщо потрібні зміни або уточнення — питай! 😊

@@ -1,0 +1,63 @@
+Ось **PL/SQL-блоки** для **створення нового альбому та схеми**, які **автоматично створюють першу версію** (`version_number = 1`) у `SCHEME_VERSION` одразу після вставки запису в `ALBUM` або `SCHEME`.
+
+---
+
+### **1️⃣ Вставка нового альбому + створення першої версії**
+```sql
+DECLARE v_album_id NUMBER;
+DECLARE v_version_id NUMBER;
+BEGIN
+    -- Вставка нового альбому
+    INSERT INTO ALBUM (name, depart_id, unit_id, description, status_id)
+    VALUES (:new_name, :new_depart_id, :new_unit_id, :new_description, :new_status_id)
+    RETURNING id INTO v_album_id;
+
+    -- Створення першої версії альбому (version_number = 1, is_stable = 1)
+    INSERT INTO SCHEME_VERSION (album_id, version_number, is_stable, is_archived, created_by, created_at)
+    VALUES (v_album_id, 1, 1, 0, :created_by, SYSDATE)
+    RETURNING id INTO v_version_id;
+    
+    COMMIT;
+END;
+/
+```
+✅ **Що робить цей код?**  
+1. **Створює новий альбом** у таблиці `ALBUM`.  
+2. **Одразу після вставки створює першу версію альбому** (`version_number = 1`, `is_stable = 1`).  
+3. **Зберігає автора створення (`created_by`) та дату (`created_at`).**  
+
+---
+
+### **2️⃣ Вставка нової схеми + створення першої версії**
+```sql
+DECLARE v_scheme_id NUMBER;
+DECLARE v_version_id NUMBER;
+BEGIN
+    -- Вставка нової схеми
+    INSERT INTO SCHEME (name, album_id, depart_id, unit_id, description, format, system, shifr)
+    VALUES (:new_name, :album_id, :new_depart_id, :new_unit_id, :new_description, :new_format, :new_system, :new_shifr)
+    RETURNING id INTO v_scheme_id;
+
+    -- Створення першої версії схеми (version_number = 1, is_stable = 1)
+    INSERT INTO SCHEME_VERSION (scheme_id, version_number, is_stable, is_archived, created_by, created_at)
+    VALUES (v_scheme_id, 1, 1, 0, :created_by, SYSDATE)
+    RETURNING id INTO v_version_id;
+    
+    COMMIT;
+END;
+/
+```
+✅ **Що робить цей код?**  
+1. **Створює нову схему** в `SCHEME`.  
+2. **Одразу після вставки створює першу версію схеми** (`version_number = 1`, `is_stable = 1`).  
+3. **Фіксує користувача (`created_by`) і дату (`created_at`).**  
+
+---
+
+### **📌 Висновок**
+- ✅ Під час **створення альбому або схеми** **автоматично створюється їхня перша версія**.
+- ✅ У `SCHEME_VERSION` з’являється запис **з номером версії `1`** і статусом `is_stable = 1`.
+- ✅ **Дані про автора та дату створення зберігаються**, що важливо для логування змін.
+
+🚀 **Це дозволить відстежувати версії та керувати змінами альбомів та схем одразу після створення!**  
+Якщо є питання чи потрібно розширення логіки — питай! 😊

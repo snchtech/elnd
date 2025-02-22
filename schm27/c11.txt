@@ -1,0 +1,66 @@
+Ось API для створення нової схеми за аналогією з альбомами.
+
+---
+
+### **1. Створюємо новий файл** `/pages/api/rest/createScheme.js`
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { album_id, name, depart_id, unit_id, format, description, creator_id } = req.body;
+
+    if (!album_id || !name || !depart_id || !unit_id || !creator_id) {
+      return res.status(400).json({ error: "Заповніть всі обов'язкові поля" });
+    }
+
+    const sql = `
+      INSERT INTO SCHEME (album_id, name, depart_id, unit_id, format, description, status)
+      VALUES (:album_id, :name, :depart_id, :unit_id, :format, :description, 1)
+      RETURNING id INTO :new_id
+    `;
+
+    const params = {
+      album_id,
+      name,
+      depart_id,
+      unit_id,
+      format,
+      description,
+      new_id: { dir: "out", type: "NUMBER" }
+    };
+
+    const result = await queryDatabase(sql, params);
+
+    res.status(201).json({ success: true, scheme_id: result.outBinds.new_id });
+  } catch (error) {
+    console.error("Error creating scheme:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+### **2. Додаємо функцію в `utils/api.js`**
+```javascript
+export const createScheme = async (schemeData) => {
+  return fetchData("/api/rest/createScheme", {
+    method: "POST",
+    body: JSON.stringify(schemeData),
+  });
+};
+```
+
+---
+
+### **Що далі?**
+✅ **API створює нову схему** і повертає її `id`.  
+✅ **Дані передаються через `POST`** і включають `album_id`, `назву`, `відділ`, `підрозділ`, `формат`, `опис`.  
+✅ **API повертає `scheme_id`**, який можна використати для редагування схеми.  
+
+Готово для інтеграції в модальне вікно **`NewSchemeModal.js`**! 🚀

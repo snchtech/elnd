@@ -1,0 +1,98 @@
+### **📌 Структурування Next.js проєкту з компонентами**
+У Next.js загальноприйнята структура для поділу компонентів за призначенням:
+
+1. **Сторінкові компоненти (Page-specific components)**  
+   - Використовуються **тільки для конкретної сторінки**.
+   - Наприклад, `AlbumsReport.js` і `AlbumsFilters.js` використовуються тільки на `/albums`.
+
+2. **Глобальні (спільні) компоненти (Shared components)**  
+   - Використовуються **на кількох сторінках**.
+   - Наприклад, `NavigationTree.js`, `SearchBar.js`, `Modal.js` можуть використовуватися на багатьох сторінках.
+
+---
+
+## **📁 Пропонована структура проєкту**
+### **📂 `components/`** → Каталог для компонентів
+- **📂 `shared/`** → Загальні компоненти (пошук, навігація, модальні вікна).
+- **📂 `albums/`** → Компоненти, специфічні для `/albums`.
+- **📂 `editor/`** → Компоненти, специфічні для редактора `/editor`.
+
+### **📂 `pages/`** → Сторінки Next.js
+- `albums/index.js` → Список альбомів.
+- `albums/[albumId].js` → Сторінка конкретного альбому.
+- `editor/[schemeId].js` → Сторінка редагування схеми.
+
+---
+
+### **📁 Як це виглядає в структурі**
+```
+📂 my-nextjs-project
+│── 📂 components
+│   │── 📂 shared
+│   │   │── NavigationTree.js  // Деревовидна навігація (використовується в albums і editor)
+│   │   │── SearchBar.js       // Глобальний пошук (використовується в albums і editor)
+│   │   │── Modal.js           // Загальне модальне вікно (для всіх сторінок)
+│   │
+│   │── 📂 albums
+│   │   │── AlbumsReport.js    // Звіт по альбомах (використовується тільки в /albums)
+│   │   │── AlbumsFilters.js   // Фільтри для альбомів
+│   │
+│   │── 📂 editor
+│   │   │── EditorToolbar.js   // Панель інструментів редактора
+│   │   │── EditorCanvas.js    // Головне полотно редактора
+│
+│── 📂 pages
+│   │── 📂 albums
+│   │   │── index.js           // Головна сторінка альбомів
+│   │   │── [albumId].js       // Сторінка конкретного альбому
+│   │
+│   │── 📂 editor
+│   │   │── [schemeId].js      // Сторінка редагування схеми
+│
+│── 📂 utils
+│   │── api.js                 // API-запити до бекенду
+│   │── helpers.js              // Допоміжні функції
+│
+│── 📂 styles
+│   │── global.css              // Глобальні стилі
+│   │── albums.css              // Стилі для сторінки альбомів
+│
+│── next.config.js              // Налаштування Next.js
+│── package.json                // Залежності
+│── .gitignore
+```
+
+---
+
+## **📌 Переваги такої структури**
+✅ **Чіткий розподіл між спільними та сторінковими компонентами.**  
+✅ **Легко розширювати проєкт, додаючи нові розділи.**  
+✅ **Модульність: кожен розділ має власні компоненти, що зменшує плутанину.**  
+✅ **Мінімальна кількість імпортів, оскільки компоненти згруповані за логікою.**  
+
+---
+
+## **📌 Як імпортувати компоненти після структурування**
+### **У `albums/index.js` (сторінка списку альбомів)**
+```javascript
+import AlbumsReport from "@/components/albums/AlbumsReport";
+import AlbumsFilters from "@/components/albums/AlbumsFilters";
+import NavigationTree from "@/components/shared/NavigationTree";
+import SearchBar from "@/components/shared/SearchBar";
+```
+
+### **У `editor/[schemeId].js` (сторінка редактора схем)**
+```javascript
+import NavigationTree from "@/components/shared/NavigationTree";
+import EditorToolbar from "@/components/editor/EditorToolbar";
+import EditorCanvas from "@/components/editor/EditorCanvas";
+```
+
+---
+
+## **📌 Висновок**
+1️⃣ **Специфічні компоненти для сторінок (`AlbumsReport.js`, `AlbumsFilters.js`) розміщуємо у відповідних папках (`components/albums/`).**  
+2️⃣ **Глобальні компоненти (`NavigationTree.js`, `SearchBar.js`) виносимо у `components/shared/`.**  
+3️⃣ **Всі компоненти імпортуються з `@/components/...`, що спрощує роботу.**  
+
+🚀 **Тепер проєкт структурований логічно, легко підтримується та масштабується!**

@@ -1,0 +1,162 @@
+Ось оновлений код **`SchemeReport`**, який додає розбивку на сторінки (пагінацію) по 15 схем на сторінку. Пагінація відображається лише, якщо схем більше 15.
+
+---
+
+### **Оновлений `SchemeReport`**
+```tsx
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton,
+  Typography, Button, Dialog, DialogActions, DialogContent, DialogContentText,
+  DialogTitle, Paper, TablePagination
+} from "@mui/material";
+import { Visibility, Edit, Archive, Sort } from "@mui/icons-material";
+import { fetchSchemes, archiveScheme } from "@/utils/api";
+
+const SchemeReport = ({ albumId, userRole, mode }) => {
+  const router = useRouter();
+  const [schemes, setSchemes] = useState([]);
+  const [sortAsc, setSortAsc] = useState(true);
+  const [archiveDialog, setArchiveDialog] = useState({ open: false, schemeId: null });
+  const [page, setPage] = useState(0);
+  const [rowsPerPage] = useState(15); // Фіксована кількість записів на сторінку
+
+  useEffect(() => {
+    const loadSchemes = async () => {
+      try {
+        const data = await fetchSchemes(albumId);
+        setSchemes(data);
+      } catch (error) {
+        console.error("Помилка завантаження схем:", error);
+      }
+    };
+
+    loadSchemes();
+  }, [albumId]);
+
+  const handleSort = () => {
+    const sorted = [...schemes].sort((a, b) =>
+      sortAsc ? new Date(a.updated_at) - new Date(b.updated_at) : new Date(b.updated_at) - new Date(a.updated_at)
+    );
+    setSchemes(sorted);
+    setSortAsc(!sortAsc);
+  };
+
+  const handleViewScheme = (schemeId) => {
+    router.push(`/schemes/${schemeId}?mode=viewer`);
+  };
+
+  const handleEditScheme = (schemeId) => {
+    router.push(`/schemes/${schemeId}?mode=editor`);
+  };
+
+  const handleArchiveConfirm = async () => {
+    try {
+      await archiveScheme(archiveDialog.schemeId);
+      setSchemes(schemes.filter((s) => s.id !== archiveDialog.schemeId));
+      setArchiveDialog({ open: false, schemeId: null });
+    } catch (error) {
+      console.error("Помилка архівування схеми:", error);
+    }
+  };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  if (schemes.length === 0) {
+    return <Typography variant="body1">На даний момент для цього альбому немає жодної схеми.</Typography>;
+  }
+
+  return (
+    <>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Перегляд</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Відділ</TableCell>
+              <TableCell>Unit</TableCell>
+              <TableCell>Назва</TableCell>
+              <TableCell>Опис</TableCell>
+              <TableCell onClick={handleSort} style={{ cursor: "pointer" }}>
+                Дата створення/оновлення <Sort fontSize="small" />
+              </TableCell>
+              {mode === "editor" && userRole === "editor" && <TableCell>Дії</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {schemes.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((scheme) => (
+              <TableRow key={scheme.id}>
+                <TableCell>
+                  <IconButton onClick={() => handleViewScheme(scheme.id)}>
+                    <Visibility />
+                  </IconButton>
+                </TableCell>
+                <TableCell>{scheme.id}</TableCell>
+                <TableCell>{scheme.department_name}</TableCell>
+                <TableCell>{scheme.unit_name}</TableCell>
+                <TableCell>{scheme.name}</TableCell>
+                <TableCell>{scheme.description}</TableCell>
+                <TableCell>{new Date(scheme.updated_at).toLocaleString()}</TableCell>
+                {mode === "editor" && userRole === "editor" && (
+                  <TableCell>
+                    <IconButton onClick={() => handleEditScheme(scheme.id)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => setArchiveDialog({ open: true, schemeId: scheme.id })}>
+                      <Archive />
+                    </IconButton>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Відображаємо пагінацію тільки якщо схем більше 15 */}
+      {schemes.length > rowsPerPage && (
+        <TablePagination
+          component="div"
+          count={schemes.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          rowsPerPageOptions={[]} // Ховаємо вибір кількості рядків
+        />
+      )}
+
+      {/* Модальне вікно для підтвердження архівування */}
+      <Dialog open={archiveDialog.open} onClose={() => setArchiveDialog({ open: false, schemeId: null })}>
+        <DialogTitle>Підтвердження архівування</DialogTitle>
+        <DialogContent>
+          <DialogContentText>Ви точно хочете перенести цю схему в архів?</DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setArchiveDialog({ open: false, schemeId: null })} color="primary">
+            Відмінити
+          </Button>
+          <Button onClick={handleArchiveConfirm} color="secondary">
+            Так
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default SchemeReport;
+```
+
+---
+
+### **Що змінилося в цьому коді?**
+✅ **Додано пагінацію** (по 15 записів на сторінку).  
+✅ **Приховуємо пагінацію, якщо схем менше 15**.  
+✅ **Сортування та навігація залишаються функціональними**.  
+✅ **Після архівування схеми, список оновлюється**.  
+
+Тепер компонент `SchemeReport` дозволяє зручно переглядати схеми навіть у великих альбомах! 🚀

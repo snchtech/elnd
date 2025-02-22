@@ -1,0 +1,127 @@
+Ось компонент для редагування даних альбому, який буде розміщено в лівій панелі сторінки. Він включає:  
+- текстове поле для назви альбому,  
+- випадаючий список для вибору `Unit`,  
+- поле для опису,  
+- кнопку `Оновити`,  
+- відображення дати останнього оновлення.  
+
+Цей компонент отримує дані альбому через API та дозволяє їх редагувати.  
+
+### **Реалізація компонента `AlbumEditForm`**  
+```tsx
+import { useState, useEffect } from "react";
+import { TextField, Button, Select, MenuItem, Typography, Box } from "@mui/material";
+import { fetchUnits, updateAlbum } from "@/utils/api";
+
+const AlbumEditForm = ({ albumId }) => {
+  const [albumData, setAlbumData] = useState({
+    name: "",
+    unitId: "",
+    description: "",
+    updatedAt: "",
+  });
+
+  const [units, setUnits] = useState([]);
+
+  useEffect(() => {
+    const loadAlbumData = async () => {
+      try {
+        const response = await fetch(`/api/rest/getAlbum/${albumId}`);
+        const data = await response.json();
+        setAlbumData({
+          name: data.name,
+          unitId: data.unit_id,
+          description: data.description,
+          updatedAt: data.updated_at,
+        });
+      } catch (error) {
+        console.error("Помилка завантаження альбому:", error);
+      }
+    };
+
+    const loadUnits = async () => {
+      try {
+        const unitList = await fetchUnits();
+        setUnits(unitList);
+      } catch (error) {
+        console.error("Помилка завантаження unit:", error);
+      }
+    };
+
+    loadAlbumData();
+    loadUnits();
+  }, [albumId]);
+
+  const handleUpdate = async () => {
+    try {
+      await updateAlbum(albumId, {
+        name: albumData.name,
+        unitId: albumData.unitId,
+        description: albumData.description,
+      });
+      alert("Альбом оновлено!");
+    } catch (error) {
+      console.error("Помилка оновлення:", error);
+      alert("Помилка оновлення альбому.");
+    }
+  };
+
+  return (
+    <Box sx={{ p: 2, border: "1px solid #ddd", borderRadius: 2 }}>
+      <Typography variant="h6" gutterBottom>Редагування альбому</Typography>
+
+      <TextField
+        fullWidth
+        label="Назва"
+        value={albumData.name}
+        onChange={(e) => setAlbumData({ ...albumData, name: e.target.value })}
+        margin="dense"
+      />
+
+      <Select
+        fullWidth
+        value={albumData.unitId}
+        onChange={(e) => setAlbumData({ ...albumData, unitId: e.target.value })}
+        displayEmpty
+        margin="dense"
+      >
+        <MenuItem value="" disabled>Оберіть Unit</MenuItem>
+        {units.map((unit) => (
+          <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+        ))}
+      </Select>
+
+      <TextField
+        fullWidth
+        label="Опис"
+        multiline
+        rows={3}
+        value={albumData.description}
+        onChange={(e) => setAlbumData({ ...albumData, description: e.target.value })}
+        margin="dense"
+      />
+
+      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+        Останнє оновлення: {albumData.updatedAt || "Немає даних"}
+      </Typography>
+
+      <Button variant="contained" color="primary" onClick={handleUpdate} sx={{ mt: 2 }}>
+        Оновити
+      </Button>
+    </Box>
+  );
+};
+
+export default AlbumEditForm;
+```
+
+---
+
+### **Опис роботи компонента**  
+✅ Отримує дані альбому через API `/api/rest/getAlbum/{albumId}`  
+✅ Завантажує список `Unit` з API `/api/rest/fetchUnits`  
+✅ Поля **назва**, **unit** та **опис** можна редагувати  
+✅ Після натискання `Оновити`, дані відправляються в API `/api/rest/updateAlbum`  
+
+Цей компонент можна підключити у **лівій панелі** сторінки `/albums/[albumId]`.  
+Якщо потрібно змінити стиль або розширити функціонал, можна додати додаткові поля чи налаштування.

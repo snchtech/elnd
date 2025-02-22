@@ -1,0 +1,149 @@
+Ось оновлений компонент **`AlbumsReport.js`** із **пагінацією** (по 15 альбомів на сторінку).  
+Навігація відображається тільки якщо альбомів більше 15.
+
+---
+
+### **📁 Оновлений `AlbumsReport.js`**
+```javascript
+import { useState } from "react";
+import { useRouter } from "next/router";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions, Button, TablePagination
+} from "@mui/material";
+import { Visibility, Edit, Delete } from "@mui/icons-material";
+import { updateAlbumStatus } from "@/utils/api";
+
+export default function AlbumsReport({ albums, statuses, mode }) {
+  const router = useRouter();
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 15;
+
+  // Переходи на сторінку альбому в режимах viewer/editor
+  const handleViewClick = (albumId) => {
+    router.push(`/albums/${albumId}?mode=viewer`);
+  };
+
+  const handleEditClick = (albumId) => {
+    router.push(`/albums/${albumId}?mode=editor`);
+  };
+
+  // Відкриває модальне вікно підтвердження архівації
+  const handleArchiveClick = (album) => {
+    setSelectedAlbum(album);
+    setIsArchiveModalOpen(true);
+  };
+
+  // Запит до API для оновлення статусу альбому на "Архів"
+  const confirmArchiveAlbum = async () => {
+    if (!selectedAlbum) return;
+
+    try {
+      await updateAlbumStatus(selectedAlbum.id, "Архів"); // Запит до API
+      setIsArchiveModalOpen(false);
+      router.reload(); // Оновлення сторінки після архівації
+    } catch (error) {
+      console.error("Error archiving album:", error);
+    }
+  };
+
+  // Обробка зміни сторінки
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  // Відображати тільки альбоми для поточної сторінки
+  const paginatedAlbums = albums.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
+  return (
+    <>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Перегляд</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Відділ</TableCell>
+              <TableCell>Unit</TableCell>
+              <TableCell>Назва</TableCell>
+              <TableCell>Опис</TableCell>
+              <TableCell>Дата створення/оновлення</TableCell>
+              {mode === "editor" && <TableCell>Дії</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {paginatedAlbums.map((album) => (
+              <TableRow key={album.id}>
+                {/* Перегляд альбому */}
+                <TableCell>
+                  <IconButton color="primary" onClick={() => handleViewClick(album.id)}>
+                    <Visibility />
+                  </IconButton>
+                </TableCell>
+                <TableCell>{album.id}</TableCell>
+                <TableCell>{album.department_name}</TableCell>
+                <TableCell>{album.unit_name}</TableCell>
+                <TableCell>{album.name}</TableCell>
+                <TableCell>{album.description}</TableCell>
+                <TableCell>{album.date_update || album.date_create}</TableCell>
+
+                {/* Дії для ролі editor */}
+                {mode === "editor" && (
+                  <TableCell>
+                    <IconButton color="warning" onClick={() => handleEditClick(album.id)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton color="error" onClick={() => handleArchiveClick(album)}>
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Пагінація (відображається тільки якщо більше 15 альбомів) */}
+      {albums.length > rowsPerPage && (
+        <TablePagination
+          component="div"
+          count={albums.length}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[rowsPerPage]}
+          onPageChange={handleChangePage}
+        />
+      )}
+
+      {/* Модальне вікно архівації */}
+      <Dialog open={isArchiveModalOpen} onClose={() => setIsArchiveModalOpen(false)}>
+        <DialogTitle>Архівація альбому</DialogTitle>
+        <DialogContent>
+          Ви точно бажаєте перемістити альбом <b>{selectedAlbum?.name}</b> в архів?
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsArchiveModalOpen(false)} color="secondary">
+            Відмінити
+          </Button>
+          <Button onClick={confirmArchiveAlbum} color="primary" variant="contained">
+            Так
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+```
+
+---
+
+## **📌 Що оновлено?**
+✅ **Додано пагінацію по 15 альбомів на сторінку** (`TablePagination`).  
+✅ **Пагінація відображається тільки якщо більше 15 записів**.  
+✅ **Відображається тільки альбоми для поточної сторінки** (`slice()`).  
+✅ **Обробка подій `onPageChange` для зміни сторінки**.  
+
+🚀 **Тепер сторінка працює швидше, і список альбомів не виглядає перевантаженим!**

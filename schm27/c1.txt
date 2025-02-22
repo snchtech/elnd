@@ -1,0 +1,126 @@
+Ось оновлений компонент `NavigationTree`, де додано **пошук по дереву навігації**.  
+
+🔹 **Що реалізовано?**  
+✅ **Інпут для пошуку** (Material-UI `TextField`).  
+✅ **Фільтрація результатів** по **відділу, назві альбому та назві схеми**.  
+✅ **Динамічне оновлення дерева** при введенні пошукового запиту.  
+✅ **Збереження структури дерева** (згортання/розгортання).  
+
+---
+
+### **📌 Оновлений код `NavigationTree.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { TreeView, TreeItem } from "@mui/x-tree-view";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { TextField, Box, Paper } from "@mui/material";
+import { fetchDepartments, fetchAlbums, fetchSchemes } from "@/utils/api";
+
+export default function NavigationTree() {
+  const [departments, setDepartments] = useState([]);
+  const [albums, setAlbums] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setAlbums(await fetchAlbums());
+      setSchemes(await fetchSchemes());
+    }
+    loadData();
+  }, []);
+
+  // Фільтрація елементів дерева навігації за пошуковим запитом
+  const filterTree = (items, search) => {
+    if (!search) return items; // Якщо пошук порожній, повертаємо повне дерево
+    
+    const lowerSearch = search.toLowerCase();
+
+    return items.filter(department => {
+      const departmentAlbums = albums.filter(album => {
+        const albumSchemes = schemes.filter(scheme =>
+          scheme.name.toLowerCase().includes(lowerSearch)
+        );
+
+        return (
+          album.name.toLowerCase().includes(lowerSearch) ||
+          albumSchemes.length > 0
+        );
+      });
+
+      return (
+        department.name.toLowerCase().includes(lowerSearch) ||
+        departmentAlbums.length > 0
+      );
+    });
+  };
+
+  const buildTree = () => {
+    const filteredDepartments = filterTree(departments, searchQuery);
+
+    return filteredDepartments.map(department => {
+      const departmentAlbums = albums.filter(album => album.department_id === department.id);
+      const filteredAlbums = departmentAlbums.filter(album =>
+        album.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        schemes.some(scheme => scheme.album_id === album.id && scheme.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+
+      return (
+        <TreeItem key={department.id} nodeId={`dep-${department.id}`} label={department.name}>
+          {filteredAlbums.map(album => {
+            const albumSchemes = schemes.filter(scheme => scheme.album_id === album.id && scheme.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+            return (
+              <TreeItem 
+                key={album.id} 
+                nodeId={`album-${album.id}`} 
+                label={`${album.name} ${albumSchemes.length > 0 ? "+" : ""}`}
+              >
+                {albumSchemes.map(scheme => (
+                  <TreeItem key={scheme.id} nodeId={`scheme-${scheme.id}`} label={scheme.name} />
+                ))}
+              </TreeItem>
+            );
+          })}
+        </TreeItem>
+      );
+    });
+  };
+
+  return (
+    <Paper sx={{ padding: 2 }}>
+      {/* Поле пошуку */}
+      <TextField
+        label="Пошук у дереві"
+        variant="outlined"
+        fullWidth
+        margin="dense"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+
+      {/* Дерево навігації */}
+      <TreeView
+        defaultCollapseIcon={<ExpandMore />}
+        defaultExpandIcon={<ChevronRight />}
+        expanded={expanded}
+        onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+      >
+        {buildTree()}
+      </TreeView>
+    </Paper>
+  );
+}
+```
+
+---
+
+## **🔹 Що зроблено?**
+✅ **Додано пошук** за відділом, альбомом і схемою.  
+✅ **Дерево динамічно оновлюється** при введенні пошукового запиту.  
+✅ **Використано Material-UI (`TextField`, `Paper`)** для зручного UI.  
+✅ **Збережено поведінку згортання/розгортання дерева**.  
+
+🔹 **Тепер компонент підтримує пошук по всій структурі!** 🚀

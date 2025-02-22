@@ -1,0 +1,162 @@
+Ось **компонент `AlbumsFilters.js`**, який дозволяє **фільтрувати звіт `AlbumsReport.js`** за **відділом, підрозділом (unit) та статусом (Активні/Архів)**.
+
+---
+
+## **📁 `components/AlbumsFilters.js`**
+```javascript
+import { useState, useEffect } from "react";
+import { Box, TextField, MenuItem, Paper } from "@mui/material";
+
+export default function AlbumsFilters({ departments, units, statuses, onFilterChange }) {
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("Активні");
+
+  useEffect(() => {
+    onFilterChange({ department: selectedDepartment, unit: selectedUnit, status: selectedStatus });
+  }, [selectedDepartment, selectedUnit, selectedStatus]);
+
+  return (
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Box display="flex" gap={2}>
+        {/* Фільтр по відділу */}
+        <TextField
+          select
+          label="Відділ"
+          fullWidth
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+        >
+          <MenuItem value="">Всі</MenuItem>
+          {departments.map((dep) => (
+            <MenuItem key={dep.id} value={dep.id}>
+              {dep.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {/* Фільтр по підрозділу */}
+        <TextField
+          select
+          label="Підрозділ"
+          fullWidth
+          value={selectedUnit}
+          onChange={(e) => setSelectedUnit(e.target.value)}
+        >
+          <MenuItem value="">Всі</MenuItem>
+          {units.map((unit) => (
+            <MenuItem key={unit.id} value={unit.id}>
+              {unit.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {/* Фільтр по статусу */}
+        <TextField
+          select
+          label="Статус"
+          fullWidth
+          value={selectedStatus}
+          onChange={(e) => setSelectedStatus(e.target.value)}
+        >
+          <MenuItem value="Активні">Активні</MenuItem>
+          <MenuItem value="Архів">Архів</MenuItem>
+        </TextField>
+      </Box>
+    </Paper>
+  );
+}
+```
+
+---
+
+## **📌 2. Використання в `AlbumsPage.js`**
+Тепер **додаємо цей компонент у `AlbumsPage.js`** та передаємо вибрані фільтри до `AlbumsReport.js`.
+
+### **📁 Оновлюємо `AlbumsPage.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, fetchAlbumStatuses } from "@/utils/api";
+import { Container, Box, Button } from "@mui/material";
+import { Add } from "@mui/icons-material";
+import NewAlbumModal from "@/components/NewAlbumModal";
+import AlbumsReport from "@/components/AlbumsReport";
+import AlbumsFilters from "@/components/AlbumsFilters";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [filteredAlbums, setFilteredAlbums] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+      setStatuses(await fetchAlbumStatuses());
+    }
+    loadData();
+  }, []);
+
+  // Фільтрація альбомів
+  const handleFilterChange = ({ department, unit, status }) => {
+    let filtered = albums;
+
+    if (department) {
+      filtered = filtered.filter((album) => album.department_id === Number(department));
+    }
+    if (unit) {
+      filtered = filtered.filter((album) => album.unit_id === Number(unit));
+    }
+    if (status === "Активні") {
+      filtered = filtered.filter((album) => album.status_id !== 2); // Наприклад, статус "Архів" має id=2
+    } else if (status === "Архів") {
+      filtered = filtered.filter((album) => album.status_id === 2);
+    }
+
+    setFilteredAlbums(filtered);
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <h2>Каталог альбомів</h2>
+        {mode === "editor" && (
+          <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setIsModalOpen(true)}>
+            Новий альбом
+          </Button>
+        )}
+      </Box>
+
+      {/* Блок фільтрів */}
+      <AlbumsFilters departments={departments} units={units} statuses={statuses} onFilterChange={handleFilterChange} />
+
+      {/* Компонент звіту альбомів */}
+      <AlbumsReport albums={filteredAlbums.length > 0 ? filteredAlbums : albums} statuses={statuses} mode={mode} />
+
+      {/* Модальне вікно для створення альбому */}
+      <NewAlbumModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAlbumCreated={() => setAlbums([...albums])}
+      />
+    </Container>
+  );
+}
+```
+
+---
+
+## **📌 Що реалізовано?**
+✅ **Компонент `AlbumsFilters.js`** → три `select` (**Відділ, Unit, Статус**).  
+✅ **Фільтрація `AlbumsReport.js`** → відображає тільки ті альбоми, які підходять під фільтр.  
+✅ **Статус (Активні/Архів)** → за замовчуванням **"Активні"**.  
+✅ **Динамічне оновлення `AlbumsReport.js`** при зміні фільтрів.  
+
+🚀 **Тепер фільтри динамічно працюють та впливають на відображення альбомів у звіті!**

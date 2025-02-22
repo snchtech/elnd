@@ -1,0 +1,148 @@
+У вашому коді є кілька помилок, які можуть викликати `NJS-013: invalid bind direction`. Ось їх розбір і виправлення:
+
+### **1. Некоректне оголошення `params.new_id`**
+Ви передаєте `new_id` в `params`, але неправильно вказали його структуру. В `oracledb` ви повинні вказати `{ dir: oracledb.BIND_OUT, type: oracledb.NUMBER }`, а не `{ dor: 'out', type: 'NUMBER' }`.
+
+#### **Виправлення:**
+```js
+import oracledb from 'oracledb';
+
+const params = {
+    name,
+    depart_id,
+    unit_id,
+    description,
+    status_id: 1,  // додайте статус, якщо він є в таблиці
+    new_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER } // Ось тут виправлення
+};
+```
+
+---
+
+### **2. Некоректне використання `RETURNING id INTO :new_id`**
+Коли ви використовуєте `RETURNING id INTO :new_id`, необхідно правильно обробляти `outBinds` у відповіді.
+
+#### **Виправлення**
+```js
+const resultAlbum = await OracleDBManager.query(dbName, sqlAlbum, params);
+const newAlbumID = resultAlbum.outBinds.new_id[0];  // Дістаємо значення з масиву
+```
+
+---
+
+### **3. Некоректне розташування `catch {}`**
+Ваш `catch {}` порожній, тому ви не бачите помилки. Завжди логуйте `error`.
+
+#### **Виправлення**
+```js
+catch (error) {
+    console.error("Error creating album:", error);
+    res.status(500).json({ success: false, message: "Database error", error });
+}
+```
+
+---
+
+### **4. Некоректна структура `sqlAlbumVersion`**
+У `sqlAlbumVersion` ви вставляєте `newAlbumID`, але не передаєте його правильно.
+
+#### **Виправлення**
+```js
+const newParams = {
+    newAlbumID,
+    creator_id,
+    new_vers_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+};
+
+const sqlAlbumVersion = `
+    INSERT INTO SCHEME_VERSION (album_id, version_number, is_stable, is_archived, created_at, updated_at, created_by, updated_by, status_id)
+    VALUES (:newAlbumID, 1, 1, 0, SYSDATE, SYSDATE, :creator_id, NULL, 1)
+    RETURNING id INTO :new_vers_id
+`;
+
+const resultAlbumVersion = await OracleDBManager.query(dbName, sqlAlbumVersion, newParams);
+const newAlbumVersionID = resultAlbumVersion.outBinds.new_vers_id[0];  // Дістаємо значення
+```
+
+---
+
+### **5. Оновлена версія коду**
+```js
+import oracledb from 'oracledb';
+
+class AlbumController {
+    async createAlbum(req, res, next) {
+        const dbName = req.locals.dbName;
+        const { name, depart_id, unit_id, description, creator_id } = req.body;
+
+        try {
+            const sqlAlbum = `
+                INSERT INTO ALBUM (name, depart_id, unit_id, description, status_id)
+                VALUES (:name, :depart_id, :unit_id, :description, :status_id)
+                RETURNING id INTO :new_id`;
+
+            const params = {
+                name,
+                depart_id,
+                unit_id,
+                description,
+                status_id: 1,  // Замініть на актуальне значення статусу
+                new_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+            };
+
+            const resultAlbum = await OracleDBManager.query(dbName, sqlAlbum, params);
+            const newAlbumID = resultAlbum.outBinds.new_id[0];
+
+            const sqlAlbumVersion = `
+                INSERT INTO SCHEME_VERSION (album_id, version_number, is_stable, is_archived, created_at, updated_at, created_by, updated_by, status_id)
+                VALUES (:newAlbumID, 1, 1, 0, SYSDATE, SYSDATE, :creator_id, NULL, 1)
+                RETURNING id INTO :new_vers_id`;
+
+            const newParams = {
+                newAlbumID,
+                creator_id,
+                new_vers_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+            };
+
+            const resultAlbumVersion = await OracleDBManager.query(dbName, sqlAlbumVersion, newParams);
+            const newAlbumVersionID = resultAlbumVersion.outBinds.new_vers_id[0];
+
+            res.status(201).json({
+                success: true,
+                album_id: newAlbumID,
+                album_version_id: newAlbumVersionID
+            });
+
+        } catch (error) {
+            console.error("Error creating album:", error);
+            res.status(500).json({ success: false, message: "Database error", error });
+        }
+    }
+}
+
+export default new AlbumController();
+```
+
+---
+
+### **6. Використання в `routes.js`**
+```js
+import express from 'express';
+import AlbumController from './albumController.js';
+
+const router = express.Router();
+
+router.post('/create-album', (req, res, next) => AlbumController.createAlbum(req, res, next));
+
+export default router;
+```
+
+---
+
+### **Висновок**
+Після цих виправлень:
+✅ Ви зможете створювати `album` і `scheme_version`.  
+✅ `RETURNING INTO` працюватиме коректно.  
+✅ Помилки будуть логуватися в консоль.  
+
+Спробуйте оновлений код і перевірте роботу! 🚀

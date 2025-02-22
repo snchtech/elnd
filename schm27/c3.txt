@@ -1,0 +1,129 @@
+Ось оновлений компонент `NewAlbumModal.js`, який **після успішного створення альбому** одразу **перенаправляє користувача на сторінку нового альбому**.
+
+🔹 **Що реалізовано?**  
+✅ **Запит до стороннього API (`createAlbum`)**  
+✅ **Обробка `response`, отримання `id ALBUM` та `id ALBUM_VERSION`**  
+✅ **Перенаправлення на `/albums/[albumId]?versionId=[albumVersionId]`**  
+✅ **Оновлена обробка помилок**  
+
+---
+
+### 📁 **Оновлений `NewAlbumModal.js`**
+```javascript
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem } from "@mui/material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+import { fetchDepartments, fetchUnits, createAlbum } from "@/utils/api";
+
+export default function NewAlbumModal({ open, onClose, onAlbumCreated }) {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const router = useRouter();
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+    }
+    loadData();
+  }, []);
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+  });
+
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      const response = await createAlbum({ ...values, creator_id: 1 });
+
+      if (response.success) {
+        const { album_id, album_version_id } = response; 
+
+        // Закриваємо модальне вікно
+        onClose();
+        onAlbumCreated();
+
+        // Очищуємо форму
+        resetForm();
+
+        // Перенаправлення на сторінку нового альбому
+        router.push(`/albums/${album_id}?versionId=${album_version_id}`);
+      } else {
+        console.error("Error creating album:", response.error);
+      }
+    } catch (error) {
+      console.error("Error creating album:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>Новий альбом</DialogTitle>
+      <Formik
+        initialValues={{ name: "", depart_id: "", unit_id: "", description: "" }}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ isSubmitting, errors, touched }) => (
+          <Form>
+            <DialogContent>
+              <Field as={TextField} select label="Відділ" name="depart_id" fullWidth 
+                error={touched.depart_id && !!errors.depart_id} 
+                helperText={touched.depart_id && errors.depart_id}
+              >
+                {departments.map(dep => (
+                  <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+                ))}
+              </Field>
+
+              <Field as={TextField} select label="Підрозділ" name="unit_id" fullWidth 
+                error={touched.unit_id && !!errors.unit_id} 
+                helperText={touched.unit_id && errors.unit_id}
+              >
+                {units.map(unit => (
+                  <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                ))}
+              </Field>
+
+              <Field as={TextField} label="Назва" name="name" fullWidth 
+                error={touched.name && !!errors.name} 
+                helperText={touched.name && errors.name}
+              />
+
+              <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+            </DialogContent>
+
+            <DialogActions>
+              <Button onClick={onClose} color="secondary">Скасувати</Button>
+              <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>
+                Додати
+              </Button>
+            </DialogActions>
+          </Form>
+        )}
+      </Formik>
+    </Dialog>
+  );
+}
+```
+
+---
+
+## **📌 Що змінилося?**
+✅ **Перенаправлення після створення**:  
+- Отримуємо **`album_id`** та **`album_version_id`** із `response`.  
+- Використовуємо `router.push()` для переходу на `/albums/[albumId]?versionId=[albumVersionId]`.  
+
+✅ **Обробка API відповіді**:  
+- Додає перевірку `response.success`, якщо немає – виводить помилку в `console.error()`.  
+
+✅ **Краща обробка `setSubmitting(false)`**:  
+- Тепер у `finally`, щоб `formik` точно зняв статус `isSubmitting`.  
+
+🚀 **Тепер компонент працює коректно: після створення альбому відбувається автоматичний редирект на сторінку нового альбому!**

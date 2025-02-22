@@ -1,0 +1,161 @@
+Оновлено компонент **`NewSchemeModal.js`**, де **за замовчуванням встановлено формат `A3`**.  
+
+Ось виправлений код:
+```tsx
+import { useState, useEffect } from "react";
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem } from "@mui/material";
+import { Formik, Form, Field } from "formik";
+import * as Yup from "yup";
+import { fetchAlbums, fetchDepartments, fetchUnits, createScheme } from "@/utils/api";
+import { useRouter } from "next/router";
+
+export default function NewSchemeModal({ open, onClose, onSchemeCreated }) {
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const router = useRouter();
+  const { albumId } = router.query;
+
+  useEffect(() => {
+    async function loadData() {
+      setAlbums(await fetchAlbums());
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+    }
+    loadData();
+  }, []);
+
+  const validationSchema = Yup.object().shape({
+    album_id: Yup.number().required("Оберіть альбом"),
+    name: Yup.string().required("Введіть назву"),
+    depart_id: Yup.number().required("Оберіть відділ"),
+    unit_id: Yup.number().required("Оберіть підрозділ"),
+    format: Yup.string().required("Оберіть формат"),
+  });
+
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      const response = await createScheme({ ...values, editor_id: 1 }); // ID тимчасово 1
+      onClose();
+      onSchemeCreated();
+      resetForm();
+      router.push(`/editor/${response.scheme_id}`); // Перенаправлення на Editor
+    } catch (error) {
+      console.error("Error creating scheme:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>Створення нової схеми</DialogTitle>
+      <Formik
+        initialValues={{
+          album_id: albumId || "",
+          name: "",
+          depart_id: "",
+          unit_id: "",
+          format: "A3", // Формат за замовчуванням A3
+          description: "",
+        }}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
+      >
+        {({ isSubmitting, errors, touched }) => (
+          <Form>
+            <DialogContent>
+              <Field
+                as={TextField}
+                select
+                label="Виберіть альбом"
+                name="album_id"
+                fullWidth
+                error={touched.album_id && !!errors.album_id}
+                helperText={touched.album_id && errors.album_id}
+              >
+                {albums.map((album) => (
+                  <MenuItem key={album.id} value={album.id}>
+                    {album.name}
+                  </MenuItem>
+                ))}
+              </Field>
+              <Field
+                as={TextField}
+                select
+                label="Відділ"
+                name="depart_id"
+                fullWidth
+                error={touched.depart_id && !!errors.depart_id}
+                helperText={touched.depart_id && errors.depart_id}
+              >
+                {departments.map((dep) => (
+                  <MenuItem key={dep.id} value={dep.id}>
+                    {dep.name}
+                  </MenuItem>
+                ))}
+              </Field>
+              <Field
+                as={TextField}
+                select
+                label="Підрозділ"
+                name="unit_id"
+                fullWidth
+                error={touched.unit_id && !!errors.unit_id}
+                helperText={touched.unit_id && errors.unit_id}
+              >
+                {units.map((unit) => (
+                  <MenuItem key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </MenuItem>
+                ))}
+              </Field>
+              <Field
+                as={TextField}
+                label="Назва"
+                name="name"
+                fullWidth
+                error={touched.name && !!errors.name}
+                helperText={touched.name && errors.name}
+              />
+              <Field
+                as={TextField}
+                select
+                label="Формат"
+                name="format"
+                fullWidth
+                error={touched.format && !!errors.format}
+                helperText={touched.format && errors.format}
+              >
+                {["A4", "A3", "A2", "A1", "A0"].map((format) => (
+                  <MenuItem key={format} value={format}>
+                    {format}
+                  </MenuItem>
+                ))}
+              </Field>
+              <Field as={TextField} label="Опис" name="description" fullWidth multiline rows={3} />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={onClose} color="secondary">
+                Скасувати
+              </Button>
+              <Button type="submit" color="primary" variant="contained" disabled={isSubmitting}>
+                Створити
+              </Button>
+            </DialogActions>
+          </Form>
+        )}
+      </Formik>
+    </Dialog>
+  );
+}
+```
+
+---
+
+### **Що змінилось?**
+✅ **За замовчуванням у полі "Формат" встановлено значення "A3"**.  
+✅ **Перевірив, щоб `initialValues` містив `"A3"` у полі `format`**.  
+✅ **Виправив помилку у `router.push` (кавику пропустили раніше)**.  
+
+Тепер нові схеми за замовчуванням матимуть **формат "A3"**, але користувач зможе змінити його на інший. 🚀

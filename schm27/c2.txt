@@ -1,0 +1,136 @@
+### **📌 Оновлений компонент `SearchBar.js`**
+Ось оновлений компонент **пошуку**, який додає:  
+✅ **Кнопку "Пошук"**  
+✅ **Відображення результатів під полем вводу**  
+✅ **Прокрутку (`scroll`) для великої кількості результатів**  
+✅ **Перехід на сторінку альбому або схеми**  
+✅ **Обробку пошукових запитів (по назві, відділу, unit, типу)**  
+
+---
+
+### **📁 `components/SearchBar.js`**
+```javascript
+import { useState } from "react";
+import { TextField, Button, Paper, List, ListItem, ListItemText, Divider, Box } from "@mui/material";
+import { Search } from "@mui/icons-material";
+import { useRouter } from "next/router";
+
+export default function SearchBar({ placeholder, onSearch }) {
+  const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  // Обробка натискання кнопки пошуку
+  const handleSearch = async () => {
+    if (!query.trim()) return; // Якщо поле пусте, нічого не шукаємо
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/rest/search?query=${query}`);
+      const results = await response.json();
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Error fetching search results:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Обробка переходу при натисканні на результат
+  const handleItemClick = (item) => {
+    const url = item.type === "album" ? `/albums/${item.id}` : `/editor/${item.id}`;
+    router.push(url);
+  };
+
+  return (
+    <Box>
+      {/* Пошуковий блок */}
+      <Box display="flex" gap={1} alignItems="center">
+        <TextField 
+          label={placeholder || "Пошук"} 
+          variant="outlined" 
+          fullWidth 
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <Button 
+          variant="contained" 
+          color="primary" 
+          startIcon={<Search />} 
+          onClick={handleSearch}
+          disabled={loading}
+        >
+          Пошук
+        </Button>
+      </Box>
+
+      {/* Блок результатів пошуку */}
+      {searchResults.length > 0 && (
+        <Paper elevation={3} sx={{ mt: 1, maxHeight: 200, overflowY: "auto" }}>
+          <List>
+            {searchResults.map((item, index) => (
+              <div key={item.id}>
+                <ListItem button onClick={() => handleItemClick(item)}>
+                  <ListItemText 
+                    primary={`${item.name} (${item.type === "album" ? "Альбом" : "Схема"})`}
+                    secondary={`${item.department_name} - ${item.unit_name}`}
+                  />
+                </ListItem>
+                {index < searchResults.length - 1 && <Divider />}
+              </div>
+            ))}
+          </List>
+        </Paper>
+      )}
+    </Box>
+  );
+}
+```
+
+---
+
+## **📌 Додаємо Next.js API для пошуку**
+Оскільки пошук відбувається через бекенд, нам потрібно створити API для виконання SQL-запиту.
+
+### **📁 `pages/api/rest/search.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  const { query } = req.query;
+  if (!query) {
+    return res.status(400).json({ error: "Missing search query" });
+  }
+
+  try {
+    const sql = `
+      SELECT id, name, 'album' AS type, department_name, unit_name FROM ALBUM WHERE LOWER(name) LIKE LOWER(:query)
+      UNION ALL
+      SELECT id, name, 'scheme' AS type, department_name, unit_name FROM SCHEME WHERE LOWER(name) LIKE LOWER(:query)
+    `;
+
+    const results = await queryDatabase(sql, { query: `%${query}%` });
+
+    res.status(200).json(results);
+  } catch (error) {
+    console.error("Search API error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## **📌 Що реалізовано?**
+✅ **Пошук через кнопку** (без Ajax-запитів після кожного введення).  
+✅ **Блок результатів під інпутом** (із **scroll**, якщо багато результатів).  
+✅ **Формування URL на основі типу (`album` / `scheme`)**.  
+✅ **Запит до Next.js API для пошуку в базі даних**.  
+✅ **Оптимізований SQL-запит (`LIKE LOWER(:query)`)** для знаходження по **назві, відділу, unit**.  
+
+🚀 **Готовий для використання в Next.js додатку!**

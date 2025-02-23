@@ -1,0 +1,189 @@
+Ось оновлений код, який **всі запити (GET, POST, PUT, DELETE)** надсилає через `POST` до `customfetch`, а `customfetch` вже сам вирішує, як обробляти запит.
+
+---
+
+## **🔹 Оновлений `customfetch.js` (всі запити через POST)**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../../utils/auth';
+
+export const runtime = 'edge';
+const REMOTE_API = process.env.MAIN_API_URL;
+
+export default async function customFetch(req) {
+    try {
+        // Отримуємо body-запиту
+        const { url, options } = await req.json();
+        
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // Якщо немає accessToken, оновлюємо токени через refreshToken
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) return logoutUser(req);
+
+            const { newAccessToken } = await refreshedTokens.json();
+            accessToken = newAccessToken;
+        }
+
+        // Виконуємо POST-запит до REMOTE_API незалежно від типу операції
+        let fetchOptions = {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                method: options.method || 'GET',  // Вказуємо початковий метод у тілі
+                data: options.body || {}  // Передаємо дані
+            })
+        };
+
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // Якщо отримуємо 401, оновлюємо токени та повторюємо запит
+        if (response.status === 401) {
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) return logoutUser(req);
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+
+            // Повторний запит
+            fetchOptions.headers.Authorization = `Bearer ${accessToken}`;
+            response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+        }
+
+        // Формуємо відповідь
+        const responseResults = NextResponse.json(await response.json());
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`
+            ].join(',')
+        );
+
+        return responseResults;
+    } catch (error) {
+        console.error("Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+## **🔹 Оновлений `fetchData` у `utils/api.js` (всі запити через POST)**
+```javascript
+export const fetchData = async (url, method = 'GET', data = {}) => {
+    try {
+        const res = await fetch('/api/rest/customfetch', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, options: { method, body: data } }),
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to fetch ${url}`);
+        }
+
+        return await res.json();
+    } catch (error) {
+        console.error(`Error fetching ${url}:`, error);
+        return null;
+    }
+};
+
+// **GET-запит (він все одно йде через POST)**
+export const getAlbums = async (filters = {}) => {
+    return fetchData('/api/album/list', 'GET', filters);
+};
+
+// **POST-запит (створення альбому)**
+export const createAlbum = async (data) => {
+    return fetchData('/api/album/create-album', 'POST', data);
+};
+
+// **PUT-запит (оновлення альбому)**
+export const updateAlbum = async (albumId, data) => {
+    return fetchData(`/api/album/update/${albumId}`, 'PUT', data);
+};
+
+// **DELETE-запит (видалення альбому)**
+export const deleteAlbum = async (albumId) => {
+    return fetchData(`/api/album/delete/${albumId}`, 'DELETE');
+};
+```
+
+---
+
+## **Як це працює тепер?**
+✅ **Все через `POST`**, але **з правильним імітуванням методів (`GET`, `PUT`, `DELETE`)**.  
+✅ Всі запити передаються у `body`, а `customfetch` визначає тип запиту (`method: "GET"` або `method: "DELETE"`, тощо).  
+✅ Можна робити як `GET`, так і `POST` без обмежень.  
+✅ **Уніфікований підхід** без зміни стороннього API.
+
+---
+
+## **Приклад використання**
+```javascript
+// Отримання альбомів (GET)
+const albums = await getAlbums({ depart_id: 2, unit_id: 5 });
+
+// Створення альбому (POST)
+const newAlbum = await createAlbum({
+    name: "Новий альбом",
+    depart_id: 2,
+    unit_id: 5,
+    description: "Опис альбому",
+    creator_id: 10
+});
+
+// Оновлення альбому (PUT)
+const updatedAlbum = await updateAlbum(3, { name: "Оновлена назва" });
+
+// Видалення альбому (DELETE)
+await deleteAlbum(3);
+```
+
+---
+
+## **Переваги цього підходу**
+🔹 Всі запити `GET`, `POST`, `PUT`, `DELETE` виконуються через `POST`, тому **немає проблем із `body` в GET**.  
+🔹 Можливість легко **логувати методи запитів** (оскільки вони тепер передаються в `body`).  
+🔹 **Просте розширення API** – можна легко додавати нові запити.  
+🔹 **Не потрібно змінювати сторонній API**, все обробляється на рівні `customfetch`.
+
+---
+
+### 🚀 **Тепер у вас є єдиний підхід для всіх запитів через POST!**

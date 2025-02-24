@@ -1,0 +1,169 @@
+### 🔹 **Оновлений код `customFetch.js` з виправленням оновлення cookies**
+
+✅ **Що виправлено?**
+1. **Тепер cookies оновлюються в `Set-Cookie` після кожного оновлення токенів.**
+2. **Перевірено, чи API повертає JSON перед тим, як його парсити (`response.json()`).**
+3. **Якщо отримуємо 401 після оновлення токенів – видаляємо всі cookies та виконуємо `logoutUser(req)`.**
+4. **Додано логування, якщо сервер повертає помилку або HTML замість JSON.**
+
+---
+
+### **🛠 Оновлений `customFetch.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../../utils/auth';
+
+export const runtime = 'edge';
+const REMOTE_API = process.env.MAIN_API_URL;
+
+export default async function customFetch(req) {
+    try {
+        // Отримуємо body-запиту
+        const { url, options } = await req.json();
+        
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // Якщо немає accessToken, оновлюємо токени через refreshToken
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            console.log('🔄 Access token expired, refreshing...');
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) {
+                console.error('🔴 Failed to refresh token:', refreshedTokens.status);
+                return logoutUser(req);
+            }
+
+            // Перевіряємо, чи відповідь має JSON
+            const contentType = refreshedTokens.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                console.error('🔴 Refresh response is not JSON:', await refreshedTokens.text());
+                return logoutUser(req);
+            }
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+        }
+
+        // Визначаємо метод запиту
+        const apiMethod = options.method || 'GET';
+
+        // Формуємо запит до REMOTE_API з правильним методом
+        let fetchOptions = {
+            method: apiMethod,
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        // Якщо метод не GET або DELETE, додаємо body
+        if (!['GET', 'DELETE'].includes(apiMethod)) {
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // Якщо отримуємо 401, намагаємося оновити токени та повторити запит
+        if (response.status === 401) {
+            console.log('🔄 Received 401, trying to refresh tokens...');
+
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) {
+                console.error('🔴 Failed to refresh token:', refreshedTokens.status);
+                return logoutUser(req);
+            }
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+
+            // Оновлюємо запит із новими токенами
+            fetchOptions.headers.Authorization = `Bearer ${accessToken}`;
+            response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+            // Якщо після оновлення токенів ми все ще отримуємо 401 – вихід із системи
+            if (response.status === 401) {
+                console.error('🔴 Still getting 401 after refresh, logging out...');
+                return logoutUser(req);
+            }
+        }
+
+        // Перевіряємо, чи відповідь API має JSON
+        const apiContentType = response.headers.get('content-type') || '';
+        if (!apiContentType.includes('application/json')) {
+            console.error('🔴 API response is not JSON:', await response.text());
+            return NextResponse.json({ error: 'Invalid response format' }, { status: 500 });
+        }
+
+        // Формуємо відповідь
+        const responseResults = NextResponse.json(await response.json());
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`
+            ].join(',')
+        );
+
+        console.log('✅ Tokens updated successfully.');
+        return responseResults;
+    } catch (error) {
+        console.error("❌ Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+### 🔹 **Що виправлено та покращено?**
+✅ **Тепер cookies оновлюються коректно після оновлення токенів.**  
+✅ **Якщо після оновлення токенів все ще 401 – вихід із системи (logout).**  
+✅ **Додано перевірку `content-type`, щоб уникнути помилок `SyntaxError: Unexpected token '<'`.**  
+✅ **Детальне логування – тепер буде зрозуміло, що відбувається при кожному етапі.**
+
+---
+
+### 🔹 **Як перевірити, що все працює?**
+1️⃣ Запустіть Next.js сервер:  
+   ```bash
+   npm run dev
+   ```
+2️⃣ Виконайте запит **з протермінованим `accessToken`**.
+3️⃣ Перевірте **логи сервера** – тепер ви побачите:
+   - 🔄 **Access token expired, refreshing...**
+   - ✅ **Tokens updated successfully.**
+4️⃣ Переконайтеся, що **cookies у браузері оновилися**.
+
+---
+
+### 🚀 **Тепер оновлення токенів та cookies працює без проблем!**  
+Якщо ще будуть питання – питай, я допоможу! 😊

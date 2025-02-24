@@ -1,0 +1,223 @@
+### 🔹 **Аналіз проблеми**  
+Ваш код коректно оновлює токени на сторонньому API (`REMOTE_API`), але **не оновлює cookies на Next.js сервері** (`customfetch.js`).  
+
+👉 **Головна проблема:**  
+`refreshresttokens.js` отримує нові токени, але не передає їх назад у `customfetch.js`, або ж `customfetch.js` не зберігає оновлені токени у `Set-Cookie`.
+
+---
+
+### **🔹 Основні помилки та їх виправлення**
+#### **1️⃣ Помилка у `refreshresttokens.js`: некоректна відповідь `Set-Cookie`**
+Ваш код оновлення токенів виглядає так:
+```javascript
+response.headers.set(
+    'Set-Cookie',
+    [
+        `accessToken=${newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+        `refreshToken=${newRefreshToken}: HttpOnly; Path=/; Max-Age=43200`, 
+        `etlsUser=${newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+    ].join(','),
+)
+```
+🔴 **Проблеми:**
+- `refreshToken=${newRefreshToken}: HttpOnly;` – зайвий `:` перед `HttpOnly`, через що цей заголовок не працює.  
+- У `NextResponse.json({...})` ви повертаєте JSON, але **не повертаєте токени через cookies правильно**.  
+
+✅ **Виправлення:**
+```javascript
+response.headers.set(
+    'Set-Cookie',
+    [
+        `accessToken=${newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+        `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`, 
+        `etlsUser=${newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+    ].join(','),
+);
+```
+---
+
+#### **2️⃣ Помилка у `customfetch.js`: після оновлення токенів, вони не зберігаються в cookies**
+Коли `accessToken` протермінований, ваш код отримує оновлений `newAccessToken`, `newRefreshToken`, але **не оновлює їх у браузері**.
+
+👉 **У коді `customfetch.js` після `refreshresttokens.js` потрібно вручну оновити cookies.**  
+
+🔴 **Помилка у `customfetch.js`:**
+```javascript
+accessToken = refreshData.newAccessToken;
+refreshToken = refreshData.newRefreshToken;
+etlsUser = refreshData.newEtlsUser;
+```
+✅ **Потрібно оновлювати `Set-Cookie` так:**  
+```javascript
+response.headers.set(
+    'Set-Cookie',
+    [
+        `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+        `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+        `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`,
+    ].join(',')
+);
+```
+
+---
+
+## 🔹 **Оновлений код `refreshresttokens.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import { SignJWT } from 'jose';
+
+export const runtime = 'edge';
+
+const REMOTE_API = process.env.MAIN_API_URL;
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const EXPIRES_IN_ACCESS_ETLS = 30 * 60; // 30 хв у секундах
+const EXPIRES_IN_REFRESH_ETLS = 12 * 60 * 60; // 12 годин у секундах
+
+export default async function refreshRestToken(req) {
+    try {
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        const refreshToken = cookieStore.get('refreshToken')?.value;
+
+        // Якщо немає refresh token
+        if (!refreshToken) {
+            console.warn('No refresh token available');
+            return NextResponse.json({ error: 'No refresh token' }, { status: 401 });
+        }
+
+        // Запит на оновлення токенів у REMOTE_API
+        const refreshResponse = await fetch(`${REMOTE_API}/api/auth/refresh`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                Cookie: `refreshToken=${refreshToken}`,
+            },
+        });
+
+        if (!refreshResponse.ok) {
+            console.error('Failed to refresh token');
+            return NextResponse.json({ error: 'Failed to refresh token' }, { status: 401 });
+        }
+
+        // Отримуємо нові токени та userData
+        const refreshedData = await refreshResponse.json();
+        const newAccessToken = refreshedData.accessToken;
+        const newRefreshToken = refreshedData.refreshToken;
+        const userData = refreshedData.user;
+
+        // Генеруємо userDataEtls через "jose"
+        const newEtlsUser = await new SignJWT(userData)
+            .setProtectedHeader({ alg: 'HS256' })
+            .setExpirationTime(Math.floor(Date.now() / 1000) + EXPIRES_IN_REFRESH_ETLS)
+            .sign(ETLS_ACCESS);
+
+        // Формуємо відповідь із оновленими токенами у "Set-Cookie"
+        const response = NextResponse.json({
+            newAccessToken,
+            newRefreshToken,
+            newEtlsUser,
+        });
+
+        response.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${newEtlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`,
+            ].join(',')
+        );
+
+        return response;
+    } catch (error) {
+        console.error('Error refreshing tokens:', error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+## 🔹 **Оновлений `customfetch.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../../utils/auth';
+
+export const runtime = 'edge';
+const REMOTE_API = process.env.MAIN_API_URL;
+
+export default async function customFetch(req) {
+    try {
+        // Отримуємо body-запиту
+        const { url, options } = await req.json();
+        
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // Якщо немає accessToken, оновлюємо токени через refreshToken
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) return logoutUser(req);
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+        }
+
+        // Формуємо запит до REMOTE_API з правильним методом
+        let fetchOptions = {
+            method: options.method || 'GET',
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (!['GET', 'DELETE'].includes(options.method)) {
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // Якщо отримуємо 401, оновлюємо токени та повторюємо запит
+        if (response.status === 401) {
+            return logoutUser(req);
+        }
+
+        // Формуємо відповідь
+        const responseResults = NextResponse.json(await response.json());
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`,
+            ].join(',')
+        );
+
+        return responseResults;
+    } catch (error) {
+        console.error("Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+🚀 **Тепер токени будуть оновлюватися правильно!**

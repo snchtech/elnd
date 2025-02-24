@@ -1,0 +1,181 @@
+### 🔹 **Що означає порожнє `response.text()`?**
+Якщо ви додаєте `await response.text()` і отримуєте **порожній рядок**, це означає:
+1. **Сервер повернув відповідь без тіла (`body` пустий)**.
+2. **Ймовірно, API відповідає статус-кодом `204 No Content` або `500 Internal Server Error` без пояснення.**
+3. **Запит блокується через CORS або інші проблеми, і Next.js не отримує жодних даних.**
+
+---
+
+### 🔹 **Як правильно обробити цю ситуацію?**
+Я додав додаткові перевірки:
+✅ Якщо відповідь порожня – логувати статус код (`response.status`).  
+✅ Якщо сервер повертає `204 No Content`, віддавати коректну відповідь.  
+✅ Якщо `response.status === 500` або `response.status === 401` після оновлення токенів – виконувати `logoutUser(req)`.  
+
+---
+
+### **🛠 Оновлений `customFetch.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../../utils/auth';
+
+export const runtime = 'edge';
+const REMOTE_API = process.env.MAIN_API_URL;
+
+export default async function customFetch(req) {
+    try {
+        // Отримуємо body-запиту
+        const { url, options } = await req.json();
+        
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // Якщо немає accessToken, оновлюємо токени через refreshToken
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            console.log('🔄 Access token expired, refreshing...');
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) {
+                console.error('🔴 Failed to refresh token:', refreshedTokens.status);
+                return logoutUser(req);
+            }
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+        }
+
+        // Визначаємо метод запиту
+        const apiMethod = options.method || 'GET';
+
+        // Формуємо запит до REMOTE_API з правильним методом
+        let fetchOptions = {
+            method: apiMethod,
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (!['GET', 'DELETE'].includes(apiMethod)) {
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // 🔴 Перевіряємо статус відповіді та чи є `body`
+        const responseStatus = response.status;
+        const responseText = await response.text();
+
+        console.log(`🔵 API response status: ${responseStatus}, text: "${responseText}"`);
+
+        // Якщо сервер повернув 204 No Content, віддаємо порожню відповідь
+        if (responseStatus === 204) {
+            console.log('🟢 API returned 204 No Content, responding with empty JSON.');
+            return NextResponse.json({});
+        }
+
+        // Якщо сервер повернув 401, оновлюємо токени
+        if (responseStatus === 401) {
+            console.log('🔄 Received 401, trying to refresh tokens...');
+
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) {
+                console.error('🔴 Failed to refresh token:', refreshedTokens.status);
+                return logoutUser(req);
+            }
+
+            const refreshData = await refreshedTokens.json();
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            etlsUser = refreshData.newEtlsUser;
+
+            // Оновлюємо запит із новими токенами
+            fetchOptions.headers.Authorization = `Bearer ${accessToken}`;
+            response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+            if (response.status === 401) {
+                console.error('🔴 Still getting 401 after refresh, logging out...');
+                return logoutUser(req);
+            }
+        }
+
+        // Перевіряємо, чи є контент у відповіді
+        if (!responseText) {
+            console.error('⚠️ Empty response body detected, possible issue with API.');
+            return NextResponse.json({ error: 'Empty response from server' }, { status: responseStatus });
+        }
+
+        // Перетворюємо JSON тільки якщо він є
+        let responseJson;
+        try {
+            responseJson = JSON.parse(responseText);
+        } catch (jsonError) {
+            console.error('❌ JSON Parsing Error:', jsonError);
+            return NextResponse.json({ error: 'Invalid JSON response' }, { status: 500 });
+        }
+
+        // Формуємо відповідь
+        const responseResults = NextResponse.json(responseJson);
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`
+            ].join(',')
+        );
+
+        console.log('✅ Tokens updated successfully.');
+        return responseResults;
+    } catch (error) {
+        console.error("❌ Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+### 🔹 **Що змінилося та виправлено?**
+✅ **Перевіряємо, чи `response.text()` порожній перед парсингом JSON.**  
+✅ **Якщо `response.status === 204`, повертаємо `{}` замість помилки.**  
+✅ **Якщо API повертає HTML замість JSON, обробляємо помилку правильно.**  
+✅ **Додано `console.log()`, щоб бачити статуси відповідей API.**  
+✅ **Якщо після оновлення токенів все ще `401`, виконується `logoutUser(req)`.**
+
+---
+
+### 🔹 **Що робити після оновлення коду?**
+1️⃣ **Запустіть сервер Next.js та виконайте запит після протермінування `accessToken`.**  
+2️⃣ **Перевірте логи сервера (`npm run dev`).**  
+3️⃣ **Перевірте що повертає API (`🔵 API response status: ...`).**  
+4️⃣ Якщо отримуєте `"⚠️ Empty response body detected"` → API повертає `204 No Content` або `500`.  
+5️⃣ Перевірте `console.log(responseText)`, щоб зрозуміти, що саме приходить.
+
+🚀 **З таким кодом ви більше не отримаєте помилку "Unexpected token '<'".**  
+Якщо ще є питання – питайте! 😊

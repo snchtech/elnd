@@ -1,0 +1,142 @@
+### 🔹 **Аналіз проблеми**  
+Ви отримуєте помилку на цьому рядку:
+```javascript
+const responseResults = NextResponse.json(await response.json());
+```
+> **Ймовірна причина:** `response.json()` викликає `SyntaxError`, оскільки `response` містить не JSON, а HTML або взагалі порожню відповідь.
+
+---
+
+### **🔹 Як знайти точну причину?**
+Перед тим, як викликати `response.json()`, потрібно перевірити:  
+1️⃣ **Чи взагалі `response` має `Content-Type: application/json`?**  
+2️⃣ **Чи `response.status` не є 500, 401 або іншим помилковим?**  
+3️⃣ **Що знаходиться в `response.text()`, якщо це не JSON?**
+
+---
+
+### **🔹 Оновлений код із детальним логуванням**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../../utils/auth';
+
+export const runtime = 'edge';
+const REMOTE_API = process.env.MAIN_API_URL;
+
+export default async function customFetch(req) {
+    try {
+        // Отримуємо body-запиту
+        const { url, options } = await req.json();
+        
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // Якщо немає accessToken, оновлюємо токени через refreshToken
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            const refreshedTokens = await fetch(`${req.nextUrl.origin}/api/rest/refreshresttokens`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || ''
+                }
+            });
+
+            if (!refreshedTokens.ok) {
+                console.error('🔴 Failed to refresh token. Status:', refreshedTokens.status);
+                return logoutUser(req);
+            }
+
+            const { newAccessToken } = await refreshedTokens.json();
+            accessToken = newAccessToken;
+        }
+
+        // Визначаємо метод запиту
+        const apiMethod = options.method || 'GET';
+
+        // Формуємо запит до REMOTE_API з правильним методом
+        let fetchOptions = {
+            method: apiMethod,
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        if (!['GET', 'DELETE'].includes(apiMethod)) {
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // 🔴 **Додаємо логування, якщо запит повертає не JSON**
+        const contentType = response.headers.get('content-type') || 'unknown';
+        console.log(`🔵 API response content-type: ${contentType}, status: ${response.status}`);
+
+        if (!response.ok) {
+            console.error(`🔴 API request failed with status ${response.status}`);
+
+            // Якщо сервер повернув HTML-сторінку помилки, виводимо її текст
+            if (!contentType.includes('application/json')) {
+                console.error('🔴 Server returned non-JSON response:', await response.text());
+                return NextResponse.json({ error: 'Invalid response format' }, { status: 500 });
+            }
+        }
+
+        // 🔵 **Перевіряємо JSON-парсинг**
+        let responseJson;
+        try {
+            responseJson = await response.json();
+        } catch (jsonError) {
+            console.error('❌ JSON Parsing Error:', jsonError);
+            console.error('❌ Response body (text mode):', await response.text());
+            return NextResponse.json({ error: 'Invalid JSON response' }, { status: 500 });
+        }
+
+        // Формуємо відповідь
+        const responseResults = NextResponse.json(responseJson);
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Secure; Max-Age=43200`,
+            ].join(',')
+        );
+
+        return responseResults;
+    } catch (error) {
+        console.error("❌ Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+### **🔹 Що змінилося?**
+✅ **Логуємо `Content-Type` відповіді**, щоб побачити, чи сервер дійсно повертає JSON.  
+✅ **Перевіряємо `response.ok`** – якщо сервер повернув помилку (`500`, `401`), ми логуємо текст відповіді.  
+✅ **Додаємо `try { response.json() } catch (error)`**, щоб уникнути `SyntaxError` при парсингу.  
+✅ **Якщо JSON-парсинг не вдався, ми виводимо `response.text()`**, щоб побачити, що саме повернув сервер.
+
+---
+
+### **🔹 Що робити після оновлення коду?**
+1️⃣ **Запустіть Next.js і зробіть запит після протермінування `accessToken`.**  
+2️⃣ **Перевірте логи в консолі сервера (`npm run dev`).**  
+3️⃣ Надішліть мені в консольній логіки:  
+   - `🔵 API response content-type: ...`
+   - `🔴 Server returned non-JSON response: ...`
+   - `❌ JSON Parsing Error: ...`  
+4️⃣ Це допоможе зрозуміти, що сервер повертає неправильно.
+
+🚀 **Після цього я точно скажу, як виправити проблему!**

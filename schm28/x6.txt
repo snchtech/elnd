@@ -1,0 +1,63 @@
+// 🔹 Обробка логіки для /login
+if (pathname === '/login') {
+    if (accessTokenEtls) {
+        try {
+            await jose.jwtVerify(accessTokenEtls, ETLS_ACCESS);
+            return NextResponse.redirect(new URL('/', req.url));
+        } catch (error) {
+            console.log(error);
+        }
+    }
+
+    if (refreshTokenEtls) {
+        try {
+            await jose.jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+            // 🔹 Якщо вже триває оновлення токенів, чекаємо завершення
+            if (refreshingToken === '1') {
+                console.log('🔄 Waiting for token refresh on /login...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return NextResponse.redirect(new URL('/', req.url));
+            }
+
+            // 🔹 Встановлюємо `refreshingToken=1`, щоб уникнути дублювання оновлення
+            const response = NextResponse.next();
+            response.headers.set('Set-Cookie', `refreshingToken=1; Path=/; HttpOnly`);
+
+            console.log('🔄 Refreshing tokens on /login...');
+            const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Cookie: req.headers.get('cookie') || '',
+                },
+            });
+
+            if (!refreshResponse.ok) {
+                throw new Error('Failed to refresh tokens');
+            }
+
+            const refreshResponseData = await refreshResponse.json();
+
+            // 🔹 Видаляємо `refreshingToken=1`, бо оновлення завершено
+            response.headers.set(
+                'Set-Cookie',
+                [
+                    `refreshingToken=; Path=/; HttpOnly; Max-Age=0`, // Видаляємо
+                    `accessTokenEtls=${refreshResponseData.newAccessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshTokenEtls=${refreshResponseData.newRefreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `accessToken=${refreshResponseData.newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshToken=${refreshResponseData.newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `etlsUser=${refreshResponseData.newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                ].join(', ')
+            );
+
+            return NextResponse.redirect(new URL('/', req.url));
+        } catch (error) {
+            console.error('Error refreshing tokens on /login:', error);
+        }
+    }
+
+    return logoutUser(req);
+}

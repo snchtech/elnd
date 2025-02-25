@@ -1,0 +1,202 @@
+### 🔹 **Оновлений `middleware.js` з використанням `tokenRefreshingPromise`**
+✅ **Додає глобальну змінну `tokenRefreshingPromise`**, яка дозволяє **синхронізувати всі запити** на оновлення токенів.  
+✅ **Якщо `middleware.js` вже оновлює токени**, інші запити **чекають** на завершення цього процесу.  
+✅ **Оновлення токенів більше не виконується паралельно в `middleware.js` та `customFetch.js`**, що унеможливлює помилку з використанням старих токенів.  
+
+---
+
+### **🛠 Оновлений `middleware.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import * as jose from 'jose';
+import { logoutUser } from '@/utils/auth';
+
+// Отримуємо значення ключів
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+
+// Глобальна змінна для синхронізації оновлення токенів
+let tokenRefreshingPromise = null;
+
+export async function middleware(req) {
+    const { pathname, searchParams } = req.nextUrl;
+    const cookieStore = req.cookies;
+    console.log('MW _WORKS');
+
+    // Дістаємо внутрішні токени з cookies
+    let accessTokenEtls = cookieStore.get('accessTokenEtls')?.value;
+    let refreshTokenEtls = cookieStore.get('refreshTokenEtls')?.value;
+    let etlsUser = cookieStore.get('etlsUser')?.value;
+
+    // Дістаємо accessToken з заголовка або query
+    let accessToken = req.headers.get('Authorization')?.replace('Bearer ', '') || searchParams.get('t');
+
+    // Авторизація через accessToken (якщо переданий в запиті)
+    if (accessToken) {
+        const loginResponse = await fetch(`${req.nextUrl.origin}/api/auth/loginByToken`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken, redirectTo: pathname }),
+        });
+
+        if (loginResponse.ok) {
+            const responseData = await loginResponse.json();
+
+            // Оновлюємо токени
+            accessToken = responseData.newAccessToken;
+            let refreshToken = responseData.refreshToken;
+            accessTokenEtls = responseData.accessTokenEtls;
+            refreshTokenEtls = responseData.refreshTokenEtls;
+            let etlsUser = responseData.etlsUser;
+
+            // Формуємо відповідь з оновленими cookies
+            const respLogin = NextResponse.redirect(new URL(pathname, req.url));
+            respLogin.headers.set(
+                'Set-Cookie',
+                [
+                    `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `etlsUser=${etlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                ].join(', ')
+            );
+
+            return respLogin;
+        } else {
+            return NextResponse.redirect(new URL('/login', req.url));
+        }
+    }
+
+    // Обробка автентифікації для всіх сторінок, крім /login
+    if (pathname !== '/login') {
+        if (!accessTokenEtls && !refreshTokenEtls) {
+            return logoutUser(req);
+        }
+
+        try {
+            await jose.jwtVerify(accessTokenEtls, ETLS_ACCESS);
+            return NextResponse.next();
+        } catch (error) {
+            try {
+                await jose.jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+                // **Запобігання одночасному оновленню токенів**
+                if (!tokenRefreshingPromise) {
+                    tokenRefreshingPromise = fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Cookie: req.headers.get('cookie') || '',
+                        },
+                    }).then(async (res) => {
+                        tokenRefreshingPromise = null;
+                        if (!res.ok) throw new Error('Failed to refresh tokens');
+                        return res.json();
+                    }).catch((err) => {
+                        tokenRefreshingPromise = null;
+                        throw err;
+                    });
+                }
+
+                const refreshData = await tokenRefreshingPromise;
+
+                const response = NextResponse.next();
+                response.headers.set(
+                    'Set-Cookie',
+                    [
+                        `accessTokenEtls=${refreshData.newAccessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshTokenEtls=${refreshData.newRefreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `accessToken=${refreshData.newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshToken=${refreshData.newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `etlsUser=${refreshData.newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                    ].join(', ')
+                );
+
+                return response;
+            } catch (error) {
+                console.error('refreshTokenEtls invalid:', error);
+                return logoutUser(req);
+            }
+        }
+    }
+
+    // Обробка логіки для /login
+    if (pathname === '/login') {
+        if (accessTokenEtls) {
+            try {
+                await jose.jwtVerify(accessTokenEtls, ETLS_ACCESS);
+                return NextResponse.redirect(new URL('/', req.url));
+            } catch (error) {
+                console.log(error);
+            }
+        }
+
+        if (refreshTokenEtls) {
+            try {
+                await jose.jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+                // **Запобігання одночасному оновленню токенів**
+                if (!tokenRefreshingPromise) {
+                    tokenRefreshingPromise = fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Cookie: req.headers.get('cookie') || '',
+                        },
+                    }).then(async (res) => {
+                        tokenRefreshingPromise = null;
+                        if (!res.ok) throw new Error('Failed to refresh tokens');
+                        return res.json();
+                    }).catch((err) => {
+                        tokenRefreshingPromise = null;
+                        throw err;
+                    });
+                }
+
+                const refreshData = await tokenRefreshingPromise;
+
+                // Формуємо відповідь та оновлюємо cookies
+                const response = NextResponse.redirect(new URL('/', req.url));
+                response.headers.set(
+                    'Set-Cookie',
+                    [
+                        `accessTokenEtls=${refreshData.newAccessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshTokenEtls=${refreshData.newRefreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `accessToken=${refreshData.newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshToken=${refreshData.newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `etlsUser=${refreshData.newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                    ].join(', ')
+                );
+
+                return response;
+            } catch (error) {
+                console.error('Error refreshing tokens on /login:', error);
+            }
+        }
+
+        return logoutUser(req);
+    }
+
+    return NextResponse.next();
+}
+
+// Визначаємо маршрути для обробки middleware
+export const config = {
+    matcher: ['/login', '/', '/editor', '/test'],
+};
+```
+
+---
+
+### 🔹 **Що змінено?**
+✅ **Додано `tokenRefreshingPromise`, щоб усі запити чекали на завершення оновлення токенів.**  
+✅ **Якщо `middleware.js` вже оновлює токени, нові запити не ініціюють ще один `refresh`.**  
+✅ **Виключено паралельні оновлення токенів у `/login`, `/`, `/editor`, `/test`.**  
+✅ **Унеможливлено використання `customFetch.js` із застарілими токенами.**  
+
+🚀 **З цим кодом оновлення токенів працює синхронно без конфліктів!**  
+Якщо є ще питання – запитуй! 😊

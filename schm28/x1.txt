@@ -1,0 +1,199 @@
+Ось **виправлений та оновлений код** для вашого `middleware.js`, який забезпечує **коректне оновлення токенів при заході на `/login`**.
+
+---
+
+### 🔹 **Що оновлено?**
+✅ **Виправлені синтаксичні помилки**  
+✅ **Запит `/api/auth/refreshtoken` тепер виконує оновлення всіх токенів перед редіректом на `/`.**  
+✅ **Коректна логіка встановлення `Set-Cookie` після оновлення токенів**  
+✅ **Додано обробку `refreshResponse.ok` перед парсингом JSON.**
+
+---
+
+### **🛠 Оновлений `middleware.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import * as jose from 'jose';
+import { logoutUser } from '@/utils/auth';
+
+// Отримуємо значення ключів
+const ETLS_ACCESS = new TextEncoder().encode(process.env.ETLS_ACCESS);
+const ETLS_REFRESH = new TextEncoder().encode(process.env.ETLS_REFRESH);
+
+export async function middleware(req) {
+    const { pathname, searchParams } = req.nextUrl;
+    const cookieStore = req.cookies;
+    console.log('MW _WORKS');
+
+    // Дістаємо внутрішні токени з cookies
+    let accessTokenEtls = cookieStore.get('accessTokenEtls')?.value;
+    let refreshTokenEtls = cookieStore.get('refreshTokenEtls')?.value;
+    let etlsUser = cookieStore.get('etlsUser')?.value;
+
+    // Дістаємо accessToken з заголовка або query
+    let accessToken = req.headers.get('Authorization')?.replace('Bearer ', '') || searchParams.get('t');
+
+    // Авторизація через accessToken (якщо переданий в запиті)
+    if (accessToken) {
+        const loginResponse = await fetch(`${req.nextUrl.origin}/api/auth/loginByToken`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken, redirectTo: pathname }),
+        });
+
+        if (loginResponse.ok) {
+            const responseData = await loginResponse.json();
+
+            // Оновлюємо токени
+            accessToken = responseData.newAccessToken;
+            let refreshToken = responseData.refreshToken;
+            accessTokenEtls = responseData.accessTokenEtls;
+            refreshTokenEtls = responseData.refreshTokenEtls;
+            let etlsUser = responseData.etlsUser;
+
+            // Формуємо відповідь з оновленими cookies
+            const respLogin = NextResponse.redirect(new URL(pathname, req.url));
+            respLogin.headers.set(
+                'Set-Cookie',
+                [
+                    `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                    `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                    `etlsUser=${etlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                ].join(', ')
+            );
+
+            return respLogin;
+        } else {
+            return NextResponse.redirect(new URL('/login', req.url));
+        }
+    }
+
+    // Обробка автентифікації для всіх сторінок, крім /login
+    if (pathname !== '/login') {
+        if (!accessTokenEtls && !refreshTokenEtls) {
+            return logoutUser(req);
+        }
+
+        try {
+            await jose.jwtVerify(accessTokenEtls, ETLS_ACCESS);
+            return NextResponse.next();
+        } catch (error) {
+            try {
+                await jose.jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+                // Запит на оновлення токенів
+                const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Cookie: cookieStore.toString(),
+                    },
+                });
+
+                if (!refreshResponse.ok) {
+                    throw new Error('Failed to refresh tokens');
+                }
+
+                // Отримуємо нові токени
+                const refreshResponseData = await refreshResponse.json();
+                const response = NextResponse.next();
+
+                // Оновлюємо cookies
+                response.headers.set(
+                    'Set-Cookie',
+                    [
+                        `accessTokenEtls=${refreshResponseData.newAccessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshTokenEtls=${refreshResponseData.newRefreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `accessToken=${refreshResponseData.newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshToken=${refreshResponseData.newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `etlsUser=${refreshResponseData.newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                    ].join(', ')
+                );
+
+                return response;
+            } catch (error) {
+                console.error('refreshTokenEtls invalid:', error);
+                return logoutUser(req);
+            }
+        }
+    }
+
+    // Обробка логіки для /login
+    if (pathname === '/login') {
+        if (accessTokenEtls) {
+            try {
+                await jose.jwtVerify(accessTokenEtls, ETLS_ACCESS);
+                return NextResponse.redirect(new URL('/', req.url));
+            } catch (error) {
+                console.log(error);
+            }
+        }
+
+        if (refreshTokenEtls) {
+            try {
+                await jose.jwtVerify(refreshTokenEtls, ETLS_REFRESH);
+
+                // **Оновлюємо токени перед редіректом**
+                const refreshResponse = await fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Cookie: req.headers.get('cookie') || '',
+                    },
+                });
+
+                if (!refreshResponse.ok) {
+                    throw new Error('Failed to refresh tokens');
+                }
+
+                // Отримуємо нові токени
+                const refreshResponseData = await refreshResponse.json();
+
+                // Формуємо відповідь та оновлюємо cookies
+                const response = NextResponse.redirect(new URL('/', req.url));
+                response.headers.set(
+                    'Set-Cookie',
+                    [
+                        `accessTokenEtls=${refreshResponseData.newAccessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshTokenEtls=${refreshResponseData.newRefreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                        `accessToken=${refreshResponseData.newAccessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `refreshToken=${refreshResponseData.newRefreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                        `etlsUser=${refreshResponseData.newEtlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+                    ].join(', ')
+                );
+
+                return response;
+            } catch (error) {
+                console.error('Error refreshing tokens on /login:', error);
+            }
+        }
+
+        return logoutUser(req);
+    }
+
+    return NextResponse.next();
+}
+
+// Визначаємо маршрути для обробки middleware
+export const config = {
+    matcher: ['/login', '/', '/editor', '/test'],
+};
+```
+
+---
+
+### 🔹 **Що змінилося та виправлено?**
+✅ **Додано оновлення токенів на `/login` перед редіректом на `/`**  
+✅ **Виправлені синтаксичні помилки (`Set-Cookie`, `jwtVerify`, `refreshResponseData`)**  
+✅ **Оновлюємо всі `Set-Cookie`, щоб браузер зберігав оновлені токени**  
+✅ **Перевіряємо `refreshResponse.ok` перед парсингом JSON, щоб уникнути помилок**  
+
+---
+
+🚀 **Тепер при заході на `/login`, якщо `refreshTokenEtls` дійсний, токени оновляться, і користувач буде автоматично переадресований на `/`!**  
+Якщо ще будуть питання – запитуй, я допоможу! 😊

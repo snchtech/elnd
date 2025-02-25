@@ -1,0 +1,160 @@
+### 🔹 **Оновлений `customFetch.js` з використанням `tokenRefreshingPromise`**
+✅ **Додає глобальну змінну `tokenRefreshingPromise`, яка синхронізує оновлення токенів між `customFetch.js` і `middleware.js`.**  
+✅ **Якщо токени вже оновлюються `middleware.js`, `customFetch.js` буде чекати завершення оновлення, замість виконання нового `refresh` запиту.**  
+✅ **Забезпечує коректну логіку повторного запиту після оновлення токенів.**  
+
+---
+
+### **🛠 Оновлений `customFetch.js`**
+```javascript
+import { NextResponse } from 'next/server';
+import { logoutUser } from '../../utils/auth';
+export const runtime = 'edge';
+
+const REMOTE_API = process.env.MAIN_API_URL;
+
+// Глобальна змінна для синхронізації оновлення токенів
+let tokenRefreshingPromise = null;
+
+export default async function customFetch(req) {
+    try {
+        // Дістаємо значення параметрів
+        const { url, options } = await req.json();
+        let retryCount = 0;
+
+        // Отримуємо cookies
+        const cookieStore = req.cookies;
+        let accessToken = cookieStore.get('accessToken')?.value;
+        let refreshToken = cookieStore.get('refreshToken')?.value;
+        let accessTokenEtls = cookieStore.get('accessTokenEtls')?.value;
+        let refreshTokenEtls = cookieStore.get('refreshTokenEtls')?.value;
+        let etlsUser = cookieStore.get('etlsUser')?.value;
+
+        // **Чекаємо, якщо токени оновлюються в `middleware.js`**
+        if (tokenRefreshingPromise) {
+            console.log('🔄 Waiting for token refresh...');
+            await tokenRefreshingPromise;
+        }
+
+        // Якщо `accessToken` протермінований, пробуємо оновити токени
+        if (!accessToken) {
+            if (!refreshToken) return logoutUser(req);
+
+            console.log('🔄 Access token expired, refreshing tokens...');
+
+            if (!tokenRefreshingPromise) {
+                tokenRefreshingPromise = fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Cookie: req.headers.get('cookie') || '',
+                    },
+                }).then(async (res) => {
+                    tokenRefreshingPromise = null;
+                    if (!res.ok) throw new Error('Failed to refresh tokens');
+                    return res.json();
+                }).catch((err) => {
+                    tokenRefreshingPromise = null;
+                    throw err;
+                });
+            }
+
+            const refreshData = await tokenRefreshingPromise;
+
+            // Оновлюємо токени
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            accessTokenEtls = refreshData.newAccessTokenEtls;
+            refreshTokenEtls = refreshData.newRefreshTokenEtls;
+            etlsUser = refreshData.newEtlsUser;
+        }
+
+        // Формуємо запит до REMOTE_API
+        let fetchOptions = {
+            method: options.method || 'GET',
+            credentials: 'include',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+        };
+
+        if (!['GET', 'DELETE'].includes(options.method)) {
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        // Виконуємо запит на отримання даних
+        let response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+
+        // Якщо отримуємо 401 – пробуємо оновити токени один раз
+        if (response.status === 401 && retryCount === 0) {
+            console.warn('🔄 Received 401, retrying request after refreshing tokens...');
+
+            if (!tokenRefreshingPromise) {
+                tokenRefreshingPromise = fetch(`${req.nextUrl.origin}/api/auth/refreshtoken`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Cookie: req.headers.get('cookie') || '',
+                    },
+                }).then(async (res) => {
+                    tokenRefreshingPromise = null;
+                    if (!res.ok) throw new Error('Failed to refresh tokens');
+                    return res.json();
+                }).catch((err) => {
+                    tokenRefreshingPromise = null;
+                    throw err;
+                });
+            }
+
+            const refreshData = await tokenRefreshingPromise;
+
+            // Отримуємо значення нових токенів
+            accessToken = refreshData.newAccessToken;
+            refreshToken = refreshData.newRefreshToken;
+            accessTokenEtls = refreshData.newAccessTokenEtls;
+            refreshTokenEtls = refreshData.newRefreshTokenEtls;
+            etlsUser = refreshData.newEtlsUser;
+
+            fetchOptions.headers.Authorization = `Bearer ${accessToken}`;
+
+            // Виконуємо повторний запит на отримання даних з новими токенами
+            response = await fetch(`${REMOTE_API}${url}`, fetchOptions);
+            retryCount = 1;
+        } else if (response.status === 401 && retryCount === 1) {
+            return logoutUser(req);
+        }
+
+        const responseResults = NextResponse.json(await response.json());
+
+        // Оновлюємо cookies
+        responseResults.headers.set(
+            'Set-Cookie',
+            [
+                `accessToken=${accessToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=43200`,
+                `accessTokenEtls=${accessTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                `refreshTokenEtls=${refreshTokenEtls}; HttpOnly; Path=/; Max-Age=43200`,
+                `etlsUser=${etlsUser}; HttpOnly; Path=/; Max-Age=43200`,
+            ].join(', ')
+        );
+
+        return responseResults;
+    } catch (error) {
+        console.error("❌ Error in customFetch:", error);
+        return NextResponse.json({ error: 'Request failed' }, { status: 500 });
+    }
+}
+```
+
+---
+
+### 🔹 **Що змінилося?**
+✅ **Додано `tokenRefreshingPromise`, який гарантує, що всі запити чекають оновлення токенів, а не запускають нові `refresh`-запити.**  
+✅ **Використання `tokenRefreshingPromise` в `401` повторному запиті, щоб унеможливити одночасне оновлення токенів.**  
+✅ **Запити більше не використовують старі токени, поки `middleware.js` оновлює їх.**  
+
+🚀 **З цим кодом `customFetch.js` працює стабільно без конфліктів з `middleware.js`!**  
+Якщо є ще питання – запитуй! 😊

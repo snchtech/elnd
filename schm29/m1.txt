@@ -1,0 +1,119 @@
+Ось **готовий код сторінки `albums.js`**, яка містить усі компоненти, що ми створювали:
+
+✅ **Ліва панель** → `NavigationTree`.  
+✅ **Права частина** →  
+   - **Блок 1:** `SearchBar` + Кнопка `Створити` → відкриває `NewAlbumModal`.  
+   - **Блок 2:** Фільтри `AlbumsFilters`.  
+   - **Блок 3:** Таблиця `AlbumsReport`.  
+
+---
+
+### **📁 `pages/albums.js`**
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { fetchDepartments, fetchUnits, fetchAlbums, fetchAlbumStatuses } from "@/utils/api";
+import { Container, Box, Button, Paper } from "@mui/material";
+import { Add } from "@mui/icons-material";
+import NavigationTree from "@/components/shared/NavigationTree";
+import SearchBar from "@/components/shared/SearchBar";
+import AlbumsFilters from "@/components/albums/AlbumsFilters";
+import AlbumsReport from "@/components/albums/AlbumsReport";
+import NewAlbumModal from "@/components/albums/NewAlbumModal";
+
+export default function AlbumsPage() {
+  const router = useRouter();
+  const { mode } = router.query;
+  const [albums, setAlbums] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [filteredAlbums, setFilteredAlbums] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      setDepartments(await fetchDepartments());
+      setUnits(await fetchUnits());
+      setAlbums(await fetchAlbums());
+      setStatuses(await fetchAlbumStatuses());
+    }
+    loadData();
+  }, []);
+
+  // Фільтрація альбомів
+  const handleFilterChange = ({ department, unit, status }) => {
+    let filtered = albums;
+
+    if (department) {
+      filtered = filtered.filter((album) => album.department_id === Number(department));
+    }
+    if (unit) {
+      filtered = filtered.filter((album) => album.unit_id === Number(unit));
+    }
+    if (status === "Активні") {
+      filtered = filtered.filter((album) => album.status_id !== 2); // Наприклад, статус "Архів" має id=2
+    } else if (status === "Архів") {
+      filtered = filtered.filter((album) => album.status_id === 2);
+    }
+
+    setFilteredAlbums(filtered);
+  };
+
+  return (
+    <Container maxWidth="xl">
+      <Box display="flex" gap={3}>
+        {/* Ліва панель (Дерево навігації) */}
+        <Box width="25%">
+          <Paper sx={{ padding: 2 }}>
+            <h3>Навігація</h3>
+            <NavigationTree />
+          </Paper>
+        </Box>
+
+        {/* Права частина (Основний контент) */}
+        <Box flex={1} display="flex" flexDirection="column" gap={2}>
+          
+          {/* Блок 1: Пошук + кнопка створення */}
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Box width="75%">
+              <SearchBar placeholder="Пошук альбомів" />
+            </Box>
+            {mode === "editor" && (
+              <Button variant="contained" color="success" startIcon={<Add />} onClick={() => setIsModalOpen(true)}>
+                Новий альбом
+              </Button>
+            )}
+          </Box>
+
+          {/* Блок 2: Фільтри */}
+          <AlbumsFilters departments={departments} units={units} statuses={statuses} onFilterChange={handleFilterChange} />
+
+          {/* Блок 3: Таблиця звітів альбомів */}
+          <AlbumsReport albums={filteredAlbums.length > 0 ? filteredAlbums : albums} statuses={statuses} mode={mode} />
+        </Box>
+      </Box>
+
+      {/* Модальне вікно для створення альбому */}
+      <NewAlbumModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAlbumCreated={() => setAlbums([...albums])}
+      />
+    </Container>
+  );
+}
+```
+
+---
+
+## **📌 Що реалізовано?**
+### **📂 Ліва панель**
+✅ `NavigationTree` (дерево навігації).
+
+### **📂 Права частина**
+✅ **Блок 1:** `SearchBar` (пошук) + `Button` (кнопка `Створити`).  
+✅ **Блок 2:** `AlbumsFilters` (фільтри по відділу, підрозділу, статусу).  
+✅ **Блок 3:** `AlbumsReport` (таблиця звітів альбомів + пагінація).  
+
+🚀 **Тепер сторінка `/albums` готова до використання!**

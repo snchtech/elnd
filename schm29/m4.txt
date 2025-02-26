@@ -1,0 +1,90 @@
+### **📌 SQL-запит для `fetchAlbumStatuses()`**
+Оскільки таблиця `ENTRY_STATUS` містить статуси, які посилаються на таблицю `ALBUM` (через `status_id`), нам потрібно отримати список статусів.
+
+```sql
+SELECT id, name 
+FROM ENTRY_STATUS
+ORDER BY id;
+```
+
+Цей запит просто повертає всі статуси, які можна використовувати для фільтрації альбомів.
+
+---
+
+### **📌 Оновлення `fetchAlbumStatuses()` в `utils/api.js`**
+```javascript
+export const fetchAlbumStatuses = async () => {
+  return fetchData("/api/rest/album_statuses", { method: "GET" });
+};
+```
+
+---
+
+### **📌 Оновлення `AlbumsFilters.js` для використання статусів**
+Якщо `AlbumsFilters` ще не має підтримки статусів, додаємо:
+```javascript
+import { useEffect, useState } from "react";
+import { Box, TextField, MenuItem } from "@mui/material";
+import { fetchAlbumStatuses } from "@/utils/api";
+
+export default function AlbumsFilters({ departments, units, onFilterChange }) {
+  const [statuses, setStatuses] = useState([]);
+  const [filters, setFilters] = useState({
+    department: "",
+    unit: "",
+    status: "Активні",
+  });
+
+  useEffect(() => {
+    async function loadStatuses() {
+      setStatuses(await fetchAlbumStatuses());
+    }
+    loadStatuses();
+  }, []);
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+    onFilterChange({ ...filters, [name]: value });
+  };
+
+  return (
+    <Box display="flex" gap={2}>
+      {/* Відділ */}
+      <TextField select label="Відділ" name="department" value={filters.department} onChange={handleChange} fullWidth>
+        {departments.map((dep) => (
+          <MenuItem key={dep.id} value={dep.id}>{dep.name}</MenuItem>
+        ))}
+      </TextField>
+
+      {/* Підрозділ */}
+      <TextField select label="Підрозділ" name="unit" value={filters.unit} onChange={handleChange} fullWidth>
+        {units.map((unit) => (
+          <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+        ))}
+      </TextField>
+
+      {/* Статус */}
+      <TextField select label="Статус" name="status" value={filters.status} onChange={handleChange} fullWidth>
+        <MenuItem value="Активні">Активні</MenuItem>
+        <MenuItem value="Архів">Архів</MenuItem>
+        {statuses.map((status) => (
+          <MenuItem key={status.id} value={status.name}>{status.name}</MenuItem>
+        ))}
+      </TextField>
+    </Box>
+  );
+}
+```
+
+---
+
+### **📌 Що реалізовано?**
+✅ **SQL-запит** повертає всі статуси з таблиці `ENTRY_STATUS`.  
+✅ **Оновлена функція `fetchAlbumStatuses()`** у `utils/api.js`.  
+✅ **Оновлений `AlbumsFilters.js`**:  
+   - Додає статус **Активні/Архів** за замовчуванням.  
+   - Підтягує статуси з БД.  
+   - Фільтрує альбоми за статусом.  
+
+🚀 **Тепер можна фільтрувати альбоми за статусами!**

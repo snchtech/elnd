@@ -1,0 +1,195 @@
+Ось повна реалізація кнопки **"Редагувати"**, включаючи **Next.js endpoint та SQL**.
+
+---
+
+## **1. Додаємо обробник кліку на кнопку "Редагувати" у `SchemeReport`**
+Коли користувач натискає "Редагувати", виконується запит до `/api/rest/editScheme`, який повертає **ID відповідної версії** (існуючої або нової). Після отримання ID **користувача перенаправляємо в `editor`**.
+
+### **Оновлений `SchemeReport.js`**
+```tsx
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton,
+  Typography, Button, Dialog, DialogActions, DialogContent, DialogContentText,
+  DialogTitle, Paper, TablePagination
+} from "@mui/material";
+import { Visibility, Edit, Archive } from "@mui/icons-material";
+import { fetchSchemes, editScheme } from "@/utils/api";
+
+const SchemeReport = ({ albumId, userRole, mode }) => {
+  const router = useRouter();
+  const [schemes, setSchemes] = useState([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage] = useState(15);
+
+  useEffect(() => {
+    const loadSchemes = async () => {
+      try {
+        const data = await fetchSchemes(albumId);
+        setSchemes(data);
+      } catch (error) {
+        console.error("Помилка завантаження схем:", error);
+      }
+    };
+
+    loadSchemes();
+  }, [albumId]);
+
+  const handleEditScheme = async (schemeId) => {
+    try {
+      const response = await editScheme(schemeId);
+      router.push(`/editor/${response.scheme_version_id}?mode=editor`);
+    } catch (error) {
+      console.error("Помилка відкриття схеми:", error);
+    }
+  };
+
+  return (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Перегляд</TableCell>
+            <TableCell>ID</TableCell>
+            <TableCell>Назва</TableCell>
+            {mode === "editor" && userRole === "editor" && <TableCell>Дії</TableCell>}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {schemes.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((scheme) => (
+            <TableRow key={scheme.id}>
+              <TableCell>
+                <IconButton onClick={() => router.push(`/schemes/${scheme.id}?mode=viewer`)}>
+                  <Visibility />
+                </IconButton>
+              </TableCell>
+              <TableCell>{scheme.id}</TableCell>
+              <TableCell>{scheme.name}</TableCell>
+              {mode === "editor" && userRole === "editor" && (
+                <TableCell>
+                  <IconButton onClick={() => handleEditScheme(scheme.id)}>
+                    <Edit />
+                  </IconButton>
+                </TableCell>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
+export default SchemeReport;
+```
+
+---
+
+## **2. Створюємо API-ендпоінт `/api/rest/editScheme.js`**
+Цей API:
+1. **Перевіряє наявність стабільної версії** (`is_stable = 1`).
+2. **Перевіряє, чи є редагована версія** (`is_stable = 0`).
+3. **Якщо редагована версія є** → повертає її `scheme_version_id`.
+4. **Якщо редагованої версії немає** → створює **нову** і повертає її `scheme_version_id`.
+
+### **Файл `/pages/api/rest/editScheme.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { schemeId, userId } = req.body;
+
+    if (!schemeId || !userId) {
+      return res.status(400).json({ error: "Необхідні schemeId та userId" });
+    }
+
+    // 1. Отримуємо останню стабільну або редаговану версію
+    const versionQuery = `
+      SELECT id, version_number, is_stable
+      FROM SCHEME_VERSION
+      WHERE scheme_id = :schemeId AND is_archived = 0
+      ORDER BY is_stable DESC, created_at DESC
+      FETCH FIRST 1 ROW ONLY
+    `;
+    const versionResult = await queryDatabase(versionQuery, { schemeId });
+
+    if (versionResult.rows.length === 0) {
+      return res.status(404).json({ error: "Стабільна версія не знайдена" });
+    }
+
+    const latestVersion = versionResult.rows[0];
+
+    // Якщо існує редагована версія (is_stable = 0) → відкриваємо її
+    if (latestVersion.IS_STABLE === 0) {
+      return res.status(200).json({ success: true, scheme_version_id: latestVersion.ID });
+    }
+
+    // 2. Якщо немає редагованої версії, створюємо нову версію
+    const newVersionNumber = latestVersion.VERSION_NUMBER + 1;
+    const createVersionQuery = `
+      INSERT INTO SCHEME_VERSION (scheme_id, version_number, is_stable, created_at, created_by)
+      VALUES (:schemeId, :newVersionNumber, 0, SYSDATE, :userId)
+      RETURNING id INTO :newVersionId
+    `;
+
+    const createVersionParams = {
+      schemeId,
+      newVersionNumber,
+      userId,
+      newVersionId: { dir: "out", type: "NUMBER" },
+    };
+
+    const createVersionResult = await queryDatabase(createVersionQuery, createVersionParams);
+
+    res.status(201).json({ success: true, scheme_version_id: createVersionResult.outBinds.newVersionId });
+  } catch (error) {
+    console.error("Помилка відкриття схеми:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## **3. Додаємо функцію `editScheme` у `utils/api.js`**
+```javascript
+export const editScheme = async (schemeId) => {
+  const response = await fetch("/api/rest/editScheme", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ schemeId, userId: 1 }), // TODO: Додати актуальний userId
+  });
+
+  if (!response.ok) {
+    throw new Error("Помилка відкриття схеми");
+  }
+
+  return response.json();
+};
+```
+
+---
+
+## **Як це працює?**
+1️⃣ **Користувач натискає "Редагувати" у `SchemeReport`**.  
+2️⃣ **Виконується `POST` запит на `/api/rest/editScheme`**.  
+3️⃣ API:
+   - **Шукає останню стабільну або редаговану версію**.
+   - Якщо **редагована версія є** → повертає її `scheme_version_id`.
+   - Якщо **немає** → створює **нову версію** (`is_stable = 0`).
+4️⃣ **Next.js отримує ID редагованої версії та відкриває `/editor/{scheme_version_id}?mode=editor`**.  
+
+---
+
+## **Що ще можна покращити?**
+✅ **Передавати `userId` з авторизації** (замість `1`).  
+✅ **Логувати всі зміни** (додати таблицю `SCHEME_VERSION_LOG`).  
+✅ **Перевіряти, чи версія вже відкрита кимось іншим** (`SELECT FOR UPDATE`).  
+
+Готово! 🎯 Цей API **створює та відкриває редаговану версію схеми** на рівні **Next.js + SQL**. 🚀

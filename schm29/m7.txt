@@ -1,0 +1,92 @@
+### **1. SQL-запит для редагування даних альбому**
+```sql
+UPDATE ALBUM
+SET 
+    name = :name,
+    unit_id = :unitId,
+    description = :description,
+    last_editor_id = :editorId,
+    date_update = SYSDATE
+WHERE id = :albumId
+RETURNING date_update INTO :updatedAt;
+```
+
+---
+
+### **2. Створення нового endpoint `/pages/api/rest/updateAlbum.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "PUT") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { albumId, name, unitId, description, editorId } = req.body;
+
+    if (!albumId || !name || !unitId || !editorId) {
+      return res.status(400).json({ error: "Заповніть всі обов'язкові поля" });
+    }
+
+    const sql = `
+      UPDATE ALBUM
+      SET 
+          name = :name,
+          unit_id = :unitId,
+          description = :description,
+          last_editor_id = :editorId,
+          date_update = SYSDATE
+      WHERE id = :albumId
+      RETURNING TO_CHAR(date_update, 'YYYY-MM-DD HH24:MI:SS') INTO :updatedAt
+    `;
+
+    const params = { albumId, name, unitId, description, editorId, updatedAt: { dir: "out", type: "STRING" } };
+    const result = await queryDatabase(sql, params);
+
+    res.status(200).json({ success: true, updatedAt: result.outBinds.updatedAt });
+  } catch (error) {
+    console.error("Помилка оновлення альбому:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+### **3. Додавання функції `updateAlbum` у `utils/api.js`**
+```javascript
+export const updateAlbum = async (albumId, albumData) => {
+  const response = await fetch("/api/rest/updateAlbum", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ albumId, ...albumData }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Помилка оновлення альбому");
+  }
+
+  return response.json();
+};
+```
+
+---
+
+### **Як це працює?**
+1️⃣ Фронтенд викликає `updateAlbum(albumId, { name, unitId, description, editorId })`.  
+2️⃣ Виконується `PUT` запит на **`/api/rest/updateAlbum`**.  
+3️⃣ **SQL-запит** оновлює **назву, unit, опис, дату оновлення** та **останнього редактора**.  
+4️⃣ Повертається оновлена `date_update` (у форматі `YYYY-MM-DD HH24:MI:SS`).  
+5️⃣ Якщо оновлення успішне → **API повертає `success: true` і `updatedAt`**.  
+6️⃣ Якщо виникає помилка → повертається `500 Internal Server Error`.  
+
+---
+
+### **Що ще можна покращити?**
+✅ **Додати перевірку ролі користувача**, щоб редагувати міг тільки редактор.  
+✅ **Логувати зміни** в окремій таблиці (`ALBUM_HISTORY`).  
+✅ **Захист від одночасного редагування**, наприклад через `SELECT FOR UPDATE`.  
+
+Це готове API для оновлення альбому! 🚀  
+Якщо є нюанси — питай! 😊

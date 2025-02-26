@@ -1,0 +1,141 @@
+Ось оновлений код сторінки `/albums/[albumId]`, який відповідає новій структурі:
+
+- **Ліва панель**:  
+  - Вкладки `Навігація` (відкрита за замовчуванням) і `Редагування альбому` (згорнута).  
+
+- **Основний контент**:  
+  - Верхня панель: `SearchBar` + кнопки в ряд (іконки).  
+  - Заголовок `Список схем альбому [Назва альбому]`.  
+  - `SchemeReport` для відображення списку схем.  
+
+---
+
+### **Оновлений код `AlbumPage.tsx`**
+```tsx
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import {
+  Box, Typography, IconButton, Paper, Tab, Tabs, Button
+} from "@mui/material";
+import {
+  ArrowBack, Description, PictureAsPdf, Print, Add, Layers
+} from "@mui/icons-material";
+import NavigationTree from "@/components/NavigationTree";
+import AlbumEditForm from "@/components/AlbumEditForm";
+import SchemeReport from "@/components/SchemeReport";
+import SearchComponent from "@/components/SearchComponent";
+import { fetchAlbumById } from "@/utils/api";
+
+const AlbumPage = () => {
+  const router = useRouter();
+  const { albumId, mode } = router.query;
+  const [album, setAlbum] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
+
+  useEffect(() => {
+    if (albumId) {
+      const loadAlbum = async () => {
+        try {
+          const data = await fetchAlbumById(albumId);
+          setAlbum(data);
+        } catch (error) {
+          console.error("Помилка завантаження альбому:", error);
+        }
+      };
+
+      loadAlbum();
+    }
+  }, [albumId]);
+
+  if (!album) {
+    return <Typography variant="h6">Завантаження...</Typography>;
+  }
+
+  return (
+    <Box display="flex" height="100vh">
+      {/* Ліва панель */}
+      <Box width="300px" p={2} borderRight="1px solid #ddd">
+        <Tabs
+          value={activeTab}
+          onChange={(e, newValue) => setActiveTab(newValue)}
+          variant="fullWidth"
+        >
+          <Tab label="Навігація" />
+          <Tab label="Редагування альбому" />
+        </Tabs>
+
+        <Box hidden={activeTab !== 0}>
+          <NavigationTree albumId={albumId} />
+        </Box>
+        <Box hidden={activeTab !== 1}>
+          <AlbumEditForm albumId={albumId} />
+        </Box>
+      </Box>
+
+      {/* Основний контент */}
+      <Box flexGrow={1} p={3}>
+        {/* Верхня панель */}
+        <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+          {/* Блок пошуку */}
+          <SearchComponent />
+
+          {/* Кнопки */}
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton onClick={() => router.push("/albums")} title="До каталогу альбомів">
+              <ArrowBack />
+            </IconButton>
+            <IconButton title="Версії альбому">
+              <Layers />
+            </IconButton>
+            <IconButton title="Документи альбому">
+              <Description />
+            </IconButton>
+            <IconButton title="Експорт альбому">
+              <PictureAsPdf />
+            </IconButton>
+            <IconButton title="Друк альбому">
+              <Print />
+            </IconButton>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              title="Новий аркуш альбому схем"
+            >
+              Новий аркуш
+            </Button>
+          </Box>
+        </Box>
+
+        {/* Заголовок */}
+        <Paper sx={{ p: 2, mb: 2, textAlign: "center" }}>
+          <Typography variant="h5">Список схем альбому {album.name}</Typography>
+        </Paper>
+
+        {/* Блок звіту */}
+        <SchemeReport albumId={albumId} userRole={album.userRole} mode={mode} />
+      </Box>
+    </Box>
+  );
+};
+
+export default AlbumPage;
+```
+
+---
+
+### **Що змінилось?**
+✅ **Ліва панель**  
+- Має вкладки (`Навігація`, `Редагування альбому`), за замовчуванням відкрита `Навігація`.  
+
+✅ **Верхня панель**  
+- **Пошук (SearchComponent)** тепер вирівняний зліва.  
+- **Кнопки** розміщені справа в один ряд.  
+
+✅ **Список схем**  
+- Заголовок тепер окремо (`Paper` для візуального розділення).  
+- **SchemeReport** розташований під заголовком.  
+
+---
+
+Цей дизайн більш структурований, **верхня панель стала зручнішою**, а **блоки впорядковані**. 🚀  
+Якщо потрібно ще щось покращити — дай знати! 😊

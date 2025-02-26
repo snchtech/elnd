@@ -1,0 +1,83 @@
+Ось SQL-запит для перенесення схеми в архів, встановлюючи `status_id = 0`:
+
+```sql
+UPDATE SCHEME
+SET status_id = 0
+WHERE id = :schemeId
+RETURNING id INTO :updatedSchemeId;
+```
+
+---
+
+### **Створюємо API `/api/rest/archiveScheme.js`**
+Цей API приймає `schemeId`, змінює статус схеми на **архівний (`status_id = 0`)** і повертає підтвердження.
+
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "PUT") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { schemeId } = req.body;
+
+    if (!schemeId) {
+      return res.status(400).json({ error: "Необхідний параметр schemeId" });
+    }
+
+    const sql = `
+      UPDATE SCHEME
+      SET status_id = 0
+      WHERE id = :schemeId
+      RETURNING id INTO :updatedSchemeId
+    `;
+
+    const params = {
+      schemeId,
+      updatedSchemeId: { dir: "out", type: "NUMBER" },
+    };
+
+    const result = await queryDatabase(sql, params);
+
+    res.status(200).json({ success: true, schemeId: result.outBinds.updatedSchemeId });
+  } catch (error) {
+    console.error("Помилка архівування схеми:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+### **Додаємо функцію `archiveScheme` у `utils/api.js`**
+```javascript
+export const archiveScheme = async (schemeId) => {
+  const response = await fetch("/api/rest/archiveScheme", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ schemeId }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Помилка архівування схеми");
+  }
+
+  return response.json();
+};
+```
+
+---
+
+### **Як це працює?**
+1️⃣ **Користувач натискає кнопку "В архів" у `SchemeReport.js`**.  
+2️⃣ **Відкривається модальне вікно підтвердження**.  
+3️⃣ **Виконується `PUT` запит на `/api/rest/archiveScheme`**.  
+4️⃣ **SQL-запит встановлює `status_id = 0` для `schemeId`**.  
+5️⃣ **Після успішного архівування схема видаляється зі списку** у `SchemeReport`.  
+
+---
+
+Готово! 🎯 **Тепер схема може бути архівована коректно.** 🚀  
+Якщо є нюанси — питай! 😊

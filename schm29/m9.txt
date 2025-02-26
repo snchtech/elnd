@@ -1,0 +1,168 @@
+### **Уточнення щодо побудови URL для кнопок "Перегляд", "Редагування" і "В архів"**
+
+Зараз у нас є **scheme_id**, але **кожна схема може мати кілька версій (scheme_version_id)**.  
+Оскільки ми працюємо з версіями, кнопки **"Перегляд"** та **"Редагування"** повинні використовувати `scheme_version_id`, а **"В архів"** працюватиме із `scheme_id`.
+
+---
+
+### **1. Логіка побудови URL**
+- **Перегляд (`viewer`)** → Використовує **останню стабільну версію** (`scheme_version_id`).
+  - **URL:** `/viewer/{scheme_version_id}?mode=viewer`
+  - **Отримуємо `scheme_version_id` через API** `/api/rest/getStableSchemeVersion`
+- **Редагування (`editor`)** → Використовує **активну редаговану версію** або **створює нову**.
+  - **URL:** `/editor/{scheme_version_id}?mode=editor`
+  - **Отримуємо `scheme_version_id` через API** `/api/rest/editScheme`
+- **В архів (`archive`)** → Використовує **scheme_id** (архівує всі версії схеми).
+  - **Запит до API:** `/api/rest/archiveScheme`
+  - **Немає сторінки перегляду архіву, тому без переходу**
+
+---
+
+### **2. Оновлений `SchemeReport.js`**
+```tsx
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton,
+  Paper, TablePagination, Dialog, DialogTitle, DialogContent, DialogActions, Button
+} from "@mui/material";
+import { Visibility, Edit, Archive } from "@mui/icons-material";
+import { fetchSchemes, getStableSchemeVersion, editScheme, archiveScheme } from "@/utils/api";
+
+const SchemeReport = ({ albumId, userRole, mode }) => {
+  const router = useRouter();
+  const [schemes, setSchemes] = useState([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage] = useState(15);
+  const [archiveDialog, setArchiveDialog] = useState({ open: false, schemeId: null });
+
+  useEffect(() => {
+    const loadSchemes = async () => {
+      try {
+        const data = await fetchSchemes(albumId);
+        setSchemes(data);
+      } catch (error) {
+        console.error("Помилка завантаження схем:", error);
+      }
+    };
+
+    loadSchemes();
+  }, [albumId]);
+
+  // Перегляд схеми (відкриває стабільну версію)
+  const handleViewScheme = async (schemeId) => {
+    try {
+      const response = await getStableSchemeVersion(schemeId);
+      router.push(`/viewer/${response.scheme_version_id}?mode=viewer`);
+    } catch (error) {
+      console.error("Помилка відкриття стабільної версії:", error);
+    }
+  };
+
+  // Редагування схеми (відкриває активну редаговану версію або створює нову)
+  const handleEditScheme = async (schemeId) => {
+    try {
+      const response = await editScheme(schemeId);
+      router.push(`/editor/${response.scheme_version_id}?mode=editor`);
+    } catch (error) {
+      console.error("Помилка відкриття схеми:", error);
+    }
+  };
+
+  // Архівування схеми (відкриває модальне вікно для підтвердження)
+  const handleArchiveScheme = async () => {
+    try {
+      await archiveScheme(archiveDialog.schemeId);
+      setSchemes(schemes.filter((s) => s.id !== archiveDialog.schemeId));
+      setArchiveDialog({ open: false, schemeId: null });
+    } catch (error) {
+      console.error("Помилка архівування схеми:", error);
+    }
+  };
+
+  return (
+    <>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Перегляд</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Назва</TableCell>
+              {mode === "editor" && userRole === "editor" && <TableCell>Дії</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {schemes.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((scheme) => (
+              <TableRow key={scheme.id}>
+                <TableCell>
+                  <IconButton onClick={() => handleViewScheme(scheme.id)}>
+                    <Visibility />
+                  </IconButton>
+                </TableCell>
+                <TableCell>{scheme.id}</TableCell>
+                <TableCell>{scheme.name}</TableCell>
+                {mode === "editor" && userRole === "editor" && (
+                  <TableCell>
+                    <IconButton onClick={() => handleEditScheme(scheme.id)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => setArchiveDialog({ open: true, schemeId: scheme.id })}>
+                      <Archive />
+                    </IconButton>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Модальне вікно для підтвердження архівування */}
+      <Dialog open={archiveDialog.open} onClose={() => setArchiveDialog({ open: false, schemeId: null })}>
+        <DialogTitle>Підтвердження архівування</DialogTitle>
+        <DialogContent>
+          Ви точно хочете перенести цю схему в архів?
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setArchiveDialog({ open: false, schemeId: null })} color="secondary">
+            Відмінити
+          </Button>
+          <Button onClick={handleArchiveScheme} color="primary">
+            Так
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default SchemeReport;
+```
+
+---
+
+## **4. Фінальний вигляд URL**
+| Дія | Використовує | URL |
+|------|-------------|--------------------------------------|
+| **Перегляд** | `scheme_version_id` (стабільна версія) | `/viewer/{scheme_version_id}?mode=viewer` |
+| **Редагування** | `scheme_version_id` (редагована версія або створює нову) | `/editor/{scheme_version_id}?mode=editor` |
+| **В архів** | `scheme_id` | API `/api/rest/archiveScheme` |
+
+---
+
+## **5. Що покращено у порівнянні з початковим кодом?**
+✅ **Тепер у перегляді використовується `scheme_version_id` стабільної версії**  
+✅ **Редагування працює через `scheme_version_id` (активна або нова редагована версія)**  
+✅ **Архівування працює із `scheme_id` (без версій)**  
+✅ **Додано модальне вікно підтвердження архівування**  
+
+---
+
+## **Що ще можна додати?**
+✅ **Додати логіку перевірки, якщо стабільної версії немає** → `alert("Стабільної версії не знайдено")`.  
+✅ **Перевіряти, чи є вже редагована версія перед створенням нової** (в API `/api/rest/editScheme`).  
+✅ **Додати обробку помилок у `getStableSchemeVersion` та `editScheme`**.  
+
+Готово! 🎯 **Тепер всі кнопки працюють правильно, використовуючи `scheme_version_id` або `scheme_id`!** 🚀  
+Якщо є ще питання чи нюанси — питай! 😊

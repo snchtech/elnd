@@ -1,0 +1,105 @@
+Ось SQL-запит для отримання даних альбому та створення окремого **endpoint** `/api/rest/getAlbumById.js` у `utils/api.js`.
+
+---
+
+### **1. SQL-запит для отримання альбому за `albumId`**
+```sql
+SELECT 
+    a.id,
+    a.name,
+    a.depart_id,
+    d.name AS department_name,
+    a.unit_id,
+    u.name AS unit_name,
+    a.description,
+    a.date_create,
+    a.version,
+    a.stable,
+    a.creator_id,
+    a.last_editor_id
+FROM ALBUM a
+LEFT JOIN DEPARTMENT d ON a.depart_id = d.id
+LEFT JOIN UNIT u ON a.unit_id = u.id
+WHERE a.id = :albumId;
+```
+
+---
+
+### **2. Створення нового endpoint `/pages/api/rest/getAlbumById.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const { albumId } = req.query;
+
+    if (!albumId) {
+      return res.status(400).json({ error: "Необхідний параметр albumId" });
+    }
+
+    const sql = `
+      SELECT 
+          a.id,
+          a.name,
+          a.depart_id,
+          d.name AS department_name,
+          a.unit_id,
+          u.name AS unit_name,
+          a.description,
+          TO_CHAR(a.date_create, 'YYYY-MM-DD HH24:MI:SS') AS date_create,
+          a.version,
+          a.stable,
+          a.creator_id,
+          a.last_editor_id
+      FROM ALBUM a
+      LEFT JOIN DEPARTMENT d ON a.depart_id = d.id
+      LEFT JOIN UNIT u ON a.unit_id = u.id
+      WHERE a.id = :albumId
+    `;
+
+    const params = { albumId };
+    const result = await queryDatabase(sql, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Альбом не знайдено" });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error("Помилка отримання альбому:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+### **3. Додавання функції `fetchAlbumById` у `utils/api.js`**
+```javascript
+export const fetchAlbumById = async (albumId) => {
+  const response = await fetch(`/api/rest/getAlbumById?albumId=${albumId}`);
+  if (!response.ok) {
+    throw new Error("Помилка отримання альбому");
+  }
+  return response.json();
+};
+```
+
+---
+
+### **Як це працює?**
+1️⃣ Фронтенд викликає `fetchAlbumById(albumId)`.  
+2️⃣ Виконується `GET` запит на **`/api/rest/getAlbumById?albumId={albumId}`**.  
+3️⃣ **SQL-запит** витягує всі дані про альбом + назви відділу та підрозділу.  
+4️⃣ Якщо альбом знайдено → API повертає його у `JSON` форматі.  
+5️⃣ Якщо **альбом не знайдено**, повертається `404`.  
+6️⃣ Якщо виникає помилка → повертається `500 Internal Server Error`.  
+
+---
+
+Це дозволяє **оптимізовано** отримувати інформацію про альбом через **окремий API endpoint**! 🚀  
+Дай знати, якщо потрібні додаткові зміни. 😊

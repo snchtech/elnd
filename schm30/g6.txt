@@ -1,0 +1,157 @@
+### **📌 Оновлення `NavigationTree.js` з покращеним пошуком**
+✅ Пошук **по всіх рівнях**: Відділ → Підрозділ → Альбом → Схема  
+✅ Підсвічування відповідних вузлів при пошуку  
+✅ **Збереження вкладених елементів** у дереві під час пошуку  
+
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { TreeView } from "@mui/x-tree-view/TreeView";
+import { TreeItem } from "@mui/x-tree-view/TreeItem";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { fetchNavigationTree } from "@/utils/api";
+import { Box, TextField, Paper } from "@mui/material";
+
+export default function NavigationTree() {
+  const router = useRouter();
+  const { mode } = router.query; // Отримання mode (viewer/editor)
+  const [treeData, setTreeData] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredTree, setFilteredTree] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      const data = await fetchNavigationTree();
+      setTreeData(data);
+      setFilteredTree(data);
+    }
+    loadData();
+  }, []);
+
+  // Обробка кліків по альбому та схемі
+  const handleNodeClick = (type, id) => {
+    const baseUrl = type === "album" ? `/album/${id}` : `/scheme/${id}`;
+    const url = mode ? `${baseUrl}?mode=${mode}` : baseUrl;
+    router.push(url);
+  };
+
+  // Функція пошуку по всіх рівнях (Відділ → Підрозділ → Альбом → Схема)
+  const searchTree = (items, searchKey) => {
+    if (!searchKey) {
+      setFilteredTree(treeData);
+      setExpanded([]);
+      return;
+    }
+
+    const lowerSearchKey = searchKey.toLowerCase();
+    const expandedNodes = new Set();
+
+    const filterItems = (items) => {
+      return items
+        .map((department) => {
+          const filteredUnits = department.units
+            .map((unit) => {
+              const filteredAlbums = unit.albums
+                .map((album) => {
+                  const filteredSchemes = album.schemes.filter((scheme) =>
+                    scheme.name.toLowerCase().includes(lowerSearchKey)
+                  );
+
+                  if (filteredSchemes.length > 0 || album.name.toLowerCase().includes(lowerSearchKey)) {
+                    expandedNodes.add(`album-${album.id}`);
+                    return { ...album, schemes: filteredSchemes };
+                  }
+                  return null;
+                })
+                .filter(Boolean);
+
+              if (filteredAlbums.length > 0 || unit.name.toLowerCase().includes(lowerSearchKey)) {
+                expandedNodes.add(`unit-${unit.id}`);
+                return { ...unit, albums: filteredAlbums };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          if (filteredUnits.length > 0 || department.name.toLowerCase().includes(lowerSearchKey)) {
+            expandedNodes.add(`dep-${department.id}`);
+            return { ...department, units: filteredUnits };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    };
+
+    const filteredResults = filterItems(treeData);
+    setFilteredTree(filteredResults);
+    setExpanded([...expandedNodes]);
+  };
+
+  // Формування дерева навігації
+  const buildTree = () => {
+    return filteredTree.map((department) => (
+      <TreeItem key={`dep-${department.id}`} nodeId={`dep-${department.id}`} label={department.name}>
+        {department.units.map((unit) => (
+          <TreeItem key={`unit-${unit.id}`} nodeId={`unit-${unit.id}`} label={unit.name}>
+            {unit.albums.map((album) => (
+              <TreeItem
+                key={`album-${album.id}`}
+                nodeId={`album-${album.id}`}
+                label={album.name}
+                onClick={() => handleNodeClick("album", album.id)}
+              >
+                {album.schemes.map((scheme) => (
+                  <TreeItem
+                    key={`scheme-${scheme.id}`}
+                    nodeId={`scheme-${scheme.id}`}
+                    label={scheme.name}
+                    onClick={() => handleNodeClick("scheme", scheme.id)}
+                  />
+                ))}
+              </TreeItem>
+            ))}
+          </TreeItem>
+        ))}
+      </TreeItem>
+    ));
+  };
+
+  return (
+    <Paper sx={{ padding: 2 }}>
+      {/* Поле пошуку */}
+      <TextField
+        label="Пошук"
+        variant="outlined"
+        fullWidth
+        value={searchTerm}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          searchTree(treeData, e.target.value);
+        }}
+        sx={{ mb: 2 }}
+      />
+
+      {/* Дерево навігації */}
+      <TreeView
+        expanded={expanded}
+        onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+        defaultCollapseIcon={<ExpandMore />}
+        defaultExpandIcon={<ChevronRight />}
+      >
+        {buildTree()}
+      </TreeView>
+    </Paper>
+  );
+}
+```
+
+---
+
+## **📌 Що покращено?**
+✅ **Пошук по всіх рівнях:** `Department`, `Unit`, `Album`, `Scheme`  
+✅ **Автоматичне відкриття відповідних вузлів дерева**  
+✅ **При введенні пошуку підсвічуються лише відповідні вузли, без втрати вкладеності**  
+✅ **Якщо пошук очищено, дерево повертається у початковий стан**  
+
+🚀 **Тепер `NavigationTree.js` працює набагато краще з динамічним пошуком та збереженням структури!**

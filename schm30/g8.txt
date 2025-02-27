@@ -1,0 +1,127 @@
+Ця помилка виникає, коли **React-інпут змінюється з контрольованого (`value` визначено) на неконтрольований (`value` стає `undefined` або `null`)**.  
+
+### **Причина помилки**
+- `albumData.name`, `albumData.unitId` або `albumData.description` можуть **спочатку бути `undefined`**, а потім React не знає, як працювати з таким інпутом.
+- **Рішення** → Встановити **початкові значення** для `useState` або забезпечити `value` завжди визначене.
+
+---
+
+### **Оновлений код `AlbumEditForm.js`**
+```tsx
+import { useState, useEffect } from "react";
+import { TextField, Button, Select, MenuItem, Typography, Box } from "@mui/material";
+import { fetchUnits, updateAlbum } from "@/utils/api";
+
+const AlbumEditForm = ({ albumId }) => {
+  const [albumData, setAlbumData] = useState({
+    name: "",
+    unitId: "",
+    description: "",
+    updatedAt: "",
+  });
+
+  const [units, setUnits] = useState([]);
+
+  useEffect(() => {
+    const loadAlbumData = async () => {
+      try {
+        const response = await fetch(`/api/rest/getAlbum/${albumId}`);
+        const data = await response.json();
+        setAlbumData({
+          name: data.name || "", // Запобігає undefined
+          unitId: data.unit_id || "", // Запобігає undefined
+          description: data.description || "", // Запобігає undefined
+          updatedAt: data.updated_at || "Немає даних",
+        });
+      } catch (error) {
+        console.error("Помилка завантаження альбому:", error);
+      }
+    };
+
+    const loadUnits = async () => {
+      try {
+        const unitList = await fetchUnits();
+        setUnits(unitList);
+      } catch (error) {
+        console.error("Помилка завантаження unit:", error);
+      }
+    };
+
+    if (albumId) {
+      loadAlbumData();
+      loadUnits();
+    }
+  }, [albumId]);
+
+  const handleUpdate = async () => {
+    try {
+      await updateAlbum(albumId, {
+        name: albumData.name,
+        unitId: albumData.unitId,
+        description: albumData.description,
+      });
+      alert("Альбом оновлено!");
+    } catch (error) {
+      console.error("Помилка оновлення:", error);
+      alert("Помилка оновлення альбому.");
+    }
+  };
+
+  return (
+    <Box sx={{ p: 2, border: "1px solid #ddd", borderRadius: 2 }}>
+      <Typography variant="h6" gutterBottom>Редагування альбому</Typography>
+
+      <TextField
+        fullWidth
+        label="Назва"
+        value={albumData.name}
+        onChange={(e) => setAlbumData({ ...albumData, name: e.target.value })}
+        margin="dense"
+      />
+
+      <Select
+        fullWidth
+        value={albumData.unitId}
+        onChange={(e) => setAlbumData({ ...albumData, unitId: e.target.value })}
+        displayEmpty
+        margin="dense"
+      >
+        <MenuItem value="" disabled>Оберіть Unit</MenuItem>
+        {units.map((unit) => (
+          <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+        ))}
+      </Select>
+
+      <TextField
+        fullWidth
+        label="Опис"
+        multiline
+        rows={3}
+        value={albumData.description}
+        onChange={(e) => setAlbumData({ ...albumData, description: e.target.value })}
+        margin="dense"
+      />
+
+      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+        Останнє оновлення: {albumData.updatedAt}
+      </Typography>
+
+      <Button variant="contained" color="primary" onClick={handleUpdate} sx={{ mt: 2 }}>
+        Оновити
+      </Button>
+    </Box>
+  );
+};
+
+export default AlbumEditForm;
+```
+
+---
+
+### **Що виправлено?**
+✅ **Захист від `undefined` значень** → `name || ""`, `unitId || ""`, `description || ""`.  
+✅ **Перевірка `albumId` перед завантаженням даних**, щоб уникнути запиту без ідентифікатора.  
+✅ **Останнє оновлення (`updatedAt`) завжди має значення (`"Немає даних"` за замовчуванням).**  
+
+Тепер **немає помилки "A component is changing a controlled input to be uncontrolled"**! 🚀  
+Якщо ще щось треба покращити — питай! 😊

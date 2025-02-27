@@ -1,0 +1,244 @@
+### **📌 Оновлений `AlbumsReport.js`**
+Тепер кнопка **Перегляду (`View`)** відкриває **стабільну версію** альбому, а кнопка **Редагування (`Edit`)** відкриває **останню редаговану версію**.
+
+```javascript
+import { useState } from "react";
+import { useRouter } from "next/router";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions, Button, TablePagination
+} from "@mui/material";
+import { Visibility, Edit, Delete } from "@mui/icons-material";
+import { getStableAlbumVersion, getLatestAlbumVersion, updateAlbumStatus } from "@/utils/api";
+
+export default function AlbumsReport({ albums, statuses, mode }) {
+  const router = useRouter();
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 15;
+
+  // Перехід на стабільну версію альбому
+  const handleViewClick = async (albumId) => {
+    try {
+      const stableVersion = await getStableAlbumVersion(albumId);
+      if (stableVersion?.version_id) {
+        router.push(`/albums/${albumId}/versions/${stableVersion.version_id}?mode=viewer`);
+      }
+    } catch (error) {
+      console.error("Помилка отримання стабільної версії:", error);
+    }
+  };
+
+  // Перехід на останню редаговану версію альбому
+  const handleEditClick = async (albumId) => {
+    try {
+      const latestVersion = await getLatestAlbumVersion(albumId);
+      if (latestVersion?.version_id) {
+        router.push(`/albums/${albumId}/versions/${latestVersion.version_id}?mode=editor`);
+      }
+    } catch (error) {
+      console.error("Помилка отримання останньої версії:", error);
+    }
+  };
+
+  // Відкриває модальне вікно підтвердження архівації
+  const handleArchiveClick = (album) => {
+    setSelectedAlbum(album);
+    setIsArchiveModalOpen(true);
+  };
+
+  // Запит до API для оновлення статусу альбому на "Архів"
+  const confirmArchiveAlbum = async () => {
+    if (!selectedAlbum) return;
+
+    try {
+      await updateAlbumStatus(selectedAlbum.id, "Архів"); // Запит до API
+      setIsArchiveModalOpen(false);
+      router.reload(); // Оновлення сторінки після архівації
+    } catch (error) {
+      console.error("Error archiving album:", error);
+    }
+  };
+
+  // Обробка зміни сторінки
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  // Відображати тільки альбоми для поточної сторінки
+  const paginatedAlbums = albums.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+
+  return (
+    <>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Перегляд</TableCell>
+              <TableCell>ID</TableCell>
+              <TableCell>Відділ</TableCell>
+              <TableCell>Unit</TableCell>
+              <TableCell>Назва</TableCell>
+              <TableCell>Опис</TableCell>
+              <TableCell>Дата створення/оновлення</TableCell>
+              {mode === "editor" && <TableCell>Дії</TableCell>}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {paginatedAlbums.map((album) => (
+              <TableRow key={album.id}>
+                {/* Перегляд стабільної версії */}
+                <TableCell>
+                  <IconButton color="primary" onClick={() => handleViewClick(album.id)}>
+                    <Visibility />
+                  </IconButton>
+                </TableCell>
+                <TableCell>{album.id}</TableCell>
+                <TableCell>{album.department_name}</TableCell>
+                <TableCell>{album.unit_name}</TableCell>
+                <TableCell>{album.name}</TableCell>
+                <TableCell>{album.description}</TableCell>
+                <TableCell>{album.date_update || album.date_create}</TableCell>
+
+                {/* Дії для ролі editor */}
+                {mode === "editor" && (
+                  <TableCell>
+                    <IconButton color="warning" onClick={() => handleEditClick(album.id)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton color="error" onClick={() => handleArchiveClick(album)}>
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Пагінація (відображається тільки якщо більше 15 альбомів) */}
+      {albums.length > rowsPerPage && (
+        <TablePagination
+          component="div"
+          count={albums.length}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[rowsPerPage]}
+          onPageChange={handleChangePage}
+        />
+      )}
+
+      {/* Модальне вікно архівації */}
+      <Dialog open={isArchiveModalOpen} onClose={() => setIsArchiveModalOpen(false)}>
+        <DialogTitle>Архівація альбому</DialogTitle>
+        <DialogContent>
+          Ви точно бажаєте перемістити альбом <b>{selectedAlbum?.name}</b> в архів?
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsArchiveModalOpen(false)} color="secondary">
+            Відмінити
+          </Button>
+          <Button onClick={confirmArchiveAlbum} color="primary" variant="contained">
+            Так
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+```
+
+---
+
+## **📌 SQL-запити для API**
+Створюємо два **endpoint-и** для отримання версій.
+
+### **📁 `pages/api/rest/getStableAlbumVersion.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  const { albumId } = req.query;
+
+  try {
+    const sql = `
+      SELECT version_id
+      FROM ALBUM_VERSION
+      WHERE album_id = :albumId AND stable = 1
+      ORDER BY date_update DESC
+      FETCH FIRST 1 ROWS ONLY
+    `;
+    const result = await queryDatabase(sql, { albumId });
+
+    if (result.length > 0) {
+      res.status(200).json(result[0]);
+    } else {
+      res.status(404).json({ error: "Stable version not found" });
+    }
+  } catch (error) {
+    console.error("Error fetching stable album version:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+### **📁 `pages/api/rest/getLatestAlbumVersion.js`**
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  const { albumId } = req.query;
+
+  try {
+    const sql = `
+      SELECT version_id
+      FROM ALBUM_VERSION
+      WHERE album_id = :albumId
+      ORDER BY date_update DESC
+      FETCH FIRST 1 ROWS ONLY
+    `;
+    const result = await queryDatabase(sql, { albumId });
+
+    if (result.length > 0) {
+      res.status(200).json(result[0]);
+    } else {
+      res.status(404).json({ error: "Latest version not found" });
+    }
+  } catch (error) {
+    console.error("Error fetching latest album version:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## **📌 Оновлення API-запитів у `utils/api.js`**
+```javascript
+export const getStableAlbumVersion = async (albumId) => {
+  return fetchData(`/api/rest/getStableAlbumVersion?albumId=${albumId}`, { method: "GET" });
+};
+
+export const getLatestAlbumVersion = async (albumId) => {
+  return fetchData(`/api/rest/getLatestAlbumVersion?albumId=${albumId}`, { method: "GET" });
+};
+```
+
+---
+
+## **🔹 Що реалізовано?**
+✅ **Перегляд** → відкриває **стабільну версію**.  
+✅ **Редагування** → відкриває **останню редаговану версію**.  
+✅ **Додано SQL та API-запити** для отримання **стабільної та останньої версії альбому**.  
+
+🚀 **Тепер сторінка `AlbumsReport.js` працює коректно!**

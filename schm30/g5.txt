@@ -1,0 +1,201 @@
+### **📌 Оновлений `NavigationTree.js` з підтримкою нової логіки**
+✅ Формування дерева на основі таблиці `SCHEME`  
+✅ Групування по **Відділ → Підрозділ → Альбом → Схема**  
+✅ Динамічний перехід при кліку  
+✅ Додавання **`mode`** до `URL` (`viewer/editor`)
+
+```javascript
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { TreeView } from "@mui/x-tree-view/TreeView";
+import { TreeItem } from "@mui/x-tree-view/TreeItem";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { fetchNavigationTree } from "@/utils/api";
+import { Box, TextField, Paper } from "@mui/material";
+
+export default function NavigationTree() {
+  const router = useRouter();
+  const { mode } = router.query; // Отримання mode (viewer/editor)
+  const [treeData, setTreeData] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    async function loadData() {
+      setTreeData(await fetchNavigationTree());
+    }
+    loadData();
+  }, []);
+
+  // Обробка кліків по альбому та схемі
+  const handleNodeClick = (type, id) => {
+    const baseUrl = type === "album" ? `/album/${id}` : `/scheme/${id}`;
+    const url = mode ? `${baseUrl}?mode=${mode}` : baseUrl;
+    router.push(url);
+  };
+
+  // Фільтрація дерева навігації по введеному тексту
+  const filterTree = (items, searchKey) => {
+    return items.filter((item) =>
+      item.name.toLowerCase().includes(searchKey.toLowerCase())
+    );
+  };
+
+  // Створення дерева навігації
+  const buildTree = () => {
+    return treeData.map((department) => (
+      <TreeItem key={`dep-${department.id}`} itemId={`dep-${department.id}`} label={department.name}>
+        {department.units.map((unit) => (
+          <TreeItem key={`unit-${unit.id}`} itemId={`unit-${unit.id}`} label={unit.name}>
+            {unit.albums.map((album) => (
+              <TreeItem
+                key={`album-${album.id}`}
+                itemId={`album-${album.id}`}
+                label={album.name}
+                onClick={() => handleNodeClick("album", album.id)}
+              >
+                {album.schemes.map((scheme) => (
+                  <TreeItem
+                    key={`scheme-${scheme.id}`}
+                    itemId={`scheme-${scheme.id}`}
+                    label={scheme.name}
+                    onClick={() => handleNodeClick("scheme", scheme.id)}
+                  />
+                ))}
+              </TreeItem>
+            ))}
+          </TreeItem>
+        ))}
+      </TreeItem>
+    ));
+  };
+
+  return (
+    <Paper sx={{ padding: 2 }}>
+      {/* Поле пошуку */}
+      <TextField
+        label="Пошук"
+        variant="outlined"
+        fullWidth
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        sx={{ mb: 2 }}
+      />
+
+      {/* Дерево навігації */}
+      <TreeView
+        expanded={expanded}
+        onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+        defaultCollapseIcon={<ExpandMore />}
+        defaultExpandIcon={<ChevronRight />}
+      >
+        {buildTree()}
+      </TreeView>
+    </Paper>
+  );
+}
+```
+
+---
+
+## **📌 SQL для отримання структури дерева навігації**
+Створюємо **API** `/pages/api/rest/getNavigationTree.js`, яке отримує структуровані дані.
+
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const sql = `
+      SELECT 
+        s.id AS scheme_id,
+        s.name AS scheme_name,
+        a.id AS album_id,
+        a.name AS album_name,
+        d.id AS department_id,
+        d.name AS department_name,
+        u.id AS unit_id,
+        u.name AS unit_name
+      FROM SCHEME s
+      JOIN ALBUM a ON s.album_id = a.id
+      JOIN DEPARTMENT d ON s.depart_id = d.id
+      JOIN UNIT u ON s.unit_id = u.id
+      ORDER BY d.name, u.name, a.name, s.name
+    `;
+
+    const rows = await queryDatabase(sql);
+
+    // Групуємо дані у дерево
+    const tree = [];
+    const departmentMap = new Map();
+    const unitMap = new Map();
+    const albumMap = new Map();
+
+    rows.forEach(row => {
+      if (!departmentMap.has(row.department_id)) {
+        departmentMap.set(row.department_id, {
+          id: row.department_id,
+          name: row.department_name,
+          units: [],
+        });
+        tree.push(departmentMap.get(row.department_id));
+      }
+
+      if (!unitMap.has(row.unit_id)) {
+        const unitObj = {
+          id: row.unit_id,
+          name: row.unit_name,
+          albums: [],
+        };
+        unitMap.set(row.unit_id, unitObj);
+        departmentMap.get(row.department_id).units.push(unitObj);
+      }
+
+      if (!albumMap.has(row.album_id)) {
+        const albumObj = {
+          id: row.album_id,
+          name: row.album_name,
+          schemes: [],
+        };
+        albumMap.set(row.album_id, albumObj);
+        unitMap.get(row.unit_id).albums.push(albumObj);
+      }
+
+      albumMap.get(row.album_id).schemes.push({
+        id: row.scheme_id,
+        name: row.scheme_name,
+      });
+    });
+
+    res.status(200).json(tree);
+  } catch (error) {
+    console.error("Error fetching navigation tree:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## **📌 Оновлення `utils/api.js` для отримання дерева**
+```javascript
+export const fetchNavigationTree = async () => {
+  return fetchData("/api/rest/getNavigationTree", { method: "GET" });
+};
+```
+
+---
+
+## **📌 Що реалізовано?**
+✅ **Формування дерева навігації на основі `SCHEME`**  
+✅ **Групування по Відділ → Підрозділ → Альбом → Схема**  
+✅ **Клік на альбом → Перехід на `/album/ID` з урахуванням `mode`**  
+✅ **Клік на схему → Перехід на `/scheme/ID` з урахуванням `mode`**  
+✅ **SQL-запит для отримання всієї ієрархії**  
+✅ **API-запит `fetchNavigationTree()`**  
+
+🚀 **Тепер `NavigationTree.js` коректно формує дерево на основі `SCHEME`!**

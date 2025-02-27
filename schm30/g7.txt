@@ -1,0 +1,176 @@
+### **📌 Оновлення `AlbumsFilters.js`**
+✅ **Фільтрація на основі реальних даних з `SCHEME`**  
+✅ **Виправлено `MUI: You have provided an out-of-range value`**  
+✅ **Оптимізовано встановлення значень по замовчуванню**  
+
+---
+
+## **📌 Оновлений код компонента `AlbumsFilters.js`**
+```javascript
+import { useState, useEffect } from "react";
+import { Box, TextField, MenuItem, Paper } from "@mui/material";
+import { fetchAlbumFilterOptions } from "@/utils/api";
+
+export default function AlbumsFilters({ onFilterChange }) {
+  const [departments, setDepartments] = useState([]);
+  const [units, setUnits] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState(""); // Виправлено
+
+  useEffect(() => {
+    async function loadFilterData() {
+      const data = await fetchAlbumFilterOptions();
+      setDepartments(data.departments);
+      setUnits(data.units);
+      setStatuses(data.statuses);
+    }
+    loadFilterData();
+  }, []);
+
+  useEffect(() => {
+    onFilterChange({ department: selectedDepartment, unit: selectedUnit, status: selectedStatus });
+  }, [selectedDepartment, selectedUnit, selectedStatus]);
+
+  return (
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Box display="flex" gap={2}>
+        {/* Фільтр по відділу */}
+        <TextField
+          select
+          label="Відділ"
+          fullWidth
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+        >
+          <MenuItem value="">Всі</MenuItem>
+          {departments.map((dep) => (
+            <MenuItem key={dep.id} value={dep.id}>
+              {dep.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {/* Фільтр по підрозділу */}
+        <TextField
+          select
+          label="Підрозділ"
+          fullWidth
+          value={selectedUnit}
+          onChange={(e) => setSelectedUnit(e.target.value)}
+        >
+          <MenuItem value="">Всі</MenuItem>
+          {units.map((unit) => (
+            <MenuItem key={unit.id} value={unit.id}>
+              {unit.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        {/* Фільтр по статусу */}
+        <TextField
+          select
+          label="Статус"
+          fullWidth
+          value={selectedStatus}
+          onChange={(e) => setSelectedStatus(e.target.value)}
+        >
+          <MenuItem value="">Всі</MenuItem>
+          {statuses.map((status) => (
+            <MenuItem key={status.id} value={status.id}>
+              {status.name}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+    </Paper>
+  );
+}
+```
+
+---
+
+## **📌 SQL-запит для формування фільтрів на основі `SCHEME`**
+Створюємо API `/pages/api/rest/getAlbumFilterOptions.js`, яке отримає **лише доступні значення** для фільтрів.
+
+```javascript
+import { queryDatabase } from "@/utils/db";
+
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  try {
+    const sql = `
+      SELECT DISTINCT d.id AS department_id, d.name AS department_name,
+                      u.id AS unit_id, u.name AS unit_name,
+                      s.status_id, es.name AS status_name
+      FROM SCHEME s
+      JOIN ALBUM a ON s.album_id = a.id
+      JOIN DEPARTMENT d ON s.depart_id = d.id
+      JOIN UNIT u ON s.unit_id = u.id
+      JOIN ENTRY_STATUS es ON s.status_id = es.id
+      ORDER BY d.name, u.name, es.name
+    `;
+
+    const rows = await queryDatabase(sql);
+
+    // Формуємо списки
+    const departments = [];
+    const units = [];
+    const statuses = [];
+
+    const departmentMap = new Map();
+    const unitMap = new Map();
+    const statusMap = new Map();
+
+    rows.forEach((row) => {
+      if (!departmentMap.has(row.department_id)) {
+        departmentMap.set(row.department_id, { id: row.department_id, name: row.department_name });
+        departments.push(departmentMap.get(row.department_id));
+      }
+      if (!unitMap.has(row.unit_id)) {
+        unitMap.set(row.unit_id, { id: row.unit_id, name: row.unit_name });
+        units.push(unitMap.get(row.unit_id));
+      }
+      if (!statusMap.has(row.status_id)) {
+        statusMap.set(row.status_id, { id: row.status_id, name: row.status_name });
+        statuses.push(statusMap.get(row.status_id));
+      }
+    });
+
+    res.status(200).json({ departments, units, statuses });
+  } catch (error) {
+    console.error("Error fetching filter options:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+```
+
+---
+
+## **📌 Оновлення `utils/api.js` для отримання фільтрів**
+```javascript
+export const fetchAlbumFilterOptions = async () => {
+  return fetchData("/api/rest/getAlbumFilterOptions", { method: "GET" });
+};
+```
+
+---
+
+## **📌 Як виправлений `MUI: You have provided an out-of-range value`?**
+- Проблема була у тому, що **`useState(1)`** встановлював значення **до отримання** `statuses`, що викликало помилку.
+- **Рішення:** тепер `selectedStatus` починається як `""` і оновлюється після завантаження даних.
+
+---
+
+## **📌 Що покращено?**
+✅ **Фільтри формуються на основі реальних записів з `SCHEME`**  
+✅ **Дані групуються по відділу, підрозділу та статусу**  
+✅ **Фільтри містять лише **актуальні** дані, які є у звіті**  
+✅ **Виправлена проблема `MUI: out-of-range value`**  
+
+🚀 **Тепер `AlbumsFilters.js` коректно працює з фільтрацією, використовуючи лише релевантні дані!**

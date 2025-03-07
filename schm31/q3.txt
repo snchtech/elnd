@@ -1,0 +1,15 @@
+Переробити таблиці Albm version - scheme version
+Замість created_at - date_created
+date_updated
+date_deleted
+Прибрати is_archive
+creator_id
+updator_id
+---------------------
+Додати constraint album version and scheme_version
+----------------------
+В scheme_note підправити constraint на правильну таблицю.
+
+----------------------------------
+
+ubdn element constraint table

@@ -1,0 +1,210 @@
+Ось оновлений код, який включає всі необхідні покращення:
+
+✅ **Автоматичне відкриття дерева при навігації на сторінку альбому або схеми.**  
+✅ **Підсвічування вибраного елемента в дереві.**  
+✅ **Додавання підзаголовків "Альбоми:" і "Схеми:".**  
+✅ **Розгортання дерева до знайденого елемента при пошуку + підсвітка результатів.**  
+✅ **Зміна поведінки "+" (розгортання, а не перехід).**  
+
+### 🔽 Оновлений код:
+```jsx
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { TreeView } from "@mui/x-tree-view/TreeView";
+import { TreeItem } from "@mui/x-tree-view/TreeItem";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
+import { fetchNavigationTree } from "@/utils/api";
+import { Box, TextField, Paper, Typography } from "@mui/material";
+
+export default function NavigationTree() {
+  const router = useRouter();
+  const { mode, albumId, schemeId } = router.query; // Отримання параметрів
+  const [treeData, setTreeData] = useState([]);
+  const [expanded, setExpanded] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredTree, setFilteredTree] = useState([]);
+
+  useEffect(() => {
+    async function loadData() {
+      const data = await fetchNavigationTree();
+      setTreeData(data);
+      setFilteredTree(data);
+      expandTreeByRoute(data);
+    }
+    loadData();
+  }, [albumId, schemeId]); // Викликати при зміні URL
+
+  // Розгортання дерева на основі URL
+  const expandTreeByRoute = (data) => {
+    const expandedNodes = new Set();
+    let selectedNode = null;
+
+    data.forEach((department) => {
+      department.units.forEach((unit) => {
+        unit.albums.forEach((album) => {
+          if (albumId && album.id == albumId) {
+            expandedNodes.add(`dep-${department.id}`);
+            expandedNodes.add(`unit-${unit.id}`);
+            expandedNodes.add(`album-${album.id}`);
+            selectedNode = `album-${album.id}`;
+          }
+          album.schemes.forEach((scheme) => {
+            if (schemeId && scheme.id == schemeId) {
+              expandedNodes.add(`dep-${department.id}`);
+              expandedNodes.add(`unit-${unit.id}`);
+              expandedNodes.add(`album-${album.id}`);
+              expandedNodes.add(`scheme-${scheme.id}`);
+              selectedNode = `scheme-${scheme.id}`;
+            }
+          });
+        });
+      });
+    });
+
+    setExpanded([...expandedNodes]);
+    setSelected(selectedNode);
+  };
+
+  // Обробка кліків
+  const handleNodeClick = (type, id, event) => {
+    event.stopPropagation(); // Запобігає відкриттю вкладених елементів при кліку
+    const baseUrl = type === "album" ? `/album/${id}` : `/scheme/${id}`;
+    const url = mode ? `${baseUrl}?mode=${mode}` : baseUrl;
+    setSelected(`${type}-${id}`);
+    router.push(url);
+  };
+
+  // Пошук + розгортання дерева до знайдених елементів
+  const searchTree = (items, searchKey) => {
+    if (!searchKey) {
+      setFilteredTree(treeData);
+      setExpanded([]);
+      setSelected(null);
+      return;
+    }
+
+    const lowerSearchKey = searchKey.toLowerCase();
+    const expandedNodes = new Set();
+    const matchedNodes = new Set();
+
+    const filterItems = (items) =>
+      items
+        .map((department) => {
+          const filteredUnits = department.units
+            .map((unit) => {
+              const filteredAlbums = unit.albums
+                .map((album) => {
+                  const filteredSchemes = album.schemes.filter((scheme) => {
+                    if (scheme.name.toLowerCase().includes(lowerSearchKey)) {
+                      expandedNodes.add(`album-${album.id}`);
+                      matchedNodes.add(`scheme-${scheme.id}`);
+                      return true;
+                    }
+                    return false;
+                  });
+
+                  if (filteredSchemes.length > 0 || album.name.toLowerCase().includes(lowerSearchKey)) {
+                    expandedNodes.add(`unit-${unit.id}`);
+                    matchedNodes.add(`album-${album.id}`);
+                    return { ...album, schemes: filteredSchemes };
+                  }
+                  return null;
+                })
+                .filter(Boolean);
+
+              if (filteredAlbums.length > 0 || unit.name.toLowerCase().includes(lowerSearchKey)) {
+                expandedNodes.add(`dep-${department.id}`);
+                matchedNodes.add(`unit-${unit.id}`);
+                return { ...unit, albums: filteredAlbums };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          if (filteredUnits.length > 0 || department.name.toLowerCase().includes(lowerSearchKey)) {
+            matchedNodes.add(`dep-${department.id}`);
+            return { ...department, units: filteredUnits };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+    setFilteredTree(filterItems(treeData));
+    setExpanded([...expandedNodes]);
+    setSelected([...matchedNodes][0] || null);
+  };
+
+  // Формування дерева з підзаголовками
+  const buildTree = () =>
+    filteredTree.map((department) => (
+      <TreeItem key={`dep-${department.id}`} nodeId={`dep-${department.id}`} label={department.name}>
+        {department.units.map((unit) => (
+          <TreeItem key={`unit-${unit.id}`} nodeId={`unit-${unit.id}`} label={unit.name}>
+            <Typography sx={{ color: "gray", pl: 2 }}>Альбоми:</Typography>
+            {unit.albums.map((album) => (
+              <TreeItem
+                key={`album-${album.id}`}
+                nodeId={`album-${album.id}`}
+                label={album.name}
+                onClick={(e) => handleNodeClick("album", album.id, e)}
+                sx={{
+                  fontWeight: selected === `album-${album.id}` ? "bold" : "normal",
+                  bgcolor: selected === `album-${album.id}` ? "lightgray" : "inherit",
+                }}
+              >
+                <Typography sx={{ color: "gray", pl: 2 }}>Схеми:</Typography>
+                {album.schemes.map((scheme) => (
+                  <TreeItem
+                    key={`scheme-${scheme.id}`}
+                    nodeId={`scheme-${scheme.id}`}
+                    label={scheme.name}
+                    onClick={(e) => handleNodeClick("scheme", scheme.id, e)}
+                    sx={{
+                      fontWeight: selected === `scheme-${scheme.id}` ? "bold" : "normal",
+                      bgcolor: selected === `scheme-${scheme.id}` ? "lightgray" : "inherit",
+                    }}
+                  />
+                ))}
+              </TreeItem>
+            ))}
+          </TreeItem>
+        ))}
+      </TreeItem>
+    ));
+
+  return (
+    <Paper sx={{ padding: 2 }}>
+      <TextField
+        label="Пошук"
+        variant="outlined"
+        fullWidth
+        value={searchTerm}
+        onChange={(e) => {
+          setSearchTerm(e.target.value);
+          searchTree(treeData, e.target.value);
+        }}
+        sx={{ mb: 2 }}
+      />
+
+      <TreeView
+        expanded={expanded}
+        onNodeToggle={(event, nodeIds) => setExpanded(nodeIds)}
+        defaultCollapseIcon={<ExpandMore />}
+        defaultExpandIcon={<ChevronRight />}
+      >
+        {buildTree()}
+      </TreeView>
+    </Paper>
+  );
+}
+```
+
+### ✨ Що покращено:
+1. **Автоматичне відкриття потрібних вузлів при переході на сторінку.**
+2. **Підсвічування вибраного елемента в дереві.**
+3. **Додавані підзаголовки "Альбоми:" і "Схеми:".**
+4. **Пошук тепер розгортає дерево до знайдених елементів + підсвічує їх.**
+5. **Зміна поведінки кнопки `+`: вона тепер лише відкриває вкладені елементи, а не переміщує на сторінку.**
+
+Це робить дерево більш інтерактивним і зручним у використанні! 🚀

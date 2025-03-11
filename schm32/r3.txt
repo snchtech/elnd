@@ -1,0 +1,115 @@
+Ось оновлений код блоку посилань відповідно до ваших вимог:
+
+✅ **Нові назви кнопок**:  
+   - 📂 **Альбоми** (замість "Переглядач")  
+   - ✏️ **Редактор схем**  
+   - ❓ **Довідка**  
+
+✅ **Оновлені іконки:**  
+   - **FaBook** для перегляду альбомів  
+   - **FaPencilRuler** для редактора схем  
+   - **FaQuestionCircle** для довідки  
+
+✅ **Оновлені лінки:**  
+   - `/albums?mode=viewer`  
+   - `/albums?mode=editor`  
+   - `/help`  
+
+---
+
+### 🔽 Оновлений код:
+```jsx
+'use client';
+import Link from 'next/link';
+import { FaBook, FaPencilRuler, FaQuestionCircle } from 'react-icons/fa';
+import TopNavBar from './components/interface/headerLine/TopHeaderLine';
+
+const buttonStyle = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '150px',
+    height: '150px',
+    border: '2px solid #ccc',
+    borderRadius: '10px',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+    transition: '0.3s',
+    textAlign: 'center',
+};
+
+const handleHover = (e, isHovering) => {
+    e.currentTarget.style.backgroundColor = isHovering ? '#e6e6e6' : '#fff';
+};
+
+const MainAppPage = () => {
+    return (
+        <div>
+            <TopNavBar />
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100vh',
+                    backgroundColor: '#f5f5f5',
+                }}
+            >
+                <h1 style={{ marginBottom: '30px', color: '#333' }}>
+                    Welcome to the Scheme App
+                </h1>
+                <div style={{ display: 'flex', gap: '20px' }}>
+                    {/* Перегляд альбомів */}
+                    <Link href="/albums?mode=viewer" passHref>
+                        <div
+                            style={buttonStyle}
+                            onMouseEnter={(e) => handleHover(e, true)}
+                            onMouseLeave={(e) => handleHover(e, false)}
+                        >
+                            <FaBook size={30} style={{ marginBottom: '10px' }} />
+                            <span>Альбоми</span>
+                        </div>
+                    </Link>
+
+                    {/* Редактор схем */}
+                    <Link href="/albums?mode=editor" passHref>
+                        <div
+                            style={buttonStyle}
+                            onMouseEnter={(e) => handleHover(e, true)}
+                            onMouseLeave={(e) => handleHover(e, false)}
+                        >
+                            <FaPencilRuler size={30} style={{ marginBottom: '10px' }} />
+                            <span>Редактор схем</span>
+                        </div>
+                    </Link>
+
+                    {/* Довідка */}
+                    <Link href="/help" passHref>
+                        <div
+                            style={buttonStyle}
+                            onMouseEnter={(e) => handleHover(e, true)}
+                            onMouseLeave={(e) => handleHover(e, false)}
+                        >
+                            <FaQuestionCircle size={30} style={{ marginBottom: '10px' }} />
+                            <span>Довідка</span>
+                        </div>
+                    </Link>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default MainAppPage;
+```
+
+---
+
+### 🔥 Що покращено:
+✔️ **Нові іконки:** 🏷️ `FaBook` (Альбоми), 🛠 `FaPencilRuler` (Редактор), ❓ `FaQuestionCircle` (Довідка)  
+✔️ **Назви оновлені згідно з вашими побажаннями.**  
+✔️ **Лінки тепер коректно вказують на `albums?mode=viewer` та `albums?mode=editor`.**  
+
+Виглядає професійніше і логічніше! 🚀

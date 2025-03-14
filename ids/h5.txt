@@ -1,0 +1,97 @@
+Щоб WebSocket сервер працював через **WSS (WebSocket Secure)** замість **WS (WebSocket Unsecure)**, потрібно змінити налаштування WebSocket сервера, використовуючи **HTTPS-сервер** із сертифікатом SSL.
+
+### **Кроки для переходу на WSS**
+1. **Додати сертифікат SSL** для вашого WebSocket сервера.
+2. **Оновити WebSocketServer** для використання **HTTPS-сервера** (`this.serverHTTPS`).
+3. **Переконатися, що клієнт підключається до `wss://`**.
+
+---
+
+### **Оновлений код WebSocket сервера**
+```javascript
+import fs from "fs";
+import https from "https";
+import WebSocket, { WebSocketServer } from "ws";
+import express from "express";
+
+const app = express();
+
+// Завантаження SSL-сертифіката
+const options = {
+  key: fs.readFileSync("/path/to/your/private-key.pem"),
+  cert: fs.readFileSync("/path/to/your/certificate.pem"),
+};
+
+// HTTPS-сервер (обов’язково, бо APEX працює на HTTPS)
+const serverHTTPS = https.createServer(options, app);
+
+// WebSocket сервер з підтримкою WSS
+class WebSocketServerMod {
+  constructor(serverWS) {
+    this.serverHTTP = serverWS;
+
+    // Оновлено: Використання HTTPS-сервера
+    this.wss = new WebSocketServer({ server: this.serverHTTP });
+    
+    this.wss.on("connection", (ws) => this.handleConnection(ws));
+  }
+
+  handleConnection(ws) {
+    console.log("Новий WebSocket клієнт підключений через WSS");
+    
+    ws.on("message", (message) => {
+      console.log("Отримано повідомлення:", message);
+      ws.send("Підтвердження отримання: " + message);
+    });
+
+    ws.on("close", () => {
+      console.log("Клієнт відключився");
+    });
+  }
+}
+
+// Запуск WebSocket сервера на HTTPS
+const wsServer = new WebSocketServerMod(serverHTTPS);
+
+// Слухаємо порт (змінити на свій)
+const PORT = 443;
+serverHTTPS.listen(PORT, () => {
+  console.log(`HTTPS + WSS сервер запущений на порту ${PORT}`);
+});
+```
+
+---
+
+### **Що змінилося у коді?**
+✅ **Додаємо HTTPS-сервер** (`https.createServer(options, app)`)  
+✅ **Читаємо SSL-сертифікати** (`fs.readFileSync(...)`)  
+✅ **Підключаємо WebSocket до HTTPS-сервера**  
+✅ **Підключення тільки через `wss://`**  
+
+---
+
+### **Що потрібно зробити на клієнті (APEX JavaScript)**
+У вашому APEX-коді змініть **ws://** на **wss://**:
+```javascript
+const ws = new WebSocket("wss://your-domain.com");
+ws.onopen = () => console.log("WebSocket підключений!");
+ws.onmessage = (event) => console.log("Отримано:", event.data);
+ws.onclose = () => console.log("WebSocket відключено");
+```
+
+🔹 **Обов’язково:** `your-domain.com` має відповідати HTTPS-домену.
+
+---
+
+### **Що робити, якщо немає сертифіката?**
+Якщо у вас немає сертифіката:
+- **Для тестів** можна використати **self-signed сертифікат** (але браузери можуть блокувати таке з'єднання).
+- **Для продакшну** отримайте безкоштовний SSL-сертифікат через **Let's Encrypt**:
+  ```
+  sudo certbot certonly --standalone -d your-domain.com
+  ```
+  Далі оновіть шлях до файлів `fullchain.pem` і `privkey.pem` у `options`.
+
+---
+
+💡 **Після цих змін WebSocket сервер буде працювати на WSS, і ваш APEX-додаток на HTTPS зможе підключатися!** 🚀

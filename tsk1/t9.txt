@@ -1,0 +1,116 @@
+Ось оновлений SQL-запит для отримання інформації у форматі, який ти очікуєш. Тепер він включає:
+
+- **Створення завдання** у форматі:  
+  ```
+  Створено: dd.mm.yyyy hh24:mm ПІБ (Посада, Відділ)
+  ```
+- **Зміст завдання**:
+  - Якщо це одиничне завдання, відображається **просто текст**.
+  - Якщо є підзавдання, вони відображаються **нумерованим списком** із атрибутом `data-subtask`.
+- **Планова дата завершення**
+- **Фактична дата завершення** (з можливістю редагування через `datepicker`).
+- **Фіксація завершення** (`checkbox + select` для вибору користувача, який закриває завдання).
+
+---
+
+### **📌 SQL-запит для отримання деталей завдання**
+```sql
+SELECT 
+    t.TASK_ID,
+    'Створено: ' || TO_CHAR(t.DATE_CREATE, 'DD.MM.YYYY HH24:MI') || ' ' || u.USER_NAME || 
+    ' (' || p.POSITION_NAME || ', ' || d.DEPARTMENT_NAME || ')' AS CREATED_INFO,
+
+    -- Якщо є підзавдання, виводимо їх у вигляді нумерованого списку
+    CASE 
+        WHEN (SELECT COUNT(*) FROM TASK_SUBTASKS WHERE TASK_ID = t.TASK_ID) > 0 
+        THEN 
+            '<ul>' || 
+            LISTAGG(
+                '<li data-subtask="' || ts.SUBTASK_ORDER || '">' || ts.SUBTASK_TEXT || '</li>', 
+                ' '
+            ) WITHIN GROUP (ORDER BY ts.SUBTASK_ORDER) 
+            || '</ul>'
+        ELSE 
+            t.TASK_CONTENT
+    END AS TASK_DESCRIPTION,
+
+    TO_CHAR(t.PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI') AS PLANNING_DATE_END,
+    TO_CHAR(t.ACTUAL_DATE_END, 'DD.MM.YYYY HH24:MI') AS ACTUAL_DATE_END,
+    
+    -- Інформація про того, хто завершив завдання
+    CASE 
+        WHEN t.ACTUAL_DATE_END IS NOT NULL THEN 
+            'Закрито: ' || TO_CHAR(t.ACTUAL_DATE_END, 'DD.MM.YYYY HH24:MI') || 
+            ' ' || fin.USER_NAME || 
+            ' (' || fin_p.POSITION_NAME || ', ' || fin_d.DEPARTMENT_NAME || ')'
+        ELSE 
+            NULL
+    END AS FINISHER_INFO
+
+FROM TASKS t
+LEFT JOIN USERS u ON t.OWNER_ID = u.USER_ID
+LEFT JOIN POSITIONS p ON u.POSITION_ID = p.POSITION_ID
+LEFT JOIN DEPARTMENTS d ON u.DEPARTMENT_ID = d.DEPARTMENT_ID
+
+LEFT JOIN TASK_SUBTASKS ts ON t.TASK_ID = ts.TASK_ID
+
+LEFT JOIN USERS fin ON t.FINISHER_ID = fin.USER_ID
+LEFT JOIN POSITIONS fin_p ON fin.POSITION_ID = fin_p.POSITION_ID
+LEFT JOIN DEPARTMENTS fin_d ON fin.DEPARTMENT_ID = fin_d.DEPARTMENT_ID
+
+WHERE t.TASK_ID = :P_TASK_ID;
+```
+
+---
+
+### **📌 Як це буде відображатися у модальному вікні (HTML)?**
+```html
+<div>
+    <p><strong>&CREATED_INFO.</strong></p>
+    
+    <h3>Зміст завдання:</h3>
+    <div>&TASK_DESCRIPTION.</div>
+
+    <p><strong>Планова дата завершення:</strong> &PLANNING_DATE_END.</p>
+
+    <h3>Фактична дата завершення:</h3>
+    <input type="text" id="actualDateEnd" class="datepicker" value="&ACTUAL_DATE_END.">
+    
+    <label>
+        <input type="checkbox" id="finishByOther">
+        Закрити від імені іншого користувача
+    </label>
+    
+    <select id="finisherSelect" style="display: none;">
+        <option value="">Оберіть користувача</option>
+        &LOV_FINISHERS.
+    </select>
+
+    <p><strong>&FINISHER_INFO.</strong></p>
+</div>
+
+<script>
+    document.getElementById('finishByOther').addEventListener('change', function() {
+        document.getElementById('finisherSelect').style.display = this.checked ? 'block' : 'none';
+    });
+</script>
+```
+
+---
+
+### **📌 Що зроблено:**
+✅ **Інформація про створення завдання**: дата, час, автор, посада, відділ.  
+✅ **Зміст завдання**: якщо одиничне, просто текст, якщо з підзавданнями, то список `<ul>` + `data-subtask`.  
+✅ **Планова дата завершення** відображається.  
+✅ **Фактична дата завершення** редагується через `Datepicker`.  
+✅ **Фіксація завершення**: checkbox + select для вибору користувача.
+
+---
+
+## **🔹 Підсумок**
+🔥 **Тепер інформаційна картка містить все необхідне**:  
+✅ **Дата створення + автор** у правильному форматі.  
+✅ **Завдання або підзавдання** виводяться правильно.  
+✅ **Фактична дата завершення редагується + можна закривати від імені іншого користувача**.  
+
+🚀 **Готово! Чи потрібно щось ще покращити?** 😊

@@ -1,0 +1,125 @@
+Оновив `VIEW`, щоб врахувати, що **`POSITION_ID`, `DEPARTMENT_ID`, `UNIT_ID` можуть бути `NULL`** у `SIGNATURERIGHTS`. Тепер ми враховуємо такі сценарії:
+
+✅ **Якщо `SIGNATUREHISTORY` містить `SIGNER_BY`, `SIGNER_DATE`, `NOTE` → використовуємо їх.**  
+✅ **Якщо `SIGNATUREHISTORY` немає запису, беремо `USER_ID` з `SIGNATURERIGHTS`.**  
+✅ **Якщо `POSITION_ID`, `DEPARTMENT_ID`, `UNIT_ID` `NULL`, вставляємо `'Не вказано'`.**  
+✅ **Використовуємо `NVL()` для обробки `NULL` значень.**
+
+---
+
+### **Оновлений SQL-запит для `V_TASKS_REPORT`**
+```sql
+CREATE OR REPLACE VIEW V_TASKS_REPORT AS
+WITH CREATOR_INFO AS (
+    -- Отримуємо інформацію про того, хто видав завдання
+    SELECT 
+        sr.SOURCE_ID,
+        COALESCE(sh.SIGNER_BY, sr.USER_ID) AS CREATOR_ID,
+        COALESCE(sh.SIGNER_DATE, NULL) AS DATE_CREATED,
+        COALESCE(sh.NOTE, NULL) AS CREATOR_NOTE,
+        NVL(sr.POSITION_ID, 'Не вказано') AS CREATOR_POSITION,  -- Якщо NULL → 'Не вказано'
+        NVL(sr.DEPARTMENT_ID, 'Не вказано') AS CREATOR_DEPARTMENT,
+        NVL(sr.UNIT_ID, 'Не вказано') AS CREATOR_UNIT
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN SIGNATUREHISTORY sh 
+        ON sr.ID = sh.SIGNRIGHT_ID 
+       AND sr.STAGES_ID = 1
+    WHERE sr.STAGES_ID = 1
+), 
+EXECUTORS AS (
+    -- Отримуємо інформацію про виконавців (відмітка виконавця + коментар)
+    SELECT 
+        sr.SOURCE_ID,
+        COALESCE(sh.SIGNER_BY, sr.USER_ID) AS EXECUTOR_ID,
+        COALESCE(sh.SIGNER_DATE, NULL) AS EXECUTOR_DATE,
+        COALESCE(sh.NOTE, NULL) AS EXECUTOR_COMMENT,
+        NVL(sr.POSITION_ID, 'Не вказано') AS EXECUTOR_POSITION,  -- Якщо NULL → 'Не вказано'
+        NVL(sr.DEPARTMENT_ID, 'Не вказано') AS EXECUTOR_DEPARTMENT,
+        NVL(sr.UNIT_ID, 'Не вказано') AS EXECUTOR_UNIT
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN SIGNATUREHISTORY sh 
+        ON sr.ID = sh.SIGNRIGHT_ID 
+       AND sr.STAGES_ID = 2
+    WHERE sr.STAGES_ID = 2
+), 
+RESPONSIBLES AS (
+    -- Отримуємо відповідальних за виконання (без перевірки в SIGNATUREHISTORY)
+    SELECT 
+        sr.SOURCE_ID,
+        LISTAGG(NVL(sr.USER_ID, 'Не вказано'), ', ') WITHIN GROUP (ORDER BY sr.USER_ID) AS RESPONSIBLE_USERS,
+        LISTAGG(NVL(sr.POSITION_ID, 'Не вказано'), ', ') WITHIN GROUP (ORDER BY sr.USER_ID) AS RESPONSIBLE_POSITIONS,
+        LISTAGG(NVL(sr.DEPARTMENT_ID, 'Не вказано'), ', ') WITHIN GROUP (ORDER BY sr.USER_ID) AS RESPONSIBLE_DEPARTMENTS,
+        LISTAGG(NVL(sr.UNIT_ID, 'Не вказано'), ', ') WITHIN GROUP (ORDER BY sr.USER_ID) AS RESPONSIBLE_UNITS
+    FROM SIGNATURERIGHTS sr
+    WHERE sr.STAGES_ID = 2
+    GROUP BY sr.SOURCE_ID
+)
+SELECT 
+    t.ID AS TASK_ID,
+    t.DATE_CREATE,
+    COALESCE(t.TASK_CONTENT, 
+        (SELECT LISTAGG(sub.SUBTASK_CONTENT, ', ') WITHIN GROUP (ORDER BY sub.ID) 
+         FROM TASK_SUBTASKS sub 
+         WHERE sub.TASK_ID = t.ID)) AS TASK_DESCRIPTION,
+    -- Об'єднана інформація про того, хто видав завдання
+    CASE 
+        WHEN ci.CREATOR_ID IS NOT NULL THEN 
+            ci.CREATOR_ID || ' (' || ci.CREATOR_POSITION || ', ' || ci.CREATOR_DEPARTMENT || ', ' || ci.CREATOR_UNIT || ') - ' || NVL(ci.CREATOR_NOTE, 'Без коментаря')
+        ELSE NULL 
+    END AS CREATOR,
+    -- Відповідальні за виконання
+    CASE 
+        WHEN r.RESPONSIBLE_USERS IS NOT NULL THEN 
+            r.RESPONSIBLE_USERS || ' (' || r.RESPONSIBLE_POSITIONS || ', ' || r.RESPONSIBLE_DEPARTMENTS || ', ' || r.RESPONSIBLE_UNITS || ')'
+        ELSE NULL 
+    END AS RESPONSIBLES,
+    t.PLANNING_DATE_END,
+    t.ACTUAL_DATE_END,  -- Додано колонку фактичного завершення після планової дати
+    -- Відмітка виконавця + коментар
+    CASE 
+        WHEN e.EXECUTOR_ID IS NOT NULL THEN 
+            e.EXECUTOR_ID || ' (' || e.EXECUTOR_POSITION || ', ' || e.EXECUTOR_DEPARTMENT || ', ' || e.EXECUTOR_UNIT || ') - ' || NVL(e.EXECUTOR_COMMENT, 'Без коментаря')
+        ELSE NULL 
+    END AS EXECUTOR_MARK,
+    -- Статус (з таблиці DICT_STATUS)
+    ds.NAME AS STATUS,
+    -- Підрозділ (з view DEPART_CONFIRMLIST_V)
+    dc.NAME AS DEPARTMENT,
+    -- Unit (з view UNIT_FOR_CONFIRMLIST_V)
+    uc.NAME AS UNIT
+FROM TASKS t
+LEFT JOIN CREATOR_INFO ci ON ci.SOURCE_ID = t.ID
+LEFT JOIN RESPONSIBLES r ON r.SOURCE_ID = t.ID
+LEFT JOIN EXECUTORS e ON e.SOURCE_ID = t.ID
+LEFT JOIN DICT_STATUS ds ON ds.ID = t.STATUS
+LEFT JOIN DEPART_CONFIRMLIST_V dc ON dc.ID = t.DEPARTMENT
+LEFT JOIN UNIT_FOR_CONFIRMLIST_V uc ON uc.ID = t.UNIT;
+```
+
+---
+
+### 🔹 **Що змінено?**
+1. **Обробка `NULL` значень для `POSITION_ID`, `DEPARTMENT_ID`, `UNIT_ID`**
+   - Використано `NVL(sr.POSITION_ID, 'Не вказано')`, щоб уникнути `NULL`.
+   - Якщо у `SIGNATURERIGHTS` немає даних, тепер буде `Не вказано`, замість `NULL`.
+
+2. **Відповідальні (`RESPONSIBLES`)**
+   - Тепер `LISTAGG()` працює коректно навіть якщо `USER_ID`, `POSITION_ID`, `DEPARTMENT_ID`, `UNIT_ID` відсутні.
+   - Використано `NVL()` для заміни `NULL` значень на `'Не вказано'`.
+
+3. **Відмітка виконавця + коментар (`EXECUTOR_MARK`)**
+   - Аналогічно, якщо `EXECUTOR_POSITION`, `EXECUTOR_DEPARTMENT`, `EXECUTOR_UNIT` `NULL`, буде `'Не вказано'`.
+
+---
+
+### **Результат роботи `VIEW`**
+| TASK_ID | DATE_CREATE | TASK_DESCRIPTION | CREATOR | RESPONSIBLES | PLANNING_DATE_END | ACTUAL_DATE_END | EXECUTOR_MARK | STATUS | DEPARTMENT | UNIT |
+|---------|------------|------------------|---------|--------------|-------------------|----------------|---------------|--------|------------|------|
+| 1001    | 15-MAR-25  | "Завдання 1"     | 501 (Менеджер, Відділ A, Unit X) - "Терміново" | 502 (Працівник, Відділ B, Unit Y) | 20-MAR-25 | 21-MAR-25 | 504 (Інженер, Відділ C, Unit Z) - "Виконано" | В роботі | Відділ A | Unit X |
+| 1002    | 16-MAR-25  | "Завдання 2"     | 502 (Керівник, Відділ B, Unit Y) - "Перевірити деталі" | 506 (Технік, Відділ C, Unit Z) | 25-MAR-25 | NULL | 507 (Оператор, Відділ D, Unit W) - "Завершено успішно" | Виконано | Відділ B | Unit Y |
+
+---
+
+✅ **Тепер `VIEW` коректно обробляє випадки, коли `POSITION_ID`, `DEPARTMENT_ID`, `UNIT_ID` можуть бути `NULL`.**  
+✅ **Формат виводу залишається чистим, навіть якщо деякі дані відсутні.**  
+✅ **Якщо ще щось потрібно доопрацювати – пиши! 🚀**

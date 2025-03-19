@@ -1,0 +1,133 @@
+Ось ваш SQL-код, переписаний у формат DBML:  
+
+```dbml
+Table TASKS {
+    id                  int  [primary key, not null]
+    date_create         date
+    task_content        varchar(4000)
+    creator_id          int
+    planning_date_end   date
+    actual_date_end     date
+    status_id           int
+    department_id       int
+    unit_id             int
+    type_id             int
+
+    Indexes {
+        (status_id) [name: "STATUS_TASK_FK", ref: > DICT_STATUS.id]
+        (unit_id) [name: "UNIT_TASK_FK", ref: > DICT_UNIT.id]
+    }
+}
+
+Table TASK_SUBTASKS {
+    id                  int  [primary key, not null]
+    task_id             int
+    subtask_content     varchar(4000)
+    status_id           int
+    planning_date_end   date
+    actual_date_end     date
+
+    Indexes {
+        (task_id) [name: "ID_TASK_FK", ref: > TASKS.id]
+        (status_id) [name: "STATUS_SUBTASK_FK", ref: > DICT_STATUS.id]
+    }
+}
+
+Table DICT_UNIT {
+    id          int [primary key, not null, note: "ID юніту"]
+    name        varchar(30) [not null]
+    unit_type   varchar(50)
+}
+
+Table DICT_STATUS_MAIN {
+    id   int [primary key, not null]
+    name varchar(40)
+}
+
+Table DICT_STATUS {
+    id                  int [primary key, not null]
+    status_main_id      int [not null]
+    name                varchar(40)
+    description         varchar(255)
+    parent_status_id    int
+
+    Indexes {
+        (status_main_id) [name: "DICT_STATUS_FK", ref: > DICT_STATUS_MAIN.id]
+    }
+}
+
+Table DICT_APP_CONFIRM_LIST {
+    id               int [primary key, not null]
+    page_list_id     int [not null]
+    stage           int [not null]
+    title          varchar(400) [not null]
+    parent_stage_id int
+    status_id       int
+    text_button     varchar(100)
+    text_post_sing  varchar(100)
+
+    Indexes {
+        (page_list_id) [name: "APP_CONFL_PAGEL_FK", ref: > DICT_PAGE_LIST.id]
+        (parent_stage_id) [name: "APP_CONFL_PARENTS_FK", ref: > DICT_APP_CONFIRM_LIST.id]
+        (status_id) [name: "APP_CONFL_STATUS_FK", ref: > DICT_STATUS.id]
+    }
+}
+
+Table DICT_PAGE_LIST {
+    id        int [primary key, not null]
+    app_id    int [not null]
+    page_id   int [not null]
+    page_name varchar(255) [not null]
+    page_desc varchar(400)
+}
+
+Table SOURCE {
+    id            int [primary key, not null]
+    page_list_id  int [not null]
+    record_id     int [not null]
+    creator_by    int [not null]
+    created_date  date [not null]
+
+    Indexes {
+        (page_list_id) [name: "SOURCE_PAGE_FK", ref: > DICT_PAGE_LIST.id]
+    }
+}
+
+Table SIGNATURERIGHTS {
+    id           int [primary key, not null]
+    source_id    int [not null]
+    position_id  int [not null]
+    department_id int
+    unit_id      int
+    user_tabno   int
+    stages_id    int [not null]
+    sort_order   int
+
+    Indexes {
+        (stages_id) [name: "SR_APPCONFIRM_FK", ref: > DICT_APP_CONFIRM_LIST.id]
+        (source_id) [name: "SR_SOURCE_FK", ref: > SOURCE.id]
+        (unit_id) [name: "SR_UNIT_FK", ref: > DICT_UNIT.id]
+    }
+}
+
+Table SIGNATUREHISTORY {
+    id              int [primary key, not null]
+    signright_id    int [not null]
+    old_signhist_id int
+    new_status_id   int [not null]
+    signer_by       int [not null]
+    signer_date     date [not null]
+    note            varchar(400)
+    actuality_id    int [not null]
+    sdate          date
+
+    Indexes {
+        (actuality_id) [name: "SH_ACTUALID_FK", ref: > DICT_ACTUALITY.id]
+        (old_signhist_id) [name: "SH_OLDSH_FK", ref: > SIGNATUREHISTORY.id]
+        (signright_id) [name: "SH_SR_FK", ref: > SIGNATURERIGHTS.id]
+        (new_status_id) [name: "SH_STATUS_FK", ref: > DICT_STATUS.id]
+    }
+}
+```
+
+Цей DBML-код чітко структурує ваші таблиці та зовнішні ключі, зберігаючи всі зв’язки між ними.

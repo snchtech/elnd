@@ -1,0 +1,65 @@
+Щоб реалізувати вашу вимогу, необхідно внести такі зміни:
+
+1. **Додати колонку `subtask_id` в таблицю `SIGNATURERIGHTS`**, щоб мати можливість фіксувати підзавдання.
+2. **Додати колонку `team_group_id` в таблицю `SIGNATURERIGHTS`**, щоб записувати команду, якщо її вказали.
+3. **Створити таблицю `TEAM_GROUP`**, яка міститиме команди.
+
+Ось оновлений SQL-код:
+
+### **Оновлення таблиці `SIGNATURERIGHTS`**
+```sql
+ALTER TABLE SIGNATURERIGHTS 
+ADD subtask_id NUMBER; -- Додаємо поле для збереження підзавдання
+
+ALTER TABLE SIGNATURERIGHTS 
+ADD team_group_id NUMBER; -- Додаємо поле для збереження команди
+
+ALTER TABLE SIGNATURERIGHTS 
+ADD CONSTRAINT SR_SUBTASK_FK FOREIGN KEY (subtask_id) 
+REFERENCES TASK_SUBTASKS (id);
+
+ALTER TABLE SIGNATURERIGHTS 
+ADD CONSTRAINT SR_TEAMGROUP_FK FOREIGN KEY (team_group_id) 
+REFERENCES TEAM_GROUP (id);
+```
+
+---
+
+### **Створення таблиці `TEAM_GROUP`**
+```sql
+CREATE TABLE TEAM_GROUP (
+    id NUMBER PRIMARY KEY,
+    number_mark NUMBER NOT NULL, -- Унікальний номер команди
+    name VARCHAR2(255) NOT NULL, -- Назва команди
+    short_name VARCHAR2(100), -- Скорочена назва
+    work_time_start DATE, -- Час початку роботи команди
+    work_time_end DATE -- Час завершення роботи команди
+);
+```
+
+---
+
+### **Запит для вибору `subtask_id` при виборі `record_id`**
+Якщо потрібно вибрати ID підзавдань (`TASK_SUBTASKS.id`) разом із основним `record_id` (`TASKS.id`), можна використати наступний `SELECT`:
+
+```sql
+SELECT 
+    sr.id AS signright_id,
+    s.record_id AS task_id,
+    ts.id AS subtask_id,
+    sr.team_group_id
+FROM SIGNATURERIGHTS sr
+LEFT JOIN SOURCE s ON sr.source_id = s.id
+LEFT JOIN TASK_SUBTASKS ts ON ts.task_id = s.record_id
+WHERE sr.id = :signright_id;
+```
+
+---
+
+### **Як це працюватиме:**
+- `SIGNATURERIGHTS` тепер може містити `subtask_id`, якщо завдання має підзавдання.
+- `SIGNATURERIGHTS` також може містити `team_group_id`, якщо воно вказане.
+- `TEAM_GROUP` містить інформацію про команди, їх робочий час та ідентифікатори.
+- Запит вибирає основне `record_id` разом із `subtask_id`, якщо підзавдання існує.
+
+Ця структура дозволяє вам чітко зберігати як основне завдання, так і підзавдання в рамках одного запису підпису.

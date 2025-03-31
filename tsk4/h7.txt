@@ -1,0 +1,83 @@
+Щоб **вивести фактичну дату завершення кожного підзавдання** в `Interactive Grid`, ти можеш:
+
+### ✅ Додати в SQL-запит колонку `ACTUAL_DATE_END`, яку обчислюєш через `JOIN` або `SCALAR SUBQUERY`.
+
+---
+
+## 🔧 Вихідні таблиці:
+
+- `TASK_SUBTASKS` — має `ID` = `subtask_id`
+- `SIGNATURERIGHTS` — `SUBTASK_ID`, `ID` (signright_id)
+- `SIGNATUREHISTORY` — `SIGNRIGHT_ID`, `SIGNER_DATE`, `STAGES_ID = 3`
+
+---
+
+## 🛠️ Варіант 1: через SCALAR SUBQUERY
+
+```sql
+SELECT 
+  ROWID AS ID,
+  SUBTASK_ORDER,
+  SUBTASK_TEXT,
+  
+  (
+    SELECT MAX(sh.SIGNER_DATE)
+    FROM SIGNATURERIGHTS sr
+    JOIN SIGNATUREHISTORY sh ON sh.SIGNRIGHT_ID = sr.ID
+    WHERE sr.SUBTASK_ID = ts.ID
+      AND sr.STAGES_ID = 3
+  ) AS ACTUAL_DATE_END
+
+FROM TASK_SUBTASKS ts
+WHERE TASK_ID = :P_TASK_ID
+```
+
+✅ Переваги:
+- Простий для інтеграції в Interactive Grid
+- Не потребує зміни структури IG
+
+---
+
+## 🛠️ Варіант 2: через `LEFT JOIN` (більш гнучкий, якщо треба ще поля, як NOTE)
+
+```sql
+SELECT 
+  ts.ROWID AS ID,
+  ts.SUBTASK_ORDER,
+  ts.SUBTASK_TEXT,
+  MAX(sh.SIGNER_DATE) AS ACTUAL_DATE_END
+
+FROM TASK_SUBTASKS ts
+LEFT JOIN SIGNATURERIGHTS sr ON sr.SUBTASK_ID = ts.ID AND sr.STAGES_ID = 3
+LEFT JOIN SIGNATUREHISTORY sh ON sh.SIGNRIGHT_ID = sr.ID
+
+WHERE ts.TASK_ID = :P_TASK_ID
+GROUP BY ts.ROWID, ts.SUBTASK_ORDER, ts.SUBTASK_TEXT
+```
+
+---
+
+## ➕ Якщо хочеш ще й `NOTE` або `SIGNER_BY`, можеш додати так:
+
+```sql
+(
+  SELECT MAX(sh.NOTE)
+  FROM SIGNATURERIGHTS sr
+  JOIN SIGNATUREHISTORY sh ON sh.SIGNRIGHT_ID = sr.ID
+  WHERE sr.SUBTASK_ID = ts.ID AND sr.STAGES_ID = 3
+) AS COMPLETION_NOTE
+```
+
+---
+
+## ✅ Підключення в APEX IG
+
+1. В APEX, у SQL Source звіту заміни `SELECT ...` на версію з `ACTUAL_DATE_END`.
+2. Додай нову колонку у `Interactive Grid` → тип: **Display Only** або **Date**.
+3. Встанови формат: `DD.MM.YYYY HH24:MI`
+
+---
+
+🔧 Хочеш — можу допомогти додати також вивід статусу (виконано / не виконано) або перекреслення рядка в залежності від заповненості `ACTUAL_DATE_END`.
+
+Це зробити?

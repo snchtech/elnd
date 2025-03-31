@@ -1,0 +1,103 @@
+Чудово! Автоматичне обчислення `NEXT_RUN_DATE` можна реалізувати динамічно в APEX **на основі вибраного режиму періодичності** (`по днях` чи `по годинах`).
+
+---
+
+## 🧠 Логіка
+
+| Параметр               | Опис                                                    |
+|------------------------|----------------------------------------------------------|
+| `PERIOD_MODE`          | `'DAYS'` або `'HOURS'`                                   |
+| `PERIOD_INTERVAL`      | Кожні N днів                                             |
+| `PERIOD_TIME`          | Час (типу `DATE`, але використовується лише `HH24:MI`)   |
+| `HOURLY_TIMES`         | Наприклад: `'07:00,15:00,23:00'`                         |
+| `HOURLY_OFFSET_MIN`    | Скільки хвилин до часу запуску                           |
+
+---
+
+## ✅ Як реалізувати автозаповнення `NEXT_RUN_DATE` в APEX
+
+---
+
+### 🔹 1. Створи `Dynamic Action`:
+
+- **Name:** `DA_Calculate_Next_Run_Date`
+- **Event:** Change
+- **Triggered by:**  
+  - `PXX_PERIOD_MODE`,  
+  - `PXX_PERIOD_INTERVAL`,  
+  - `PXX_PERIOD_TIME`,  
+  - `PXX_HOURLY_TIMES`,  
+  - `PXX_HOURLY_OFFSET_MIN`
+
+---
+
+### 🔹 2. Додай **True Action → Execute PL/SQL Code**
+
+#### 📦 PL/SQL Code:
+
+```plsql
+DECLARE
+  v_next_date DATE;
+  v_time_only DATE;
+  v_first_time VARCHAR2(5);
+BEGIN
+  IF :PXX_PERIOD_MODE = 'DAYS' THEN
+    -- беремо сьогодні + інтервал, додаємо час
+    v_time_only := TO_DATE(TO_CHAR(:PXX_PERIOD_TIME, 'HH24:MI'), 'HH24:MI');
+    v_next_date := TRUNC(SYSDATE) + :PXX_PERIOD_INTERVAL + 
+                   (v_time_only - TRUNC(v_time_only));
+
+  ELSIF :PXX_PERIOD_MODE = 'HOURS' THEN
+    -- розбираємо перший час із списку (припускаємо формат '07:00,15:00,...')
+    v_first_time := REGEXP_SUBSTR(:PXX_HOURLY_TIMES, '[^,]+', 1, 1);
+    IF v_first_time IS NOT NULL THEN
+      v_time_only := TO_DATE(v_first_time, 'HH24:MI');
+      v_next_date := TRUNC(SYSDATE) + (v_time_only - TRUNC(v_time_only)) 
+                     - NUMTODSINTERVAL(:PXX_HOURLY_OFFSET_MIN, 'MINUTE');
+    ELSE
+      v_next_date := NULL;
+    END IF;
+
+  ELSE
+    v_next_date := NULL;
+  END IF;
+
+  :PXX_NEXT_RUN_DATE := v_next_date;
+END;
+```
+
+---
+
+### 🔹 3. Налаштування
+
+| Поле               | Значення                                |
+|--------------------|------------------------------------------|
+| **Items to Submit**| `PXX_PERIOD_MODE`, `PXX_PERIOD_INTERVAL`, `PXX_PERIOD_TIME`, `PXX_HOURLY_TIMES`, `PXX_HOURLY_OFFSET_MIN` |
+| **Items to Return**| `PXX_NEXT_RUN_DATE`                      |
+
+---
+
+## ✅ Приклад результату
+
+- Якщо:
+  - `PERIOD_MODE = 'DAYS'`
+  - `PERIOD_INTERVAL = 3`
+  - `PERIOD_TIME = 12:00`
+
+➡️ `NEXT_RUN_DATE = сьогодні + 3 дні + 12:00`
+
+- Якщо:
+  - `PERIOD_MODE = 'HOURS'`
+  - `HOURLY_TIMES = 07:00,15:00,23:00`
+  - `HOURLY_OFFSET_MIN = 15`
+
+➡️ `NEXT_RUN_DATE = сьогодні о 06:45`
+
+---
+
+🔧 Хочеш — можу ще зробити JavaScript preview на формі типу:
+```
+Наступний запуск: 03.04.2025 12:00
+```
+
+Готово? Хочеш додати валідацію, що `NEXT_RUN_DATE` обов’язково має бути встановлено перед збереженням шаблону?

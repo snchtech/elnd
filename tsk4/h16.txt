@@ -1,0 +1,169 @@
+Розберемо детально два ключові моменти:
+
+---
+
+## ✅ 1. **Dynamic Action** для перемикача режимів (STANDARD / PERIODIC)
+
+### 🧩 Припустимо, перемикач має item: `PXX_TASK_MODE`  
+(значення `'STANDARD'` або `'PERIODIC'`)
+
+---
+
+### 🔹 Створюємо DA:  
+**Name:** `DA_Change_Task_Mode`  
+**When:** `Change`  
+**Item:** `PXX_TASK_MODE`
+
+---
+
+### 🛠 True Action (коли вибрано `'PERIODIC'`):
+
+| Дія             | Елементи                                                       |
+|------------------|----------------------------------------------------------------|
+| **Hide**         | `PXX_DATE_START`, `PXX_PLANNING_DATE_END`                     |
+| **Show**         | `PXX_PERIOD_MODE`, `PXX_PERIOD_INTERVAL`, `PXX_PERIOD_TIME`, `PXX_HOURLY_TIMES`, `PXX_HOURLY_OFFSET_MIN` |
+| **Set Required (False)** | `PXX_DATE_START`, `PXX_PLANNING_DATE_END`             |
+| **Set Required (True)**  | залежить від вибраного `PXX_PERIOD_MODE` (див. нижче) |
+
+---
+
+### 🛠 Dynamic Action на `PXX_PERIOD_MODE`
+
+(значення: `'DAYS'` або `'HOURS'`)
+
+#### Якщо `'DAYS'`:
+- Show: `PXX_PERIOD_INTERVAL`, `PXX_PERIOD_TIME`
+- Hide: `PXX_HOURLY_TIMES`, `PXX_HOURLY_OFFSET_MIN`
+- Set Required: `PXX_PERIOD_INTERVAL`, `PXX_PERIOD_TIME`
+- Set Required False: `PXX_HOURLY_TIMES`, `PXX_HOURLY_OFFSET_MIN`
+
+#### Якщо `'HOURS'`:
+- Зворотна логіка
+
+---
+
+### 🛠 False Action (тобто `'STANDARD'`):
+
+| Дія             | Елементи                                                |
+|------------------|---------------------------------------------------------|
+| **Show**         | `PXX_DATE_START`, `PXX_PLANNING_DATE_END`              |
+| **Hide**         | Всі елементи періодичності                             |
+| **Set Required** | `PXX_DATE_START`, `PXX_PLANNING_DATE_END` → True       |
+| **Set Required** | Поля періодичності → False                             |
+
+---
+
+## ✅ 2. **PL/SQL гілки для збереження**
+
+Створюємо **два окремі процеси** типу `PL/SQL Code` зі `Server-side Condition`.
+
+---
+
+### 🔹 Процес 1: Створення звичайного завдання
+
+| Параметр               | Значення                           |
+|------------------------|------------------------------------|
+| **Process Name**       | `PRC_INSERT_STANDARD_TASK`         |
+| **Condition**          | `PXX_TASK_MODE = 'STANDARD'`       |
+
+```plsql
+DECLARE
+  v_task_id TASKS.ID%TYPE;
+BEGIN
+  INSERT INTO TASKS (
+    DATE_CREATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    PLANNING_DATE_START,
+    PLANNING_DATE_END,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID
+  ) VALUES (
+    SYSDATE,
+    :PXX_TASK_CONTENT,
+    :APP_USER_ID,
+    :PXX_DATE_START,
+    :PXX_PLANNING_DATE_END,
+    1,
+    :PXX_DEPARTMENT_ID,
+    :PXX_UNIT_ID,
+    :PXX_TYPE_ID
+  )
+  RETURNING ID INTO v_task_id;
+
+  -- оновлення підзавдань
+  UPDATE TASK_SUBTASKS
+  SET TASK_ID = v_task_id, DRAFT_ID = NULL
+  WHERE DRAFT_ID = :PXX_DRAFT_ID;
+
+  :PXX_CREATED_TASK_ID := v_task_id;
+END;
+```
+
+---
+
+### 🔹 Процес 2: Створення періодичного шаблону
+
+| Параметр               | Значення                            |
+|------------------------|-------------------------------------|
+| **Process Name**       | `PRC_INSERT_PERIODIC_TEMPLATE`      |
+| **Condition**          | `PXX_TASK_MODE = 'PERIODIC'`        |
+
+```plsql
+DECLARE
+  v_template_id TASK_TEMPLATES.ID%TYPE;
+BEGIN
+  INSERT INTO TASK_TEMPLATES (
+    DATE_CREATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    HOURLY_TIMES,
+    HOURLY_OFFSET_MIN,
+    NEXT_RUN_DATE
+  ) VALUES (
+    SYSDATE,
+    :PXX_TASK_CONTENT,
+    :APP_USER_ID,
+    1,
+    :PXX_DEPARTMENT_ID,
+    :PXX_UNIT_ID,
+    :PXX_TYPE_ID,
+    :PXX_PAGE_LIST_ID,
+    :PXX_PERIOD_MODE,
+    :PXX_PERIOD_INTERVAL,
+    :PXX_PERIOD_TIME,
+    :PXX_HOURLY_TIMES,
+    :PXX_HOURLY_OFFSET_MIN,
+    :PXX_NEXT_RUN_DATE
+  )
+  RETURNING ID INTO v_template_id;
+
+  -- оновлюємо шаблонні підзавдання
+  UPDATE TASK_TEMPLATE_SUBTASKS
+  SET TEMPLATE_ID = v_template_id,
+      DRAFT_ID = NULL
+  WHERE DRAFT_ID = :PXX_DRAFT_ID;
+
+  :PXX_CREATED_TEMPLATE_ID := v_template_id;
+END;
+```
+
+---
+
+🔧 Обидва процеси можна обгорнути у `Validation Group`, щоб перевірити окремі required поля лише для свого режиму.
+
+---
+
+Хочеш — можу допомогти налаштувати dynamic validation на обов’язковість полів або зробити логіку автозаповнення `next_run_date`.
+
+Переходимо до підключення картки шаблону/завдання після збереження?

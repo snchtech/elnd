@@ -1,0 +1,152 @@
+Дякую! Давайте поетапно переробимо вашу `VIEW V_TASKS_REPORT` з урахуванням:
+
+---
+
+## ✅ НОВА СТРУКТУРА КОЛОНОК:
+1. `DATE_CREATE`  
+2. `UNIT`  
+3. `TASK_CONTENT`  
+4. `CREATOR`  
+5. `EXECUTORS`  
+6. `PLANNING_DATE_END`  
+7. `ACTUAL_DATE_END` ← (із `SIGNATUREHISTORY` для `STAGES_ID = 3`)  
+8. `STATUS`  
+9. `DEPARTMENT`  
+10. `NOTE` ← беремо з `SIGNATUREHISTORY.NOTE`, `STAGES_ID = 3`  
+11. `VIEWED` ← з `TASK_VIEWED`
+
+---
+
+## 🔨 ОСНОВНІ ЗМІНИ:
+- Видаляємо `RESPONSIBLES`.
+- Додаємо підзапит для `ACTUAL_DATE_END`, `NOTE` зі `STAGES_ID = 3`.
+- Колонка `VIEWED`: перевірка, чи користувач переглянув це завдання в межах зміни (наприклад, 09:00–17:00).
+- `CREATOR` і `EXECUTORS` залишаємо, але показуємо:  
+  - Якщо є запис у `SIGNATUREHISTORY`, додаємо `SIGNER_BY`, `SIGNER_DATE`, `NOTE`.
+
+---
+
+## 🆕 ОНОВЛЕНА VIEW:
+
+```sql
+CREATE OR REPLACE VIEW V_TASKS_REPORT AS
+WITH CREATOR_INFO AS (
+    SELECT 
+        sr.SOURCE_ID,
+        COALESCE(sh.SIGNER_BY, sr.USER_ID) AS CREATOR_ID,
+        COALESCE(sh.SIGNER_DATE, NULL) AS DATE_CREATED,
+        COALESCE(sh.NOTE, NULL) AS CREATOR_NOTE,
+        NVL(sr.POSITION_ID, 'Не вказано') AS CREATOR_POSITION,
+        NVL(sr.DEPARTMENT_ID, 'Не вказано') AS CREATOR_DEPARTMENT,
+        NVL(sr.UNIT_ID, 'Не вказано') AS CREATOR_UNIT
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN SIGNATUREHISTORY sh 
+        ON sr.ID = sh.SIGNRIGHT_ID AND sr.STAGES_ID = 1
+    WHERE sr.STAGES_ID = 1
+), 
+EXECUTORS AS (
+    SELECT 
+        sr.SOURCE_ID,
+        LISTAGG(
+            COALESCE(sh.SIGNER_BY, sr.USER_ID) || 
+            ' (' || NVL(sr.POSITION_ID, 'Не вказано') || ', ' || 
+            NVL(sr.DEPARTMENT_ID, 'Не вказано') || ', ' || 
+            NVL(sr.UNIT_ID, 'Не вказано') || ')' || 
+            CASE 
+                WHEN sh.SIGNER_DATE IS NOT NULL THEN 
+                    ' ✅ ' || TO_CHAR(sh.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || 
+                    ' – ' || NVL(sh.NOTE, 'Без коментаря') 
+                ELSE '' 
+            END,
+            '<br> '
+        ) WITHIN GROUP (ORDER BY COALESCE(sh.SIGNER_DATE, SYSDATE)) AS EXECUTORS
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN SIGNATUREHISTORY sh 
+        ON sr.ID = sh.SIGNRIGHT_ID AND sr.STAGES_ID = 2
+    WHERE sr.STAGES_ID = 2
+    GROUP BY sr.SOURCE_ID
+), 
+ACTUALS AS (
+    SELECT 
+        sr.SOURCE_ID,
+        MAX(sh.SIGNER_DATE) AS ACTUAL_DATE_END,
+        MAX(sh.NOTE) AS ACTUAL_NOTE
+    FROM SIGNATURERIGHTS sr
+    JOIN SIGNATUREHISTORY sh ON sr.ID = sh.SIGNRIGHT_ID
+    WHERE sr.STAGES_ID = 3
+    GROUP BY sr.SOURCE_ID
+), 
+VIEWED_STATUS AS (
+    SELECT 
+        tv.TASK_ID,
+        MAX(tv.DATE_VIEWED) AS VIEWED_DATE
+    FROM TASK_VIEWED tv
+    WHERE tv.DATE_VIEWED BETWEEN TRUNC(SYSDATE) + INTERVAL '09:00' HOUR TO MINUTE 
+                            AND TRUNC(SYSDATE) + INTERVAL '17:00' HOUR TO MINUTE
+      AND tv.USER_ID = NVL(sys_context('APEX$SESSION','APP_USER'), USER)
+    GROUP BY tv.TASK_ID
+)
+SELECT 
+    t.ID AS TASK_ID,
+    t.DATE_CREATE,
+    COALESCE(t.TASK_CONTENT, 
+        (SELECT LISTAGG(sub.SUBTASK_CONTENT, ', ') WITHIN GROUP (ORDER BY sub.ID) 
+         FROM TASK_SUBTASKS sub 
+         WHERE sub.TASK_ID = t.ID)) AS TASK_CONTENT,
+    
+    -- Створювач
+    CASE 
+        WHEN ci.CREATOR_ID IS NOT NULL THEN 
+            ci.CREATOR_ID || ' (' || ci.CREATOR_POSITION || ', ' || ci.CREATOR_DEPARTMENT || ', ' || ci.CREATOR_UNIT || ') - ' || NVL(ci.CREATOR_NOTE, 'Без коментаря')
+        ELSE NULL 
+    END AS CREATOR,
+
+    -- Виконавці
+    e.EXECUTORS,
+
+    -- Дата планового та фактичного завершення
+    t.PLANNING_DATE_END,
+    a.ACTUAL_DATE_END,
+
+    -- Статус, підрозділ, юніт
+    ds.NAME AS STATUS,
+    dc.NAME AS DEPARTMENT,
+    uc.NAME AS UNIT,
+
+    -- Примітка завершення (із signaturehistory.stage=3)
+    a.ACTUAL_NOTE AS NOTE,
+
+    -- Ознайомлення
+    CASE 
+        WHEN v.VIEWED_DATE IS NOT NULL THEN 
+            '✅ ' || TO_CHAR(v.VIEWED_DATE, 'DD.MM.YYYY HH24:MI')
+        ELSE 
+            '❌ Не ознайомлено'
+    END AS VIEWED
+
+FROM TASKS t
+LEFT JOIN CREATOR_INFO ci ON ci.SOURCE_ID = t.ID
+LEFT JOIN EXECUTORS e ON e.SOURCE_ID = t.ID
+LEFT JOIN ACTUALS a ON a.SOURCE_ID = t.ID
+LEFT JOIN VIEWED_STATUS v ON v.TASK_ID = t.ID
+LEFT JOIN DICT_STATUS ds ON ds.ID = t.STATUS
+LEFT JOIN DEPART_CONFIRMLIST_V dc ON dc.ID = t.DEPARTMENT
+LEFT JOIN UNIT_FOR_CONFIRMLIST_V uc ON uc.ID = t.UNIT;
+```
+
+---
+
+## 🧠 Примітки:
+- `SIGNATUREHISTORY.STAGES_ID = 3` — це для фактичного завершення.
+- `SIGNATUREHISTORY.STAGES_ID = 1/2` — для створювача / виконавців.
+- `TASK_VIEWED` — дає info, чи користувач **ознайомлений на поточній зміні**.
+- `APP_USER` визначається через `sys_context`, щоб працювало у View (альтернатива `:APP_USER` в SQL).
+
+---
+
+🔧 Якщо потрібно, можу допомогти:
+- реалізувати автоматичне оновлення `TASK_VIEWED` при відкритті картки;
+- додати колонку для фільтрації по типу змін (ранішня, денна, нічна);
+- покращити шаблон виводу (HTML escaping або форматування).
+
+Хочеш підключити це у твій звіт в APEX?

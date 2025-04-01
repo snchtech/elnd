@@ -1,0 +1,80 @@
+Щоб зробити **перекреслення тексту у рядку для виконаних підзавдань** (де `actual_date_end IS NOT NULL`), найкращий варіант — **зробити це через CSS у колонці IG** або навіть вже у `VIEW`, якщо формуєш `DISPLAY_CONTENT` із HTML-тегами.
+
+---
+
+## ✅ ВАРІАНТ 1: Перекреслення через HTML-тег `<s>` (на рівні VIEW)
+
+🔹 **Онови `DISPLAY_CONTENT` у `VIEW`:**
+
+```sql
+CREATE OR REPLACE VIEW V_TASK_SUBTASKS_HIER AS
+SELECT
+    s.ID,
+    s.TASK_ID,
+    s.PARENT_ID,
+    s.SUBTASK_CONTENT,
+    s.STATUS_ID,
+    s.PLANNING_DATE_END,
+    s.ACTUAL_DATE_END,
+    s.SUBTASK_ORDER,
+    CASE 
+        WHEN s.ACTUAL_DATE_END IS NOT NULL THEN 
+            '<s>' || LPAD('  ', LEVEL - 1, '  ') || s.SUBTASK_CONTENT || '</s>'
+        ELSE 
+            LPAD('  ', LEVEL - 1, '  ') || s.SUBTASK_CONTENT
+    END AS DISPLAY_CONTENT,
+    LEVEL AS NESTING_LEVEL
+FROM TASK_SUBTASKS s
+START WITH s.PARENT_ID IS NULL
+CONNECT BY PRIOR s.ID = s.PARENT_ID
+ORDER SIBLINGS BY s.SUBTASK_ORDER;
+```
+
+🔹 **В APEX:**
+- У колонці `DISPLAY_CONTENT` → встанови:
+  - **Type:** `Display Only`
+  - **Escape special characters:** `No` ✅ (це важливо!)
+
+---
+
+## ✅ ВАРІАНТ 2: Перекреслення через CSS клас у IG (без VIEW)
+
+### 1. В колонці `SUBTASK_CONTENT` (або `DISPLAY_CONTENT`):
+- **Attributes → Advanced → Static ID:** `subtask_content_col`
+
+### 2. У JS ініціалізації IG:
+
+```javascript
+function(config) {
+  config.highlightRow = function(model, record) {
+    if (record.ACTUAL_DATE_END) {
+      return 'line-through-row';
+    }
+    return null;
+  };
+  return config;
+}
+```
+
+### 3. Додай CSS:
+
+```css
+.line-through-row td.t-Report-cell, 
+.line-through-row td {
+  text-decoration: line-through !important;
+  color: #999;
+}
+```
+
+---
+
+## ✅ Який варіант краще?
+
+| Випадок                             | Рекомендований підхід           |
+|-------------------------------------|----------------------------------|
+| Хочеш виводити текст в дереві       | ВАРІАНТ 1 (через `<s>` + `VIEW`) |
+| Хочеш візуально оформити весь рядок | ВАРІАНТ 2 (через CSS-клас)       |
+
+---
+
+🔧 Хочеш ще додати іконку 🟢/🔴 чи чекбокс замість `actual_date_end IS NOT NULL`? Можемо зробити.

@@ -1,0 +1,119 @@
+Чудовий набір вимог для інтерактивної роботи з `Interactive Grid (IG)` у Oracle APEX 👇  
+Давай реалізуємо кожен пункт **чітко і покроково**:
+
+---
+
+## ✅ 1. **Обов’язковість `subtask_content` залежно від `task_type = 2`**
+
+### 🔹 Кроки:
+
+1. Додай **Dynamic Action** на зміну `PXX_TASK_TYPE`
+   - **When:** Change
+   - **Item:** `PXX_TASK_TYPE`
+   - **True condition:** `Value = 2`
+
+2. **True Action** → `Execute JavaScript Code`:
+```javascript
+// Увімкнути required у IG для поля subtask_content
+apex.region("subtasks_ig").widget().interactiveGrid("getViews", "grid").model.columns.SUBTASK_CONTENT.required = true;
+```
+
+3. **False Action** → (тобто якщо обирається простий тип `task_type = 1`)
+```javascript
+// Зняти required
+apex.region("subtasks_ig").widget().interactiveGrid("getViews", "grid").model.columns.SUBTASK_CONTENT.required = false;
+```
+
+> 🔁 Після цього IG буде сам перевіряти при збереженні, чи заповнене поле, тільки коли `task_type = 2`.
+
+---
+
+## ✅ 2. **Підсвічування завершених підзавдань + заборона редагування**
+
+### 🔹 1. В IG → відкрити `Attributes → JavaScript Initialization Code`
+
+Вставити:
+
+```javascript
+function(config) {
+  config.initActions = function(actions) {
+    actions.forEach(function(action) {
+      action.enabled = true;
+    });
+  };
+
+  config.highlightRow = function( model, record, index ) {
+    if (record.ACTUAL_DATE_END) {
+      return "highlight-row-disabled"; // CSS class
+    }
+    return null;
+  };
+
+  return config;
+}
+```
+
+### 🔹 2. CSS
+
+Увімкни `Inline CSS` на сторінці або в `Page → CSS`:
+
+```css
+.highlight-row-disabled {
+  background-color: #fff3e0 !important; /* світло-оранжевий */
+}
+
+.highlight-row-disabled td {
+  pointer-events: none;
+  opacity: 0.6;
+}
+```
+
+> Це робить рядок візуально "завершеним", і не дозволяє клікувати по ячейках (editable fields блокуються).
+
+---
+
+## ✅ 3. **Відступи за ієрархією через `parent_id`**
+
+### 🔹 Приклад JavaScript логіки (виводити +2 пробіли на рівень):
+
+1. В IG у колонці `subtask_content`, тип → Display Only  
+2. Додай `JavaScript Expression` в колонку:
+
+```javascript
+(function(){
+  var indent = '';
+  var level = 0;
+  var parent = this.record.PARENT_ID;
+  var allRows = apex.region("subtasks_ig").widget().interactiveGrid("getViews", "grid").model._records;
+
+  // Рахуємо рівень через parent_id
+  while (parent) {
+    level++;
+    var parentRecord = allRows.find(r => r.ID === parent);
+    if (parentRecord) {
+      parent = parentRecord.PARENT_ID;
+    } else {
+      break;
+    }
+  }
+
+  for (var i = 0; i < level; i++) indent += '  '; // 2 пробіли
+  return indent + this.record.SUBTASK_CONTENT;
+
+})()
+```
+
+> ⚠️ Якщо хочеш це зробити ще на рівні PL/SQL або `VIEW` — можна виводити вже відформатовану колонку `DISPLAY_CONTENT`.
+
+---
+
+## 🔧 Опціонально:
+
+- Можна додати `Sortable` для дерева, якщо рівні складні.
+- Також можна зробити `Select List` для вибору `PARENT_ID` в IG з назвою + рівнем.
+
+---
+
+📌 Готово допомогти винести це все в шаблон або згенерувати приклад.
+
+Хочеш ще автоматично перекреслювати виконані підзавдання (через `text-decoration: line-through`)?

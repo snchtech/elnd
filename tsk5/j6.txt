@@ -1,0 +1,117 @@
+Дуже хороші питання 👇  
+Ти хочеш зробити **зручну і чисту взаємодію з полем `SUBTASK_CONTENT` в Interactive Grid**, прибравши небажане textarea inline-редагування і залишивши контрольований **inline dialog з LOV + textarea**.
+
+Давай реалізуємо це:
+
+---
+
+## ✅ 1. Як передати значення з `inline dialog` (textarea) у рядок IG
+
+### 🔹 Припустимо:
+
+- **IG static ID:** `subtasks_ig`
+- **Textarea в діалозі:** `PXX_DIALOG_TEXTAREA`
+- **Кнопка "ОК"** виконує Dynamic Action.
+
+---
+
+### ▶ На кнопку "ОК" в inline dialog:
+#### Створи `Dynamic Action` → `Execute JavaScript Code`:
+
+```javascript
+var val = $v('PXX_DIALOG_TEXTAREA');
+
+// Отримуємо модель IG
+var model = apex.region("subtasks_ig").widget().interactiveGrid("getViews", "grid").model;
+
+// Знаходимо активний рядок
+var record = model.getSelectedRecords()[0];
+if (record) {
+  model.setValue(record, "SUBTASK_CONTENT", val);
+}
+```
+
+> 🧠 Після цього можеш закривати діалог (через True Action → "Close Dialog").
+
+---
+
+## ✅ 2. Як прибрати inline textarea (яке з’являється при одиночному кліку)
+
+Це "вбудоване" редагування IG, яке можна **замінити на display-only**, або **керувати через CSS/JS**.
+
+### ВАРІАНТ 1 — перетворити на `Display Only` колонку
+
+1. У колонці `SUBTASK_CONTENT` в IG:
+   - **Type:** Display Only
+   - **Escape Special Characters:** Yes
+
+2. При `double-click` – відкривається твій dialog і вставляє значення, як описано вище.
+
+✅ Проста реалізація, 100% контроль
+
+---
+
+### ВАРІАНТ 2 — Залишити як Editable, але прибрати inline textarea
+
+Якщо все ж потрібно editable поле, але без inline textarea:
+
+1. В колонці `SUBTASK_CONTENT` → додай `CSS Class`, наприклад: `no-inline-edit`
+2. Додай CSS на сторінку:
+
+```css
+td.no-inline-edit textarea {
+  display: none !important;
+}
+
+td.no-inline-edit .a-GV-cellText {
+  pointer-events: none;
+}
+```
+
+⚠️ Це не вимикає редагування повністю, але приховує textarea і забороняє клік.
+
+---
+
+## ✅ 3. Як зробити так, щоб **`double click` по вмісту** (а не по порожній клітинці) викликав dialog
+
+1. Колонка `Display Only` або кастом render — це найкраще.
+2. Приклад кастомного HTML у колонці:
+
+```sql
+'<span class="open-subtask-dialog" data-id="' || id || '">' || SUBTASK_CONTENT || '</span>'
+```
+
+3. Додаєш `JavaScript` в `Page`:
+
+```javascript
+document.addEventListener("dblclick", function(e) {
+  if (e.target.classList.contains("open-subtask-dialog")) {
+    var id = e.target.dataset.id;
+    
+    // Встановити активний запис за id:
+    var model = apex.region("subtasks_ig").widget().interactiveGrid("getViews", "grid").model;
+    var rec = model.getRecord(id);
+    if (rec) {
+      model.selectRecords([rec], true);
+    }
+
+    apex.region("DIALOG_SUBTASK_EDIT").widget().dialog("open");
+  }
+});
+```
+
+---
+
+## 🔁 Висновок
+
+| Якщо ти хочеш…                            | Рішення                          |
+|------------------------------------------|----------------------------------|
+| Повний контроль над введенням змісту     | `Display Only` + Dialog редактор |
+| Прибрати inline textarea                 | CSS або Display Only             |
+| Зробити редагування лише по double-click | JavaScript + Custom Render       |
+
+---
+
+🔧 Хочеш — можу допомогти зробити динамічну валідацію, якщо `subtask_content` обов’язковий у режимі `task_type = 2`, або прикріпити LOV у dialog.
+
+Продовжимо?

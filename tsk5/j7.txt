@@ -1,0 +1,57 @@
+Щоб реалізувати такий `LOV` в Oracle APEX, який буде виводити **і персональні, і департаментські записи** для користувача — потрібно створити SQL-запит, який враховує обидві умови:
+
+---
+
+## ✅ Умова:
+
+Показати записи з `TASK_COLLECTIONS`, де:
+- **АБО**
+  - `department_id = :P0_USER_DEPARTMENT AND is_personal = 'N'`
+- **АБО**
+  - `creator_id = :APP_USER_ID AND is_personal = 'Y'`
+
+---
+
+## ✅ SQL-запит для LOV
+
+```sql
+SELECT collection_item_content AS display_value,
+       id AS return_value
+FROM TASK_COLLECTIONS
+WHERE (department_id = :P0_USER_DEPARTMENT AND is_personal = 'N')
+   OR (creator_id = :APP_USER_ID AND is_personal = 'Y')
+ORDER BY date_create DESC
+```
+
+---
+
+## 🧩 Як підключити в APEX LOV
+
+1. Тип елемента: **Select List**
+2. LOV type: **SQL Query (returning display/value pairs)**
+3. Вставити SQL-запит вище
+4. Не забудь **додати Items to Submit**:  
+   - `P0_USER_DEPARTMENT`
+   - `APP_USER_ID` (якщо збережений як глобальний item, інакше використовуй `:APP_USER` напряму в запиті)
+
+---
+
+## 🧠 Порада:
+
+- `is_personal` має бути `CHAR(1)` або `VARCHAR2` типу — значення `'Y'` / `'N'`.
+- Можеш додатково вивести тип у `display_value`, наприклад:
+
+```sql
+SELECT 
+  CASE 
+    WHEN is_personal = 'Y' THEN '[Моє] ' || collection_item_content
+    ELSE '[Підрозділ] ' || collection_item_content
+  END AS display_value,
+  id AS return_value
+FROM TASK_COLLECTIONS
+WHERE ...
+```
+
+---
+
+🔧 Хочеш — можу допомогти реалізувати кастомну форму редагування або LOV з пошуком по шаблонах. Готовий?

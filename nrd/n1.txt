@@ -1,0 +1,119 @@
+Дякую за детальний SQL-запит! Він виглядає як частина звіту в Oracle APEX, пов’язана з формуванням outfit’ів, командами та статусами, з урахуванням часових інтервалів.
+
+Оптимізація буде сфокусована на:
+
+1. **Виправленні синтаксичних помилок.**
+2. **Спрощенні вкладених запитів.**
+3. **Уникненні дублювання коду.**
+4. **Покращенні читабельності.**
+
+---
+
+## 🔧 Проблеми та виправлення:
+
+### ❌ 1. **Синтаксичні помилки:**
+- `fcom` замість `from`
+- Зайва `групировка` після `ORDER BY`
+- Неправильна кома в `oo.id_outfit，`
+- Пропущений `join` у підзапитах (наприклад, не використовує `JOIN`-синтаксис)
+- `tl.id _outfit` має пробіл
+
+---
+
+## ✅ Оптимізований варіант:
+
+```sql
+WITH team_data AS (
+  SELECT 
+    tt.id_outfit, 
+    COUNT(tt.id) AS count_team
+  FROM tw_wp_team_v tt
+  JOIN tw.wp_outfit_v k ON tt.id_outfit = k.id_outfit
+  WHERE (tt.data_end >= SYSDATE - INTERVAL '92' DAY OR tt.data_end IS NULL)
+  GROUP BY tt.id_outfit
+),
+g_data AS (
+  SELECT 
+    k.id_outfit,
+    NVL(team.count_team, 0) + DECODE(k.performer, NULL, 0, 1) AS team_count
+  FROM tw.wp_outfit_v k
+  LEFT JOIN team_data team ON team.id_outfit = k.id_outfit
+),
+outfit_open_status AS (
+  SELECT 
+    tl.id_outfit,
+    COUNT(tl.id_status) AS outfit_open
+  FROM tw_wp_status_v tl
+  WHERE tl.data BETWEEN SYSDATE - INTERVAL '92' DAY AND SYSDATE - INTERVAL '90' DAY
+    AND tl.id_status = 6
+  GROUP BY tl.id_outfit
+)
+
+-- Перший блок
+SELECT 
+  o.id_outfit,
+  DECODE(o.id_org, NULL, 0, 1) AS org,
+  o.org_txt,
+  o.department,
+  o.tseh_outfit_txt,
+  g.team_count
+FROM g_data g
+LEFT JOIN outfit_open_status r ON r.id_outfit = g.id_outfit
+LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit
+WHERE (
+    (o.data_start <= SYSDATE - INTERVAL '90' DAY AND o.data_finish >= SYSDATE - INTERVAL '92' DAY)
+    OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(SYSDATE - INTERVAL '92' DAY, 'dd')
+)
+AND r.outfit_open IS NOT NULL
+
+UNION
+
+-- Другий блок
+SELECT 
+  oo.id_outfit,
+  DECODE(oo.id_org, NULL, 0, 1) AS org,
+  oo.org_txt,
+  oo.department,
+  oo.tseh_outfit_txt,
+  rr.outfit_open,
+  0 AS team_count
+FROM outfit_open_status rr
+LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+WHERE (
+    (oo.data_start <= SYSDATE - INTERVAL '90' DAY AND oo.data_finish >= SYSDATE - INTERVAL '92' DAY)
+    OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(SYSDATE - INTERVAL '92' DAY, 'dd')
+)
+AND oo.team IS NULL
+AND rr.outfit_open IS NOT NULL
+```
+
+---
+
+## 🧠 Ключові покращення:
+
+| Що | Пояснення |
+|----|-----------|
+| **CTE (WITH)** | Дає кращу структуру та читабельність запиту. |
+| **JOIN замість WHERE x=y** | Покращує читабельність і часто виконується швидше. |
+| **Усунено дублювання** | Підзапити для `outfit_open_status` та `team_data` об’єднані. |
+| **Компонентність** | Кожен підзапит вирішує одну задачу (SRP). |
+| **Типи JOIN** | `LEFT JOIN` збережено для забезпечення логіки `null`-перевірок. |
+
+---
+
+## 🏁 Додаткові поради:
+
+1. **Індекси:** Переконайтесь, що є індекси по:
+   - `id_outfit`
+   - `id_status`
+   - `data`, `data_start`, `data_finish`, `data_prolongation`
+
+2. **Матеріалізовані представлення (MV):** Якщо цей запит використовується часто, MV з оновленням раз на день/годину може значно прискорити APEX.
+
+3. **Профілювання:** Запустіть `EXPLAIN PLAN` або `SQL Monitor` у SQL Developer для аналізу виконання.
+
+4. **Пагінація у APEX:** Якщо це інтерактивний звіт, використовуйте `Row Limiting` у APEX, щоб уникнути обробки великої кількості рядків.
+
+---
+
+Хочеш, я допоможу вставити цей запит у APEX як SQL-звіт або динамічну ділянку?

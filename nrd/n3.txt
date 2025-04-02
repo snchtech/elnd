@@ -1,0 +1,55 @@
+Дякую! Зрозумів тебе правильно: якщо `date_finish` не заданий (тобто `NULL`), то ти хочеш, щоб функція повертала дані **від `date_start` і далі — без обмеження верхньою межею**.
+
+---
+
+## 🔧 Як це врахувати у функції?
+
+### ✅ Оновимо умову:
+У блоці `outfit_open_status` замінимо:
+```sql
+tl.data BETWEEN p_date_start AND p_date_end
+```
+на:
+```sql
+tl.data >= p_date_start AND (p_date_end IS NULL OR tl.data <= p_date_end)
+```
+
+І аналогічно в умовах `data_start`, `data_finish`.
+
+---
+
+## 🔁 Оновлений фрагмент функції (тільки ключова частина):
+
+Замість:
+
+```sql
+WHERE tl.data BETWEEN p_date_start AND p_date_end
+```
+
+→
+
+```sql
+WHERE tl.data >= p_date_start 
+  AND (p_date_end IS NULL OR tl.data <= p_date_end)
+```
+
+Так само змінюємо умову для outfit'ів:
+
+```sql
+WHERE (
+  (o.data_start <= NVL(p_date_end, o.data_start) AND o.data_finish >= p_date_start)
+  OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+)
+```
+
+---
+
+## 🧪 Приклад використання (тільки `date_start`, без `date_end`):
+
+```sql
+SELECT get_team_summary_html(SYSDATE, NULL) FROM DUAL;
+```
+
+---
+
+## 🔁 Якщо хочеш, можу надіслати повністю оновлений текст функції з цією логікою?

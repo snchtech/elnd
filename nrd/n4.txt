@@ -1,0 +1,132 @@
+Ось повністю **оновлена версія функції `get_team_summary_html`**, яка:
+
+- приймає `p_date_start` (обов’язково) і `p_date_end` (опційно — якщо `NULL`, дані беруться "від і далі");
+- повертає HTML-рядок із бригадами та працівниками фірми й підрядників;
+- адаптована до роботи в Oracle APEX, PL/SQL, або SQL-запиті.
+
+---
+
+## ✅ Оновлений код функції:
+
+```sql
+CREATE OR REPLACE FUNCTION get_team_summary_html (
+    p_date_start IN DATE,
+    p_date_end   IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html                 CLOB;
+    v_firm_teams           NUMBER := 0;
+    v_firm_workers         NUMBER := 0;
+    v_contractor_teams     NUMBER := 0;
+    v_contractor_workers   NUMBER := 0;
+BEGIN
+    WITH team_data AS (
+        SELECT 
+            tt.id_outfit, 
+            COUNT(tt.id) AS count_team
+        FROM tw_wp_team_v tt
+        JOIN tw.wp_outfit_v k ON tt.id_outfit = k.id_outfit
+        WHERE (tt.data_end >= p_date_start OR tt.data_end IS NULL)
+        GROUP BY tt.id_outfit
+    ),
+    g_data AS (
+        SELECT 
+            k.id_outfit,
+            NVL(team.count_team, 0) + DECODE(k.performer, NULL, 0, 1) AS team_count
+        FROM tw.wp_outfit_v k
+        LEFT JOIN team_data team ON team.id_outfit = k.id_outfit
+    ),
+    outfit_open_status AS (
+        SELECT 
+            tl.id_outfit,
+            COUNT(tl.id_status) AS outfit_open
+        FROM tw_wp_status_v tl
+        WHERE tl.data >= p_date_start
+          AND (p_date_end IS NULL OR tl.data <= p_date_end)
+          AND tl.id_status = 6
+        GROUP BY tl.id_outfit
+    ),
+    full_data AS (
+        SELECT 
+            o.id_outfit,
+            DECODE(o.id_org, NULL, 0, 1) AS org,
+            g.team_count
+        FROM g_data g
+        LEFT JOIN outfit_open_status r ON r.id_outfit = g.id_outfit
+        LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit
+        WHERE (
+            (
+              o.data_start <= NVL(p_date_end, o.data_start) AND 
+              o.data_finish >= p_date_start
+            )
+            OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND r.outfit_open IS NOT NULL
+
+        UNION ALL
+
+        SELECT 
+            oo.id_outfit,
+            DECODE(oo.id_org, NULL, 0, 1) AS org,
+            0 AS team_count
+        FROM outfit_open_status rr
+        LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+        WHERE (
+            (
+              oo.data_start <= NVL(p_date_end, oo.data_start) AND 
+              oo.data_finish >= p_date_start
+            )
+            OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND oo.team IS NULL
+        AND rr.outfit_open IS NOT NULL
+    )
+    SELECT
+        SUM(CASE WHEN org = 1 THEN 1 ELSE 0 END),
+        SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END),
+        SUM(CASE WHEN org = 0 THEN 1 ELSE 0 END),
+        SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END)
+    INTO
+        v_firm_teams, v_firm_workers, v_contractor_teams, v_contractor_workers
+    FROM full_data;
+
+    -- Формування HTML-рядка
+    v_html := 
+        'бригад фірми - <span class="vl_sld">' || v_firm_teams || '</span>, працівників - <span class="vl_sld">' || v_firm_workers || '</span><br>' ||
+        'бригад підрядників - <span class="vl_sld">' || v_contractor_teams || '</span>, працівників - <span class="vl_sld">' || v_contractor_workers || '</span>';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## 🧪 Сценарії використання:
+
+### 🔹 1. Від поточного моменту і далі:
+```sql
+SELECT get_team_summary_html(SYSDATE, NULL) FROM DUAL;
+```
+
+### 🔹 2. Від 12:00 до 18:00 сьогодні:
+```sql
+SELECT get_team_summary_html(TRUNC(SYSDATE) + 12/24, TRUNC(SYSDATE) + 18/24) FROM DUAL;
+```
+
+### 🔹 3. Повний день:
+```sql
+SELECT get_team_summary_html(TRUNC(SYSDATE), TRUNC(SYSDATE + 1) - INTERVAL '1' SECOND) FROM DUAL;
+```
+
+---
+
+## 📌 Примітка:
+Можеш цю функцію використовувати у:
+- **APEX Dynamic Content** (тип: `PL/SQL Function returning CLOB`);
+- **APEX SQL Report** через `SELECT get_team_summary_html(...) FROM DUAL`;
+- **JavaScript** (якщо повертатимеш JSON — можу теж допомогти).
+
+🔹 Хочеш додатково зробити версію функції, яка повертає JSON (`CLOB`) замість HTML — для зручності інтеграції у JS/REST?

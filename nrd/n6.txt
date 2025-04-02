@@ -1,0 +1,141 @@
+Чудово! 👇 Ось **оновлена функція**, яка повертає **одночасно і кількість бригад, і кількість працівників** для заданого типу організації (`1` – фірма, `0` – підрядник), у заданому часовому інтервалі:
+
+---
+
+## ✅ Функція `get_org_stats_combo`
+
+```sql
+CREATE OR REPLACE FUNCTION get_org_stats_combo (
+    p_date_start IN DATE,
+    p_date_end   IN DATE DEFAULT NULL,
+    p_org_type   IN NUMBER -- 1 = фірма, 0 = підрядник
+) RETURN SYS.ODCIVARCHAR2LIST IS
+    v_team_count     NUMBER := 0;
+    v_worker_count   NUMBER := 0;
+BEGIN
+    WITH team_data AS (
+        SELECT 
+            tt.id_outfit, 
+            COUNT(tt.id) AS count_team
+        FROM tw_wp_team_v tt
+        JOIN tw.wp_outfit_v k ON tt.id_outfit = k.id_outfit
+        WHERE (tt.data_end >= p_date_start OR tt.data_end IS NULL)
+        GROUP BY tt.id_outfit
+    ),
+    g_data AS (
+        SELECT 
+            k.id_outfit,
+            NVL(team.count_team, 0) + DECODE(k.performer, NULL, 0, 1) AS team_count
+        FROM tw.wp_outfit_v k
+        LEFT JOIN team_data team ON team.id_outfit = k.id_outfit
+    ),
+    outfit_open_status AS (
+        SELECT 
+            tl.id_outfit,
+            COUNT(tl.id_status) AS outfit_open
+        FROM tw_wp_status_v tl
+        WHERE tl.data >= p_date_start 
+          AND (p_date_end IS NULL OR tl.data <= p_date_end)
+          AND tl.id_status = 6
+        GROUP BY tl.id_outfit
+    ),
+    full_data AS (
+        SELECT 
+            o.id_outfit,
+            DECODE(o.id_org, NULL, 0, 1) AS org,
+            g.team_count
+        FROM g_data g
+        LEFT JOIN outfit_open_status r ON r.id_outfit = g.id_outfit
+        LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit
+        WHERE (
+            (
+              o.data_start <= NVL(p_date_end, o.data_start) AND 
+              o.data_finish >= p_date_start
+            )
+            OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND r.outfit_open IS NOT NULL
+
+        UNION ALL
+
+        SELECT 
+            oo.id_outfit,
+            DECODE(oo.id_org, NULL, 0, 1) AS org,
+            0 AS team_count
+        FROM outfit_open_status rr
+        LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+        WHERE (
+            (
+              oo.data_start <= NVL(p_date_end, oo.data_start) AND 
+              oo.data_finish >= p_date_start
+            )
+            OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND oo.team IS NULL
+        AND rr.outfit_open IS NOT NULL
+    )
+    SELECT
+        COUNT(*),         -- к-сть outfit'ів (тобто бригад)
+        SUM(team_count)   -- к-сть працівників
+    INTO
+        v_team_count,
+        v_worker_count
+    FROM full_data
+    WHERE org = p_org_type;
+
+    RETURN SYS.ODCIVARCHAR2LIST(
+        TO_CHAR(NVL(v_team_count, 0)), 
+        TO_CHAR(NVL(v_worker_count, 0))
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN SYS.ODCIVARCHAR2LIST('ERR', SQLERRM);
+END;
+/
+```
+
+---
+
+## 📥 Тип повернення
+
+- Функція повертає `SYS.ODCIVARCHAR2LIST`, тобто **масив із двох значень**:
+  1. `element(1)` = кількість бригад
+  2. `element(2)` = кількість працівників
+
+> Можеш використовувати її в PL/SQL, SQL або APEX-процесі.
+
+---
+
+## 🧪 Приклади використання
+
+### 🔹 1. К-сть бригад та працівників фірми від поточного моменту і далі:
+```sql
+SELECT column_value
+FROM TABLE(get_org_stats_combo(SYSDATE, NULL, 1));
+```
+
+### 🔹 2. Зберегти у змінні в PL/SQL:
+```plsql
+DECLARE
+  v_result SYS.ODCIVARCHAR2LIST;
+BEGIN
+  v_result := get_org_stats_combo(SYSDATE, NULL, 1);
+  DBMS_OUTPUT.PUT_LINE('Бригад: ' || v_result(1));
+  DBMS_OUTPUT.PUT_LINE('Працівників: ' || v_result(2));
+END;
+```
+
+### 🔹 3. В APEX Dynamic Content (PL/SQL Function Body returning CLOB):
+```plsql
+DECLARE
+  v_data SYS.ODCIVARCHAR2LIST;
+BEGIN
+  v_data := get_org_stats_combo(:P1_START_DATE, :P1_END_DATE, 1);
+  RETURN 'Бригад фірми: <span class="vl_sld">' || v_data(1) ||
+         '</span>, Працівників: <span class="vl_sld">' || v_data(2) || '</span>';
+END;
+```
+
+---
+
+🔹 Хочеш, щоб вона повертала JSON (`CLOB`) замість масиву — для роботи з JavaScript? Можу показати і це.

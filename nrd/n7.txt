@@ -1,0 +1,103 @@
+Чудово, що ти перевірив продуктивність — це ключовий момент! Дякую, що дав чіткий сигнал — будемо працювати з **оригінальним SQL**, лише **виправимо синтаксичні помилки**, не змінюючи логіку.
+
+---
+
+## ✅ Виправлений оригінальний SQL-код:
+
+```sql
+SELECT id_outfit
+FROM (
+    SELECT 
+        o.id_outfit,
+        DECODE(o.id_org, NULL, 0, 1) AS org,
+        o.org_txt,
+        o.department, 
+        o.tseh_outfit_txt,
+        g.team_count
+    FROM (
+        SELECT 
+            k.id_outfit,
+            team.count_team + DECODE(k.performer, NULL, 0, 1) AS team_count
+        FROM (
+            SELECT 
+                tt.id_outfit, 
+                COUNT(tt.id) AS count_team 
+            FROM tw_wp_team_v tt, tw.wp_outfit_v k
+            WHERE tt.id_outfit = k.id_outfit
+              AND (tt.data_end >= (SYSDATE - INTERVAL '92' DAY) OR tt.data_end IS NULL)
+            GROUP BY tt.id_outfit
+        ) team,
+        tw.wp_outfit_v k
+        WHERE team.id_outfit = k.id_outfit
+    ) g
+    LEFT JOIN (
+        SELECT
+            tl.id_outfit,
+            COUNT(id_status) AS outfit_open 
+        FROM tw_wp_status_v tl
+        WHERE tl.data >= SYSDATE - INTERVAL '92' DAY 
+          AND tl.data <= SYSDATE - INTERVAL '90' DAY
+          AND tl.id_status = 6
+        GROUP BY tl.id_outfit
+    ) r ON r.id_outfit = g.id_outfit
+    LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit 
+    WHERE (
+        (o.data_start <= SYSDATE - INTERVAL '90' DAY 
+         AND o.data_finish >= SYSDATE - INTERVAL '92' DAY)
+        OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(SYSDATE - INTERVAL '92' DAY, 'dd')
+    )
+    AND r.outfit_open IS NOT NULL
+
+    UNION
+
+    SELECT 
+        oo.id_outfit,
+        DECODE(oo.id_org, NULL, 0, 1) AS org,
+        oo.org_txt,
+        oo.department,
+        oo.tseh_outfit_txt,
+        rr.outfit_open,
+        0 AS team_count
+    FROM (
+        SELECT
+            tl.id_outfit,
+            COUNT(id_status) AS outfit_open
+        FROM tw_wp_status_v tl
+        WHERE tl.data >= SYSDATE - INTERVAL '92' DAY
+          AND tl.data <= SYSDATE - INTERVAL '90' DAY
+          AND tl.id_status = 6
+        GROUP BY tl.id_outfit
+    ) rr
+    LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+    WHERE (
+        (oo.data_start <= SYSDATE - INTERVAL '90' DAY 
+         AND oo.data_finish >= SYSDATE - INTERVAL '92' DAY)
+        OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(SYSDATE - INTERVAL '92' DAY, 'dd')
+    )
+    AND oo.team IS NULL
+    AND rr.outfit_open IS NOT NULL
+)
+ORDER BY id_outfit;
+```
+
+---
+
+## 🔧 Основні виправлення:
+
+| 🔴 Помилка | ✅ Виправлення |
+|-----------|----------------|
+| `fcom` | замінено на `FROM` |
+| `tl.id _outfit` | виправлено на `tl.id_outfit` |
+| `）` | замінено на `)` |
+| `，` (китайська кома) | замінено на звичайну `,` |
+| `GROUP BY` після `ORDER BY` | прибрано, оскільки це синтаксична помилка |
+| Зайвий `WHERE 1=1` | залишено лише там, де має сенс |
+
+---
+
+🔍 Якщо ти хочеш використати **цей код як базу для функцій**, скажи:
+- Який результат ти хочеш отримати: `JSON`, `CLOB`, `NUMBER`, масив?
+- Які параметри: `date_start`, `date_end`, `org_type`?
+- Чи потрібно рахувати щось ще (наприклад, у розрізі департаментів або типів outfit)?
+
+Я готовий допомогти побудувати надійну функцію на базі цього запиту.

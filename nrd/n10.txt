@@ -1,0 +1,144 @@
+Окей, зробимо функцію, яка повертає **дві величини одночасно** — кількість:
+
+- **бригад** (outfit’ів),
+- **працівників** (sum team_count)
+
+...в одному виклику, **для заданого типу організації** (`1` — фірма, `0` — підрядник) і в **діапазоні дат**.
+
+---
+
+## ✅ Функція `get_outfit_stats_combo`
+
+### 🔁 Повертає `SYS.ODCIVARCHAR2LIST` (масив із двох значень: бригад, працівників)
+
+```sql
+CREATE OR REPLACE FUNCTION get_outfit_stats_combo (
+    p_date_start IN DATE,
+    p_date_end   IN DATE DEFAULT NULL,
+    p_org_type   IN NUMBER -- 1 = фірма, 0 = підрядник
+) RETURN SYS.ODCIVARCHAR2LIST IS
+    v_team_count     NUMBER := 0;
+    v_worker_count   NUMBER := 0;
+BEGIN
+    SELECT
+        COUNT(*),         -- к-сть outfit'ів (тобто бригад)
+        SUM(team_count)   -- к-сть працівників
+    INTO
+        v_team_count,
+        v_worker_count
+    FROM (
+        SELECT 
+            o.id_outfit,
+            DECODE(o.id_org, NULL, 0, 1) AS org,
+            g.team_count
+        FROM (
+            SELECT 
+                k.id_outfit,
+                team.count_team + DECODE(k.performer, NULL, 0, 1) AS team_count
+            FROM (
+                SELECT 
+                    tt.id_outfit, 
+                    COUNT(tt.id) AS count_team 
+                FROM tw_wp_team_v tt, tw.wp_outfit_v k
+                WHERE tt.id_outfit = k.id_outfit
+                  AND (tt.data_end >= p_date_start OR tt.data_end IS NULL)
+                GROUP BY tt.id_outfit
+            ) team,
+            tw.wp_outfit_v k
+            WHERE team.id_outfit = k.id_outfit
+        ) g
+        LEFT JOIN (
+            SELECT
+                tl.id_outfit,
+                COUNT(id_status) AS outfit_open 
+            FROM tw_wp_status_v tl
+            WHERE tl.data >= p_date_start
+              AND (p_date_end IS NULL OR tl.data <= p_date_end)
+              AND tl.id_status = 6
+            GROUP BY tl.id_outfit
+        ) r ON r.id_outfit = g.id_outfit
+        LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit 
+        WHERE (
+            (o.data_start <= NVL(p_date_end, o.data_start) 
+             AND o.data_finish >= p_date_start)
+            OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND r.outfit_open IS NOT NULL
+
+        UNION ALL
+
+        SELECT 
+            oo.id_outfit,
+            DECODE(oo.id_org, NULL, 0, 1) AS org,
+            0 AS team_count
+        FROM (
+            SELECT
+                tl.id_outfit,
+                COUNT(id_status) AS outfit_open
+            FROM tw_wp_status_v tl
+            WHERE tl.data >= p_date_start
+              AND (p_date_end IS NULL OR tl.data <= p_date_end)
+              AND tl.id_status = 6
+            GROUP BY tl.id_outfit
+        ) rr
+        LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+        WHERE (
+            (oo.data_start <= NVL(p_date_end, oo.data_start) 
+             AND oo.data_finish >= p_date_start)
+            OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND oo.team IS NULL
+        AND rr.outfit_open IS NOT NULL
+    )
+    WHERE org = p_org_type;
+
+    RETURN SYS.ODCIVARCHAR2LIST(
+        TO_CHAR(NVL(v_team_count, 0)), 
+        TO_CHAR(NVL(v_worker_count, 0))
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN SYS.ODCIVARCHAR2LIST('ERR', SQLERRM);
+END;
+/
+```
+
+---
+
+## 🧪 Приклади використання:
+
+### 1. 📆 Фірма – поточний момент і далі:
+```sql
+SELECT column_value
+FROM TABLE(get_outfit_stats_combo(SYSDATE, NULL, 1));
+```
+
+### 2. ⏰ Підрядник – 12:00 до 18:00:
+```sql
+SELECT column_value
+FROM TABLE(get_outfit_stats_combo(TRUNC(SYSDATE) + 12/24, TRUNC(SYSDATE) + 18/24, 0));
+```
+
+### 3. 📅 Фірма – весь день:
+```sql
+SELECT column_value
+FROM TABLE(get_outfit_stats_combo(TRUNC(SYSDATE), TRUNC(SYSDATE + 1) - INTERVAL '1' SECOND, 1));
+```
+
+---
+
+## ✅ Як дістати значення окремо у PL/SQL:
+
+```plsql
+DECLARE
+  v_stats SYS.ODCIVARCHAR2LIST;
+BEGIN
+  v_stats := get_outfit_stats_combo(SYSDATE, NULL, 1);
+  DBMS_OUTPUT.PUT_LINE('Бригад: ' || v_stats(1));
+  DBMS_OUTPUT.PUT_LINE('Працівників: ' || v_stats(2));
+END;
+```
+
+---
+
+Хочеш такий самий варіант у форматі **JSON** (`CLOB`)? Це зручно для REST/JavaScript.

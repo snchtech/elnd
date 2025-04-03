@@ -1,0 +1,128 @@
+Так, ти **можеш написати окрему функцію**, яка:
+
+### 🔹 Приймає параметри:
+- `p_date_start` – початок періоду;
+- `p_date_end` – кінець періоду (може бути `NULL`);
+- `p_org_type` – `1` для фірми, `0` для підрядників;
+- `p_stat_type` – `'TEAM'` або `'WORKER'`, тобто що саме рахувати.
+
+---
+
+## ✅ Функція `get_outfit_stat`
+
+```sql
+CREATE OR REPLACE FUNCTION get_outfit_stat (
+    p_date_start IN DATE,
+    p_date_end   IN DATE DEFAULT NULL,
+    p_org_type   IN NUMBER,      -- 1 = фірма, 0 = підрядник
+    p_stat_type  IN VARCHAR2     -- 'TEAM' або 'WORKER'
+) RETURN NUMBER IS
+    v_result NUMBER := 0;
+BEGIN
+    SELECT
+        CASE 
+            WHEN p_stat_type = 'TEAM' THEN COUNT(*)
+            WHEN p_stat_type = 'WORKER' THEN SUM(team_count)
+        END
+    INTO v_result
+    FROM (
+        SELECT 
+            o.id_outfit,
+            DECODE(o.id_org, NULL, 0, 1) AS org,
+            g.team_count
+        FROM (
+            SELECT 
+                k.id_outfit,
+                team.count_team + DECODE(k.performer, NULL, 0, 1) AS team_count
+            FROM (
+                SELECT 
+                    tt.id_outfit, 
+                    COUNT(tt.id) AS count_team 
+                FROM tw_wp_team_v tt, tw.wp_outfit_v k
+                WHERE tt.id_outfit = k.id_outfit
+                  AND (tt.data_end >= p_date_start OR tt.data_end IS NULL)
+                GROUP BY tt.id_outfit
+            ) team,
+            tw.wp_outfit_v k
+            WHERE team.id_outfit = k.id_outfit
+        ) g
+        LEFT JOIN (
+            SELECT
+                tl.id_outfit,
+                COUNT(id_status) AS outfit_open 
+            FROM tw_wp_status_v tl
+            WHERE tl.data >= p_date_start
+              AND (p_date_end IS NULL OR tl.data <= p_date_end)
+              AND tl.id_status = 6
+            GROUP BY tl.id_outfit
+        ) r ON r.id_outfit = g.id_outfit
+        LEFT JOIN tw.wp_outfit@to_asics10 o ON o.id_outfit = g.id_outfit 
+        WHERE (
+            (o.data_start <= NVL(p_date_end, o.data_start) 
+             AND o.data_finish >= p_date_start)
+            OR TRUNC(o.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND r.outfit_open IS NOT NULL
+
+        UNION ALL
+
+        SELECT 
+            oo.id_outfit,
+            DECODE(oo.id_org, NULL, 0, 1) AS org,
+            0 AS team_count
+        FROM (
+            SELECT
+                tl.id_outfit,
+                COUNT(id_status) AS outfit_open
+            FROM tw_wp_status_v tl
+            WHERE tl.data >= p_date_start
+              AND (p_date_end IS NULL OR tl.data <= p_date_end)
+              AND tl.id_status = 6
+            GROUP BY tl.id_outfit
+        ) rr
+        LEFT JOIN tw.wp_outfit@to_asics10 oo ON oo.id_outfit = rr.id_outfit
+        WHERE (
+            (oo.data_start <= NVL(p_date_end, oo.data_start) 
+             AND oo.data_finish >= p_date_start)
+            OR TRUNC(oo.data_prolongation, 'dd') >= TRUNC(p_date_start, 'dd')
+        )
+        AND oo.team IS NULL
+        AND rr.outfit_open IS NOT NULL
+    )
+    WHERE org = p_org_type;
+
+    RETURN NVL(v_result, 0);
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN -1;
+END;
+/
+```
+
+---
+
+## 🧪 Приклади виклику:
+
+### 1. 📆 Від поточного моменту і далі (фірма, кількість бригад):
+```sql
+SELECT get_outfit_stat(SYSDATE, NULL, 1, 'TEAM') FROM DUAL;
+```
+
+### 2. ⏰ Від 12:00 до 18:00 сьогодні (працівники фірми):
+```sql
+SELECT get_outfit_stat(TRUNC(SYSDATE) + 12/24, TRUNC(SYSDATE) + 18/24, 1, 'WORKER') FROM DUAL;
+```
+
+### 3. 📅 За день (бригади підрядників):
+```sql
+SELECT get_outfit_stat(TRUNC(SYSDATE), TRUNC(SYSDATE + 1) - INTERVAL '1' SECOND, 0, 'TEAM') FROM DUAL;
+```
+
+---
+
+## 🧩 Як використовувати:
+- у APEX (динамічний SQL / PL/SQL блок),
+- у звітах (виводити значення),
+- у REST або JavaScript (можу допомогти з JSON-версією).
+
+Хочеш версію, яка повертає відразу дві цифри в одному виклику (`ODCIVARCHAR2LIST` або JSON)?

@@ -1,0 +1,100 @@
+Чудово, давай реалізуємо це за **варіантом 3**: ти передаєш лише **режим фільтрації** (`:P10_MODE` або щось подібне), а у фоні викликається **функція**, яка повертає `record_id`s у вигляді рядка через кому (`VARCHAR2`), і використовується в запиті `WHERE id IN (...)`.
+
+---
+
+## 🧠 Ціль:
+Написати PL/SQL-функцію, яка повертає список `ID` через кому, використовуючи ту саму логіку:
+
+- `creator_by` з певного view
+- `SIGNATURERIGHTS.department_id`
+- `SIGNATUREHISTORY.signer_by`
+
+---
+
+## ✅ Створення функції: `get_related_record_ids`
+
+```sql
+CREATE OR REPLACE FUNCTION get_related_record_ids (
+    p_user_id        NUMBER,
+    p_filter_dept_id NUMBER
+) RETURN VARCHAR2 IS
+    l_ids    VARCHAR2(32767);
+BEGIN
+    SELECT LISTAGG(s.page_list_id, ',') WITHIN GROUP (ORDER BY s.page_list_id)
+      INTO l_ids
+      FROM source s
+     WHERE 
+           s.creator_by IN (
+               SELECT u.user_id 
+               FROM my_user_filter_view u 
+               WHERE u.user_id = p_user_id
+           )
+        OR EXISTS (
+            SELECT 1
+            FROM signaturerights r
+            WHERE r.source_id = s.id
+              AND r.department_id = p_filter_dept_id
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM signaturehistory h
+            JOIN signaturerights r ON r.id = h.signright_id
+            WHERE r.source_id = s.id
+              AND h.signer_by = p_user_id
+        );
+
+    RETURN l_ids;
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+END;
+```
+
+---
+
+## 🧪 Як використати у SQL-запиті IR (Interactive Report)
+
+На стороні звіту, у SQL:
+
+```sql
+SELECT *
+FROM your_main_table
+WHERE instr(',' || get_related_record_ids(:G_USER_ID, :G_DEPT_ID) || ',', ',' || id || ',') > 0
+```
+
+🔸 або, якщо у тебе вже доступна `apex_string.split` (починаючи з APEX 19.x):
+
+```sql
+SELECT *
+FROM your_main_table
+WHERE id IN (
+    SELECT TO_NUMBER(TRIM(COLUMN_VALUE))
+    FROM TABLE(apex_string.split(get_related_record_ids(:G_USER_ID, :G_DEPT_ID), ','))
+)
+```
+
+---
+
+## 🧩 Пояснення:
+| Частина | Пояснення |
+|--------|-----------|
+| `p_user_id` | ID поточного користувача (може бути `:APP_USER_ID`, `:G_USER_ID` тощо) |
+| `p_filter_dept_id` | department, який використовується для фільтрації |
+| `LISTAGG(..., ',')` | Склеює всі `page_list_id` через кому |
+| `INSTR(... , id , ...)` | Простий спосіб перевірити, чи входить `id` до списку |
+| `apex_string.split` | Альтернатива, що дозволяє перетворити рядок у список |
+
+---
+
+## ⚠️ Зауваження:
+- Якщо `LISTAGG` перевищить 32k символів — буде помилка. У цьому разі краще використовувати `APEX_COLLECTION` або `GTT`.
+- У `IR` також обмеж частину, щоб не перевантажувати UI: `ROWNUM < 500`, наприклад.
+
+---
+
+Хочеш — можу одразу адаптувати до твого APEX Application, якщо даси:
+- точну назву таблиці/поля ID
+- як називаються твої page items (`:G_USER_ID`, `:P10_MODE` тощо)
+
+Хочеш реалізувати це динамічно — можу показати, як викликати `get_related_record_ids` **залежно від режиму**, а не завжди.

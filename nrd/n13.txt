@@ -1,0 +1,149 @@
+Супер! Ось **повна функція `get_all_outfit_stats_html`**, яка:
+
+---
+
+## ✅ Що робить:
+
+- Визначає 3 періоди:
+  1. **Поточний момент і далі**  
+  2. **Поточна зміна (06–14, 14–22, 22–06)**  
+  3. **Сьогодні (00:00 – SYSDATE)**
+- Обчислює для кожного періоду:
+  - Кількість бригад та працівників **фірми (org = 1)**
+  - Кількість бригад та працівників **підрядників (org = 0)**
+- Враховує фільтри `p_department`, `p_unit`
+- Повертає красиво згенерований **HTML-блок для APEX**
+
+---
+
+## ✅ Функція `get_all_outfit_stats_html`
+
+```sql
+CREATE OR REPLACE FUNCTION get_all_outfit_stats_html (
+    p_department IN VARCHAR2 DEFAULT NULL,
+    p_unit       IN VARCHAR2 DEFAULT NULL
+) RETURN CLOB IS
+    v_html       CLOB := '';
+    v_stats      SYS.ODCIVARCHAR2LIST;
+    
+    -- Зміна
+    v_shift_start DATE;
+    v_shift_end   DATE;
+BEGIN
+    ----------------------------------------------------------------
+    -- Визначення поточної зміни
+    ----------------------------------------------------------------
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 6/24;
+        v_shift_end := TRUNC(SYSDATE) + 14/24;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 14/24;
+        v_shift_end := TRUNC(SYSDATE) + 22/24;
+    ELSE
+        IF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+            v_shift_start := TRUNC(SYSDATE) + 22/24;
+            v_shift_end := TRUNC(SYSDATE + 1) + 6/24;
+        ELSE
+            v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+            v_shift_end := TRUNC(SYSDATE) + 6/24;
+        END IF;
+    END IF;
+
+    ----------------------------------------------------------------
+    -- HTML: Поточний момент
+    ----------------------------------------------------------------
+    v_html := v_html || '<b>На даний момент:</b><br>';
+    v_stats := get_outfit_stats_combo(SYSDATE, NULL, 1, p_department, p_unit);
+    v_html := v_html || 'бригад фірми - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br>';
+    v_stats := get_outfit_stats_combo(SYSDATE, NULL, 0, p_department, p_unit);
+    v_html := v_html || 'бригад підрядників - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br><br>';
+
+    ----------------------------------------------------------------
+    -- HTML: Поточна зміна
+    ----------------------------------------------------------------
+    v_html := v_html || '<b>За зміну (' || TO_CHAR(v_shift_start, 'HH24:MI') || ' – ' || TO_CHAR(v_shift_end, 'HH24:MI') || '):</b><br>';
+    v_stats := get_outfit_stats_combo(v_shift_start, v_shift_end, 1, p_department, p_unit);
+    v_html := v_html || 'бригад фірми - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br>';
+    v_stats := get_outfit_stats_combo(v_shift_start, v_shift_end, 0, p_department, p_unit);
+    v_html := v_html || 'бригад підрядників - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br><br>';
+
+    ----------------------------------------------------------------
+    -- HTML: За сьогодні
+    ----------------------------------------------------------------
+    v_html := v_html || '<b>За сьогодні:</b><br>';
+    v_stats := get_outfit_stats_combo(TRUNC(SYSDATE), SYSDATE, 1, p_department, p_unit);
+    v_html := v_html || 'бригад фірми - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br>';
+    v_stats := get_outfit_stats_combo(TRUNC(SYSDATE), SYSDATE, 0, p_department, p_unit);
+    v_html := v_html || 'бригад підрядників - <span class="vl_sld">' || v_stats(1) || 
+              '</span>, працівників - <span class="vl_sld">' || v_stats(2) || '</span><br>';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## 📌 Для цього потрібно оновити і `get_outfit_stats_combo`
+
+### Додай `p_department`, `p_unit`:
+
+```sql
+CREATE OR REPLACE FUNCTION get_outfit_stats_combo (
+    p_date_start IN DATE,
+    p_date_end   IN DATE DEFAULT NULL,
+    p_org_type   IN NUMBER,
+    p_department IN VARCHAR2 DEFAULT NULL,
+    p_unit       IN VARCHAR2 DEFAULT NULL
+) RETURN SYS.ODCIVARCHAR2LIST IS
+-- ...
+    -- Всередині запиту в WHERE:
+    AND (:p_department IS NULL OR o.department = :p_department)
+    AND (:p_unit IS NULL OR o.unit = :p_unit)
+-- ...
+```
+
+---
+
+## 🧩 Як використовувати в APEX
+
+### 1. **Dynamic Content Region** (PL/SQL Function returning CLOB)
+
+```plsql
+BEGIN
+  RETURN get_all_outfit_stats_html(:P1_DEPARTMENT, :P1_UNIT);
+END;
+```
+
+---
+
+### 2. **Select List Items**:
+- `P1_DEPARTMENT`:
+```sql
+SELECT DISTINCT department d, department r FROM tw.wp_outfit@to_asics10 ORDER BY 1
+```
+
+- `P1_UNIT` (залежний):
+```sql
+SELECT DISTINCT unit d, unit r 
+FROM tw.wp_outfit@to_asics10 
+WHERE (:P1_DEPARTMENT IS NULL OR department = :P1_DEPARTMENT)
+ORDER BY 1
+```
+
+---
+
+### 3. **Кнопка "Скинути":**
+- **Dynamic Action:** Set Value = NULL для `P1_DEPARTMENT`, `P1_UNIT`, потім `Refresh` регіону.
+
+---
+
+Готово 🔥! Хочеш, я зроблю приклад UI-макету або шаблон регіонів у стилі APEX (із кнопками, заголовками тощо)?

@@ -1,0 +1,119 @@
+Окей! Ось **макет сторінки APEX** для реалізації функціонального звіту по бригадам і працівникам з фільтрами `department` та `unit`.
+
+---
+
+## 🧩 Загальний вигляд
+
+### 🧱 Сторінка APEX складається з:
+
+| Елемент | Тип | ID / Name | Призначення |
+|--------|-----|------------|-------------|
+| Регіон  | Static Content / Dynamic Content | `rpt_stats` | Відображення результатів |
+| Item   | Select List | `P1_DEPARTMENT` | Вибір відділу |
+| Item   | Select List | `P1_UNIT` | Вибір unit (залежить від відділу) |
+| Button | Button | `RESET_FILTERS` | Скинути фільтри |
+
+---
+
+## 🎛️ Фільтри
+
+### 🔹 P1_DEPARTMENT (Select List)
+
+- **Label**: Відділ
+- **Type**: Select List
+- **List of Values:**
+```sql
+SELECT DISTINCT department d, department r 
+FROM tw.wp_outfit@to_asics10
+ORDER BY 1
+```
+- **Display Null Value**: Так (текст: `- Усі відділи -`)
+
+---
+
+### 🔹 P1_UNIT (Select List)
+
+- **Label**: Підрозділ (Unit)
+- **Type**: Select List
+- **List of Values:**
+```sql
+SELECT DISTINCT unit d, unit r 
+FROM tw.wp_outfit@to_asics10
+WHERE (:P1_DEPARTMENT IS NULL OR department = :P1_DEPARTMENT)
+ORDER BY 1
+```
+- **Display Null Value**: Так (`- Усі unit -`)
+- **Cascading LOV Parent Item**: `P1_DEPARTMENT`
+
+---
+
+### 🔘 Button "Скинути фільтри"
+
+- **Name**: `RESET_FILTERS`
+- **Action**: **Defined by Dynamic Action**
+
+---
+
+## 🔄 Dynamic Action для кнопки "Скинути фільтри"
+
+1. **Name**: `Reset Filters`
+2. **True Action #1**: Set Value → NULL  
+   - Items to Set: `P1_DEPARTMENT`, `P1_UNIT`
+3. **True Action #2**: Refresh  
+   - Selection Type: Region  
+   - Region: `rpt_stats`
+
+---
+
+## 📊 Регіон результатів `rpt_stats`
+
+- **Region Type**: Dynamic Content
+- **PL/SQL Function returning CLOB**
+- **Source Code:**
+```plsql
+BEGIN
+  RETURN get_all_outfit_stats_html(:P1_DEPARTMENT, :P1_UNIT);
+END;
+```
+- **Static ID**: `rpt_stats` (щоб можна було оновлювати через Dynamic Action)
+
+---
+
+## 💄 HTML + CSS (необов'язково)
+
+Якщо хочеш візуально виділити блоки, можеш обгорнути кожен період у `div`, наприклад:
+
+```html
+<div class="stat-block">
+  <b>На даний момент:</b><br>
+  ...
+</div>
+```
+
+### Стилі (в App CSS):
+```css
+.stat-block {
+  padding: 1rem;
+  background: #f8f8f8;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.vl_sld {
+  font-weight: bold;
+  color: #0076d6;
+}
+```
+
+---
+
+## ✅ Підсумок
+
+🔹 Ти отримаєш інтерактивну APEX-сторінку:
+- з **фільтрами** по відділу та підрозділу;
+- з **трьома блоками статистики** (поточна, за зміну, за день);
+- з **динамічним оновленням** при зміні фільтрів або при скиданні.
+
+---
+
+🔧 Хочеш — можу допомогти експортувати цю сторінку в APEX Builder (JSON), щоб імпортувати напряму.

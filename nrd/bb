@@ -1,0 +1,90 @@
+Зрозуміло, ви хочете створити SQL-запит для отримання структурованого звіту з підрахунками, де для кожного періоду часу ("Зараз", "З початку доби", "З початку зміни") будуть підраховані різні значення (бригади та люди фірм та підрядників), використовуючи `LEFT JOIN`. Ось як можна організувати ваш SQL-запит для створення такої структури в **SQL View**.
+
+Ми можемо використати умовні агрегати, щоб порахувати бригади та людей в залежності від періоду часу та типу організації (фірма чи підрядник). Використаємо `LEFT JOIN` для з'єднання таблиць і вибору значень по кожному типу організації та часу.
+
+### SQL View для підрахунку та структури звіту
+
+Припустимо, у вас є функція для підрахунку кількості бригад і людей для кожного періоду часу. Ось як це можна реалізувати:
+
+```sql
+CREATE VIEW my_report_view AS
+SELECT
+    period.time_period,  -- період часу
+    COALESCE(SUM(CASE WHEN org_type = 1 THEN 1 ELSE 0 END), 0) AS brigades_firm,  -- Бригад фірми
+    COALESCE(SUM(CASE WHEN org_type = 0 THEN 1 ELSE 0 END), 0) AS brigades_subcontractor,  -- Бригад підрядників
+    COALESCE(SUM(CASE WHEN org_type = 1 AND is_person = 1 THEN 1 ELSE 0 END), 0) AS people_firm,  -- Людей фірми
+    COALESCE(SUM(CASE WHEN org_type = 0 AND is_person = 1 THEN 1 ELSE 0 END), 0) AS people_subcontractor  -- Людей підрядників
+FROM (
+    -- Частина для отримання різних періодів часу
+    SELECT 'Зараз' AS time_period, 1 AS org_type, 0 AS is_person, id_outfit FROM tw_wp_outfit@to_asics10 WHERE data_start <= SYSDATE - INTERVAL '90' DAY AND data_finish >= SYSDATE - INTERVAL '92' DAY
+    UNION ALL
+    SELECT 'З початку доби' AS time_period, 1 AS org_type, 0 AS is_person, id_outfit FROM tw_wp_outfit@to_asics10 WHERE TRUNC(data_prolongation, 'dd') >= TRUNC(SYSDATE - INTERVAL '92' DAY, 'dd')
+    UNION ALL
+    SELECT 'З початку зміни' AS time_period, 1 AS org_type, 0 AS is_person, id_outfit FROM tw_wp_outfit@to_asics10 WHERE data_prolongation >= (SYSDATE - INTERVAL '92' DAY)
+) period
+LEFT JOIN (
+    -- Приклад того, як можна обчислити бригади та людей
+    SELECT
+        tt.id_outfit,
+        CASE WHEN k.id_org IS NULL THEN 0 ELSE 1 END AS org_type,  -- Фірма чи підрядник
+        CASE WHEN tt.performer IS NULL THEN 0 ELSE 1 END AS is_person  -- Людина чи ні
+    FROM tw_wp_team_v tt
+    LEFT JOIN tw.wp_outfit_v k ON tt.id_outfit = k.id_outfit
+    WHERE tt.data_end >= (SYSDATE - INTERVAL '92' DAY) OR tt.data_end IS NULL
+) team
+ON period.id_outfit = team.id_outfit
+GROUP BY period.time_period
+ORDER BY period.time_period;
+```
+
+### Опис запиту:
+
+1. **Періоди часу:** У цьому запиті ми створюємо окремі записи для кожного періоду часу:
+   - `'Зараз'`: Вибираються дані, де дата початку (data_start) більша або рівна поточній даті мінус 90 днів, а дата завершення (data_finish) більша або рівна поточній даті мінус 92 дні.
+   - `'З початку доби'`: Вибираються дані, де дата продовження (data_prolongation) більша або рівна поточній даті мінус 92 дні.
+   - `'З початку зміни'`: Тут використовується дата продовження, яка також більша або рівна поточній даті мінус 92 дні.
+   
+2. **Тип організації та люди:** Вибирається значення типу організації (`org_type`), а також визначається, чи є це людина чи бригада (`is_person`), використовуючи умови `CASE` для бригад фірми, підрядників і людей.
+
+3. **LEFT JOIN:** З'єднання періодів часу з командою, де враховуються тільки ті записи, де дані з таблиці команд існують (по `id_outfit`).
+
+4. **Підрахунки:** Підраховуємо бригади та людей для фірм і підрядників за допомогою `SUM(CASE WHEN ...)`.
+
+5. **COALESCE:** Використовуємо `COALESCE`, щоб замінити `NULL` на 0, якщо немає відповідних значень для певного підрахунку.
+
+### Структура звіту:
+
+| Період            | Бригад фірми | Бригад підрядників | Людей фірми | Людей підрядників |
+|-------------------|--------------|--------------------|-------------|-------------------|
+| Зараз             | ...          | ...                | ...         | ...               |
+| З початку доби    | ...          | ...                | ...         | ...               |
+| З початку зміни   | ...          | ...                | ...         | ...               |
+
+### Як працює цей запит:
+
+- Кожен рядок звіту буде представляти певний період часу (Зараз, З початку доби, З початку зміни).
+- Для кожного періоду часу підраховуються бригади фірми, бригади підрядників, люди фірми та люди підрядників, використовуючи умови `CASE` в `SUM`.
+- В результаті ви отримаєте підсумкові дані, які можна використовувати у вашому звіті.
+
+### Функція для підрахунку чисел
+
+Якщо вам потрібна функція для підрахунку значень, ви можете створити окрему PL/SQL функцію, яка приймає необхідні аргументи (наприклад, тип організації, період часу і т. д.) та повертає потрібні числа. Ось приклад такої функції:
+
+```sql
+CREATE OR REPLACE FUNCTION calculate_brigades_and_people (
+    p_time_period IN VARCHAR2,
+    p_org_type IN NUMBER
+) RETURN NUMBER IS
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*)
+    INTO v_count
+    FROM tw_wp_team_v tt
+    WHERE tt.time_period = p_time_period
+    AND tt.org_type = p_org_type;
+    
+    RETURN v_count;
+END;
+```
+
+Цю функцію можна викликати в SQL-запиті для більш гнучкого підрахунку.

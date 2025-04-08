@@ -1,0 +1,86 @@
+Окей ✅ Згідно твоєї view, створюємо **PL/SQL-функцію**, яка приймає:
+- `p_unit` — номер юніта (0, 1, 2)
+- `p_departments` — список підрозділів (`'DEP1:DEP2'`), але за замовчуванням обробляє всі
+
+---
+
+## 📌 Формат HTML-виводу:
+```
+По Unit: 1  
+100 бригад Фірма, 20 Підрядники  
+1000 чол. Фірма, 50 Підрядники
+```
+
+---
+
+## ✅ Функція `get_unit_quick_stats`
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit IN NUMBER,
+    p_departments IN VARCHAR2 DEFAULT NULL -- 'DEP1:DEP2'
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    TYPE dep_table IS TABLE OF VARCHAR2(4000);
+    v_dep_tbl dep_table := apex_string.split(p_departments, ':');
+BEGIN
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 1 THEN 1 END),
+      COUNT(CASE WHEN org = 0 THEN 1 END)
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl);
+
+    -- Люди
+    SELECT 
+      SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END),
+      SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END)
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl);
+
+    v_html := 'По Unit: ' || p_unit || '<br>';
+    v_html := v_html || v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>';
+    v_html := v_html || v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## 🧪 Приклад використання
+
+### У PL/SQL Dynamic Content або Dynamic Action:
+
+```plsql
+BEGIN
+  RETURN get_unit_quick_stats(1, 'DEP1:DEP2');
+END;
+```
+
+---
+
+## 🧩 Примітки
+
+- `your_view` — заміни на фактичну назву твого view (наприклад, `V_OUTFIT_STATS`)
+- Якщо не передано департаменти — фільтр не застосовується (`показує всі`)
+- `org = 1` — фірма, `org = 0` — підрядник (згідно твоєї логіки)
+
+---
+
+Хочеш — можу одразу додати цю функцію до звіту по кліку або дати версію з вибором юніта зі сторінки.

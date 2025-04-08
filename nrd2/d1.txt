@@ -1,0 +1,154 @@
+Дякую за фото та повний опис 🙌 Ти хочеш реалізувати **матричний звіт** у вигляді:
+
+| Часовий період      | Тип даних           | Unit 1 | Unit 2 | Unit 3 | Всього |
+|---------------------|---------------------|--------|--------|--------|--------|
+| Зараз               | Бригад фірми        | ...    | ...    | ...    | ...    |
+|                     | Бригад підрядників  | ...    | ...    | ...    | ...    |
+|                     | Людей фірми         | ...    | ...    | ...    | ...    |
+|                     | Людей підрядників   | ...    | ...    | ...    | ...    |
+| З початку доби      | ...                 |        |        |        |        |
+| З початку зміни     | ...                 |        |        |        |        |
+
+✅ Усе це на основі твоєї `VIEW` і з можливістю фільтрації.
+
+---
+
+## 🔧 Що потрібно зробити:
+
+### ✅ 1. Створити функцію `get_unit_matrix_data(p_start, p_end)`
+
+Вона має повертати **матрицю у форматі:**
+```sql
+SELECT 
+  time_period, 
+  data_type,        -- 'Бригад фірми', 'Людей підрядників', тощо
+  unit,
+  value
+FROM ...
+```
+
+### ✅ 2. Використати `Pivot SQL` у APEX звіті (або PL/SQL HTML Table, якщо потрібен гнучкий вигляд)
+
+---
+
+## 🧠 Основна ідея:
+
+### 1. Ти маєш дані у вигляді:
+```sql
+SELECT unit, org, team_count, COUNT(*) as outfit_count
+FROM your_view
+WHERE data_start BETWEEN :p_start AND :p_end
+GROUP BY unit, org;
+```
+
+Далі будуєш:
+
+- **`org = 1`** → фірма
+- **`org = 0`** → підрядники
+
+---
+
+## ✅ Приклад функції `get_unit_matrix_html(p_start, p_end, label)`
+
+```sql
+CREATE OR REPLACE FUNCTION get_unit_matrix_html (
+  p_start IN DATE,
+  p_end   IN DATE,
+  p_label IN VARCHAR2
+) RETURN CLOB IS
+  v_html      CLOB := '';
+  v_row       CLOB;
+  v_unit1     NUMBER := 0;
+  v_unit2     NUMBER := 0;
+  v_unit3     NUMBER := 0;
+  v_total     NUMBER := 0;
+BEGIN
+  -- Бригад фірми
+  SELECT 
+    SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+    SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+    SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+    COUNT(*)
+  INTO v_unit1, v_unit2, v_unit3, v_total
+  FROM your_view
+  WHERE org = 1 AND data_start BETWEEN p_start AND p_end;
+
+  v_html := v_html || '<tr><td rowspan="4">' || p_label || '</td><td>Бригад фірми</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+  -- Бригад підрядників
+  SELECT 
+    SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+    SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+    SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+    COUNT(*)
+  INTO v_unit1, v_unit2, v_unit3, v_total
+  FROM your_view
+  WHERE org = 0 AND data_start BETWEEN p_start AND p_end;
+
+  v_html := v_html || '<tr><td>Бригад підрядників</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+  -- Людей фірми
+  SELECT 
+    SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+    SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+    SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+    SUM(team_count)
+  INTO v_unit1, v_unit2, v_unit3, v_total
+  FROM your_view
+  WHERE org = 1 AND data_start BETWEEN p_start AND p_end;
+
+  v_html := v_html || '<tr><td>Людей фірми</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+  -- Людей підрядників
+  SELECT 
+    SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+    SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+    SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+    SUM(team_count)
+  INTO v_unit1, v_unit2, v_unit3, v_total
+  FROM your_view
+  WHERE org = 0 AND data_start BETWEEN p_start AND p_end;
+
+  v_html := v_html || '<tr><td>Людей підрядників</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+  RETURN v_html;
+END;
+/
+```
+
+---
+
+## ✅ Потім на APEX-сторінці:
+
+### Створюєш `Dynamic Content Region` з кодом:
+```plsql
+DECLARE
+  v_html CLOB;
+BEGIN
+  v_html := '<table border="1" cellpadding="5" cellspacing="0">';
+  v_html := v_html || '<tr><th>Час</th><th>Тип</th><th>Unit 1</th><th>Unit 2</th><th>Unit 3</th><th>Всього</th></tr>';
+
+  -- Зараз
+  v_html := v_html || get_unit_matrix_html(SYSDATE, NULL, 'Зараз');
+
+  -- З початку доби
+  v_html := v_html || get_unit_matrix_html(TRUNC(SYSDATE), SYSDATE, 'З початку доби');
+
+  -- З початку зміни
+  v_html := v_html || get_unit_matrix_html(:P1_SHIFT_START, :P1_SHIFT_END, 'З початку зміни');
+
+  v_html := v_html || '</table>';
+  RETURN v_html;
+END;
+```
+
+---
+
+## 🎛️ У APEX
+
+- Можна динамічно розраховувати `:P1_SHIFT_START` / `:P1_SHIFT_END` (у процесі або DA).
+- Або обчислювати їх у функції.
+
+---
+
+🔹 Хочеш — я зроблю повну функцію на основі твоєї `view`, з фільтрами `unit` у чекбоксі?

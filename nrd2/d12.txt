@@ -1,0 +1,106 @@
+Звісно! Ось оновлена версія функції `get_unit_quick_stats`, яка:
+
+---
+
+## ✅ Що нового:
+- Додає аргументи `p_date_start` і `p_date_end`
+- Якщо:
+  - `p_date_start` **і** `p_date_end` = `NULL` → ⛔ без фільтрації по часу
+  - `p_date_start` заданий, `p_date_end` `NULL` → кінець = `SYSDATE`
+  - `p_date_start` `NULL`, `p_date_end` заданий → початок не враховується (можна змінити)
+
+---
+
+## 🔁 Оновлена функція:
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL, -- 'DEP1:DEP2'
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_end         DATE;
+    v_has_date    BOOLEAN := FALSE;
+
+    TYPE dep_table IS TABLE OF VARCHAR2(4000);
+    v_dep_tbl dep_table := apex_string.split(p_departments, ':');
+BEGIN
+    -- якщо тільки p_date_start заданий, p_date_end = SYSDATE
+    IF p_date_start IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := NVL(p_date_end, SYSDATE);
+    ELSIF p_date_end IS NOT NULL THEN
+        v_has_date := TRUE;
+        -- залишаємо p_date_start NULL → початок не обмежено
+        v_end := p_date_end;
+    END IF;
+
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 1 THEN 1 END),
+      COUNT(CASE WHEN org = 0 THEN 1 END)
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NOT NULL AND data_start >= p_date_start) AND
+          (p_date_end IS NOT NULL AND data_start <= v_end)
+        )
+      );
+
+    -- Люди
+    SELECT 
+      NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0),
+      NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0)
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NOT NULL AND data_start >= p_date_start) AND
+          (p_date_end IS NOT NULL AND data_start <= v_end)
+        )
+      );
+
+    -- Формування HTML
+    v_html := 'По Unit: ' || p_unit || '<br>';
+    v_html := v_html || v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>';
+    v_html := v_html || v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## ✅ Приклад виклику:
+```plsql
+BEGIN
+  RETURN get_unit_quick_stats(
+    p_unit => 1,
+    p_departments => 'DEP1:DEP2',
+    p_date_start => SYSDATE - 1,
+    p_date_end => NULL -- автоматично буде SYSDATE
+  );
+END;
+```
+
+---
+
+🔧 Хочеш — можу додати ще варіант, де виводиться дата в заголовок (`По Unit 1 за 01.04.2025 - 02.04.2025`).

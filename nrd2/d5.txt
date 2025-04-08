@@ -1,0 +1,150 @@
+Чудово, завдання дуже чітке і повністю зрозуміле завдяки малюнкам і поясненням ✅
+
+---
+
+## 🧩 Що ми реалізовуємо:
+
+### 📍 Основна сторінка (матриця з `get_unit_matrix_html`):
+
+Користувач клікає по комірці → відкривається **модальне вікно** з розширеним звітом:
+
+---
+
+## 📦 Структура розширеного звіту (модального):
+
+- 🔹 Дані беруться з тієї самої `VIEW`, але з фільтром:
+  - Часовий інтервал (Зараз / Зміна / Початок доби)
+- 🔹 Вивід у форматі (див. "Малюнок 2"):
+  - Група "Відділи" (`org = 0`)
+  - Група "Підрядники" (`org = 1, 2, ...`)
+  - Для кожного `unit` — кількість людей, бригад
+  - Внизу – загальна сума
+
+---
+
+## 🛠 Реалізація в Oracle APEX
+
+---
+
+### ✅ 1. **Створити модальну сторінку (Dialog Page)**
+
+- Тип: `Modal Dialog`
+- Назва: `P_MODAL_UNIT_STATS`
+- Параметри:
+  - `P_MODAL_TIME_MODE` — наприклад: `'NOW'`, `'SHIFT'`, `'DAY'`
+  - `P_MODAL_UNITS` — можна передавати `0:1:2`
+  - `P_MODAL_DEPARTMENTS` — список підрозділів
+
+---
+
+### ✅ 2. **SQL-звіт для модального вікна**
+
+#### 💡 SQL-запит, який будує таблицю, подібну до Малюнка 2:
+
+```sql
+SELECT 
+  COALESCE(department, org_txt) AS group_name,
+  org,
+  unit,
+  SUM(team_count) AS people,
+  COUNT(id_outfit) AS brigades
+FROM your_view
+WHERE outfit_open = 6
+  AND (
+    (:P_MODAL_TIME_MODE = 'NOW' AND data_start <= SYSDATE)
+    OR (:P_MODAL_TIME_MODE = 'SHIFT' AND data_start BETWEEN :P_MODAL_SHIFT_START AND SYSDATE)
+    OR (:P_MODAL_TIME_MODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE)
+  )
+  AND (:P_MODAL_DEPARTMENTS IS NULL OR department IN (
+       SELECT column_value FROM TABLE(apex_string.split(:P_MODAL_DEPARTMENTS, ':'))
+  ))
+  AND (:P_MODAL_UNITS IS NULL OR unit IN (
+       SELECT column_value FROM TABLE(apex_string.split(:P_MODAL_UNITS, ':'))
+  ))
+GROUP BY 
+  GROUPING SETS (
+    (org, department, unit),
+    (org, org_txt, unit),
+    (unit),
+    ()
+  )
+ORDER BY 
+  CASE WHEN org IS NULL THEN 99 ELSE org END,
+  department,
+  org_txt,
+  unit
+```
+
+---
+
+### ✅ 3. **У матриці (HTML таблиці)** – додати посилання на кліки
+
+У функції `get_unit_matrix_html` **обгорни клікабельні клітинки посиланням**:
+
+```html
+<td>
+  <a href="javascript:void(0);" 
+     onclick="openUnitModal('NOW', 0)">
+     1
+  </a>
+</td>
+```
+
+---
+
+### ✅ 4. **JavaScript-функція на сторінці (Page JS)**
+
+```js
+function openUnitModal(mode, unit) {
+  apex.server.process("OPEN_MODAL", {
+    x01: mode,
+    x02: unit,
+    x03: $v("P1_DEPARTMENTS")
+  }, {
+    success: function() {
+      apex.navigation.dialog.open({
+        pageId: "P_MODAL_UNIT_STATS",
+        dialog: "modal",
+        modal: true,
+        reloadOnClose: true
+      });
+    }
+  });
+}
+```
+
+---
+
+### ✅ 5. **Page Process "OPEN_MODAL" (AJAX Callback)**
+
+```plsql
+:P_MODAL_TIME_MODE := apex_application.g_x01;
+:P_MODAL_UNITS := apex_application.g_x02;
+:P_MODAL_DEPARTMENTS := apex_application.g_x03;
+```
+
+---
+
+### ✅ 6. **Звіт на модальній сторінці**
+
+- Тип: Classic Report
+- SQL: те, що вище
+- Виводить структуру:
+
+| Група     | Unit1 люди | Unit1 бригад | Unit2 люди | ... | Всього люди | Всього бригад |
+
+---
+
+## 🔁 Коротко
+
+| Крок | Що робимо |
+|------|-----------|
+| 1    | В `get_unit_matrix_html` робимо `<a onclick="openUnitModal(...">` |
+| 2    | Передаємо час/юнити/департаменти у `x01`, `x02`, `x03` |
+| 3    | В AJAX Callback записуємо у `P_MODAL_*` |
+| 4    | У модальному вікні звіт читає з `P_MODAL_*` |
+| 5    | Звіт будується на тій самій view |
+
+---
+
+🔧 Хочеш — я можу дати повну `PL/SQL`-функцію з HTML + JavaScript вбудований прямо в `td`, готову до використання. Або JSON для імпорту в APEX.

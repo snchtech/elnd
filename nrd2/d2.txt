@@ -1,0 +1,163 @@
+Чудово! 🎯 Нижче — **повна PL/SQL-функція `get_unit_matrix_html`**, яка:
+
+---
+
+## 🔧 Що реалізує:
+
+- базується на твоїй `VIEW`
+- **обчислює часові інтервали всередині функції**:
+  - `Зараз`: від SYSDATE до ∞
+  - `З початку доби`: від 00:00 сьогодні до SYSDATE
+  - `З початку зміни`: від початку зміни до SYSDATE
+- приймає список `department` (чекбокси)
+- повертає HTML-таблицю зі строками: `Бригад фірми`, `Бригад підрядників`, `Людей фірми`, `Людей підрядників`
+- стовпці: `Unit 1`, `Unit 2`, `Unit 3`, `Всього`
+
+---
+
+## ✅ Функція `get_unit_matrix_html(p_departments IN VARCHAR2)`
+
+```sql
+CREATE OR REPLACE FUNCTION get_unit_matrix_html (
+    p_departments IN VARCHAR2 -- список, напр: 'DEP1:DEP2:DEP3'
+) RETURN CLOB IS
+    v_html       CLOB := '';
+    v_unit1      NUMBER;
+    v_unit2      NUMBER;
+    v_unit3      NUMBER;
+    v_total      NUMBER;
+
+    -- зміна
+    v_shift_start DATE;
+    v_shift_end   DATE;
+
+    CURSOR cur_periods IS
+      SELECT 'Зараз' AS period, SYSDATE AS start_time, NULL AS end_time FROM DUAL
+      UNION ALL
+      SELECT 'З початку доби', TRUNC(SYSDATE), SYSDATE FROM DUAL
+      UNION ALL
+      SELECT 'З початку зміни', NULL, NULL FROM DUAL; -- підставимо нижче
+
+    TYPE v_dep_table IS TABLE OF VARCHAR2(4000);
+    v_departments_tbl v_dep_table := apex_string.split(p_departments, ':');
+BEGIN
+    -- Визначення поточної зміни
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 6/24;
+        v_shift_end   := TRUNC(SYSDATE) + 14/24;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 14/24;
+        v_shift_end   := TRUNC(SYSDATE) + 22/24;
+    ELSE
+        IF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+            v_shift_start := TRUNC(SYSDATE) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE + 1) + 6/24;
+        ELSE
+            v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE) + 6/24;
+        END IF;
+    END IF;
+
+    v_html := '<table border="1" cellpadding="5" cellspacing="0">';
+    v_html := v_html || '<tr><th>Час</th><th>Тип</th><th>Unit 1</th><th>Unit 2</th><th>Unit 3</th><th>Всього</th></tr>';
+
+    FOR rec IN cur_periods LOOP
+        DECLARE
+            v_start DATE := rec.start_time;
+            v_end   DATE := rec.end_time;
+        BEGIN
+            IF rec.period = 'З початку зміни' THEN
+                v_start := v_shift_start;
+                v_end   := v_shift_end;
+            END IF;
+
+            -- Бригад фірми
+            SELECT 
+                NVL(SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END), 0),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td rowspan="4">' || rec.period || '</td><td>Бригад фірми</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+            -- Бригад підрядників
+            SELECT 
+                NVL(SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END), 0),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Бригад підрядників</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+            -- Людей фірми
+            SELECT 
+                NVL(SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(team_count), 0)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей фірми</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+
+            -- Людей підрядників
+            SELECT 
+                NVL(SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END), 0),
+                NVL(SUM(team_count), 0)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей підрядників</td><td>' || v_unit1 || '</td><td>' || v_unit2 || '</td><td>' || v_unit3 || '</td><td>' || v_total || '</td></tr>';
+        END;
+    END LOOP;
+
+    v_html := v_html || '</table>';
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## 📥 У APEX
+
+1. Створи **Checkbox Group**: `P1_DEPARTMENTS`
+   - LOV:  
+     ```sql
+     SELECT DISTINCT department d, department r FROM your_view
+     ```
+
+2. Створи **Dynamic Content Region**
+   - PL/SQL Function Returning CLOB:
+     ```plsql
+     BEGIN
+       RETURN get_unit_matrix_html(apex_util.table_to_string(apex_util.string_to_table(:P1_DEPARTMENTS)));
+     END;
+     ```
+
+3. Додай **Dynamic Action** on change `P1_DEPARTMENTS` → Refresh регіон
+
+---
+
+Хочеш — я зроблю тобі ще **повноцінний JSON APEX-експорт** або додаткову підтримку по UI?

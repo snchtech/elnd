@@ -1,0 +1,190 @@
+Окей, ось повна PL/SQL-функція `get_unit_matrix_html`, яка:
+
+- Будує HTML-таблицю з трьома часовими періодами: **Зараз**, **З початку доби**, **З початку зміни**
+- Вбудовує **JavaScript-обробник у кожну клітинку** (`<td>`) — по кліку відкривається модальне вікно з деталізацією
+- Передає у JS:
+  - режим (`'NOW'`, `'DAY'`, `'SHIFT'`)
+  - тип (фірма/підрядник)
+  - unit (0/1/2)
+  - тип значення (`'brigades'` або `'people'`)
+
+---
+
+## ✅ PL/SQL-функція: `get_unit_matrix_html`
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_matrix_html (
+    p_departments IN VARCHAR2
+) RETURN CLOB IS
+    v_html       CLOB := '';
+    v_unit1      NUMBER;
+    v_unit2      NUMBER;
+    v_unit3      NUMBER;
+    v_total      NUMBER;
+
+    v_shift_start DATE;
+    v_shift_end   DATE;
+
+    CURSOR cur_periods IS
+      SELECT 'Зараз' AS period_key, 'NOW' AS mode, SYSDATE AS start_time, NULL AS end_time FROM DUAL
+      UNION ALL
+      SELECT 'З початку доби', 'DAY', TRUNC(SYSDATE), SYSDATE FROM DUAL
+      UNION ALL
+      SELECT 'З початку зміни', 'SHIFT', NULL, NULL FROM DUAL;
+
+    TYPE v_dep_table IS TABLE OF VARCHAR2(4000);
+    v_departments_tbl v_dep_table := apex_string.split(p_departments, ':');
+
+    -- допоміжна функція для клікабельної TD
+    FUNCTION clickable_cell(p_value NUMBER, p_mode VARCHAR2, p_org NUMBER, p_unit NUMBER, p_data_type VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+      RETURN '<a href="javascript:void(0);" onclick="openUnitModal(''' 
+              || p_mode || ''',' 
+              || p_org || ',' 
+              || p_unit || ',''' 
+              || p_data_type || ''')">' 
+              || NVL(p_value, 0) || '</a>';
+    END;
+BEGIN
+    -- Зміна
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 6/24;
+        v_shift_end   := TRUNC(SYSDATE) + 14/24;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 14/24;
+        v_shift_end   := TRUNC(SYSDATE) + 22/24;
+    ELSE
+        IF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+            v_shift_start := TRUNC(SYSDATE) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE + 1) + 6/24;
+        ELSE
+            v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE) + 6/24;
+        END IF;
+    END IF;
+
+    v_html := '<table border="1" cellpadding="5" cellspacing="0">';
+    v_html := v_html || '<tr><th>Час</th><th>Тип</th><th>Unit 1</th><th>Unit 2</th><th>Unit 3</th><th>Всього</th></tr>';
+
+    FOR rec IN cur_periods LOOP
+        DECLARE
+            v_start DATE := rec.start_time;
+            v_end   DATE := rec.end_time;
+        BEGIN
+            IF rec.period_key = 'З початку зміни' THEN
+                v_start := v_shift_start;
+                v_end   := SYSDATE;
+            END IF;
+
+            -- Бригад фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td rowspan="4">' || rec.period_key || '</td><td>Бригад фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Бригад підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Бригад підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Людей фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Людей підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+        END;
+    END LOOP;
+
+    v_html := v_html || '</table>';
+    RETURN v_html;
+END;
+/
+```
+
+---
+
+## ✅ JavaScript-функція на сторінці
+
+```js
+function openUnitModal(mode, org, unit, dataType) {
+  apex.server.process("OPEN_UNIT_MODAL", {
+    x01: mode,
+    x02: org,
+    x03: unit,
+    x04: dataType,
+    x05: $v("P1_DEPARTMENTS")
+  }, {
+    success: function() {
+      apex.navigation.dialog.open({
+        pageId: 102, // ID модальної сторінки
+        modal: true,
+        title: "Детальний звіт",
+        height: "auto",
+        width: "95%",
+        maxWidth: "1000px"
+      });
+    }
+  });
+}
+```
+
+---
+
+Якщо потрібно — підкажу як написати процес `OPEN_UNIT_MODAL`, і як побудувати SQL-звіт на модальній сторінці.
+
+Хочеш, продовжимо з модального SQL-звіту?

@@ -1,0 +1,83 @@
+Це дуже слушне питання 👍
+
+---
+
+## 📌 Відповідь:
+
+### 🔹 Так, Oracle 12.1 **може виконати** `apex_string.split(...)`,  
+**але лише якщо:**
+- Установлений Oracle APEX (принаймні версія APEX 5.1+)
+- Сесія виконується в **APEX environment** або під користувачем, який має доступ до `APEX_STRING` пакету
+
+---
+
+## 🔴 Якщо `APEX_STRING` недоступний:
+
+На деяких системах (особливо не APEX-enabled середовищах, або PL/SQL поза APEX) буде помилка:
+> `PLS-00201: identifier 'APEX_STRING.SPLIT' must be declared`
+
+---
+
+## ✅ Альтернатива без APEX: створити власну split-функцію
+
+### 🔧 Крок 1: створити власний тип
+```sql
+CREATE OR REPLACE TYPE t_varchar2_tab IS TABLE OF VARCHAR2(4000);
+```
+
+### 🔧 Крок 2: створити функцію `split_string`
+```sql
+CREATE OR REPLACE FUNCTION split_string (
+  p_string IN VARCHAR2,
+  p_delim  IN VARCHAR2 := ':'
+) RETURN t_varchar2_tab IS
+  v_result t_varchar2_tab := t_varchar2_tab();
+  v_start PLS_INTEGER := 1;
+  v_end   PLS_INTEGER;
+  v_index PLS_INTEGER := 1;
+BEGIN
+  LOOP
+    v_end := INSTR(p_string, p_delim, v_start);
+    EXIT WHEN v_end = 0;
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start, v_end - v_start);
+    v_index := v_index + 1;
+    v_start := v_end + LENGTH(p_delim);
+  END LOOP;
+
+  IF v_start <= LENGTH(p_string) THEN
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start);
+  END IF;
+
+  RETURN v_result;
+END;
+```
+
+---
+
+### 🔄 Тепер можеш писати так:
+
+```plsql
+v_dep_tbl t_varchar2_tab := split_string(p_departments, ':');
+```
+
+І використовувати в `MEMBER OF`:
+
+```sql
+AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+```
+
+---
+
+## ✅ Переваги цього підходу:
+
+| Перевага                  | Пояснення                          |
+|---------------------------|------------------------------------|
+| ✔ Працює у **будь-якій** Oracle DB | Навіть без APEX |
+| ✔ Повний контроль         | Можна легко модифікувати |
+| ✔ Простий тип даних       | Без залежності від `APEX_APPLICATION_GLOBAL.VC_ARR2` |
+
+---
+
+🔧 Якщо хочеш — я можу зібрати повну версію функції `get_unit_quick_stats` **без APEX**, з цим `split_string`. Написати?

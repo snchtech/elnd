@@ -1,0 +1,195 @@
+Окей! Ось **переписаний варіант функції `get_unit_matrix_html`**, яка замість `apex_string.split(...)` використовує власну функцію `split_string(...)` та тип `t_varchar2_tab`.
+
+---
+
+## ✅ Перед використанням переконайся, що у тебе створені:
+
+### 🔹 Тип:
+```sql
+CREATE OR REPLACE TYPE t_varchar2_tab IS TABLE OF VARCHAR2(4000);
+```
+
+### 🔹 Функція:
+```sql
+CREATE OR REPLACE FUNCTION split_string (
+  p_string IN VARCHAR2,
+  p_delim  IN VARCHAR2 := ':'
+) RETURN t_varchar2_tab IS
+  v_result t_varchar2_tab := t_varchar2_tab();
+  v_start  PLS_INTEGER := 1;
+  v_end    PLS_INTEGER;
+  v_index  PLS_INTEGER := 1;
+BEGIN
+  LOOP
+    v_end := INSTR(p_string, p_delim, v_start);
+    EXIT WHEN v_end = 0;
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start, v_end - v_start);
+    v_index := v_index + 1;
+    v_start := v_end + LENGTH(p_delim);
+  END LOOP;
+
+  IF v_start <= LENGTH(p_string) THEN
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start);
+  END IF;
+
+  RETURN v_result;
+END;
+```
+
+---
+
+## ✅ Оновлена функція `get_unit_matrix_html`:
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_matrix_html (
+    p_departments IN VARCHAR2
+) RETURN CLOB IS
+    v_html       CLOB := '';
+    v_unit1      NUMBER;
+    v_unit2      NUMBER;
+    v_unit3      NUMBER;
+    v_total      NUMBER;
+
+    v_shift_start DATE;
+    v_shift_end   DATE;
+
+    CURSOR cur_periods IS
+      SELECT 'Зараз' AS period_key, 'NOW' AS mode, SYSDATE AS start_time, NULL AS end_time FROM DUAL
+      UNION ALL
+      SELECT 'З початку доби', 'DAY', TRUNC(SYSDATE), SYSDATE FROM DUAL
+      UNION ALL
+      SELECT 'З початку зміни', 'SHIFT', NULL, NULL FROM DUAL;
+
+    v_departments_tbl t_varchar2_tab := split_string(p_departments, ':');
+
+    FUNCTION clickable_cell(p_value NUMBER, p_mode VARCHAR2, p_org NUMBER, p_unit NUMBER, p_data_type VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+      RETURN '<a href="javascript:void(0);" onclick="openUnitModal(''' 
+              || p_mode || ''',' 
+              || p_org || ',' 
+              || p_unit || ',''' 
+              || p_data_type || ''')">' 
+              || NVL(p_value, 0) || '</a>';
+    END;
+BEGIN
+    -- Визначення початку і кінця зміни
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 6/24;
+        v_shift_end   := TRUNC(SYSDATE) + 14/24;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 14/24;
+        v_shift_end   := TRUNC(SYSDATE) + 22/24;
+    ELSE
+        IF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+            v_shift_start := TRUNC(SYSDATE) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE + 1) + 6/24;
+        ELSE
+            v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE) + 6/24;
+        END IF;
+    END IF;
+
+    v_html := '<table border="1" cellpadding="5" cellspacing="0">';
+    v_html := v_html || '<tr><th>Час</th><th>Тип</th><th>Unit 1</th><th>Unit 2</th><th>Unit 3</th><th>Всього</th></tr>';
+
+    FOR rec IN cur_periods LOOP
+        DECLARE
+            v_start DATE := rec.start_time;
+            v_end   DATE := rec.end_time;
+        BEGIN
+            IF rec.period_key = 'З початку зміни' THEN
+                v_start := v_shift_start;
+                v_end   := SYSDATE;
+            END IF;
+
+            -- Бригади фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td rowspan="4">' || rec.period_key || '</td><td>Бригад фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Бригади підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Бригад підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Люди фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- Люди підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (v_end IS NULL OR data_start BETWEEN v_start AND v_end)
+              AND department MEMBER OF v_departments_tbl;
+
+            v_html := v_html || '<tr><td>Людей підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+        END;
+    END LOOP;
+
+    v_html := v_html || '</table>';
+    RETURN v_html;
+END;
+/
+```
+
+---
+
+## ✅ Уточнення:
+
+- `your_view` — заміни на свою актуальну view
+- `org = 0` — фірма, `org = 1` — підрядники
+- Функція працює в Oracle 12.1 без залежності від `APEX_STRING`
+
+Якщо потрібно — можу ще додати опціональне форматування (`<span class="vl_sld">`) або повернення в JSON.

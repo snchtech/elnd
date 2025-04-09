@@ -1,0 +1,73 @@
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL, -- 'DEP1:DEP2'
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_end         DATE;
+    v_has_date    BOOLEAN := FALSE;
+
+    v_dep_tbl t_varchar2_tab := split_string(p_departments, ':');
+BEGIN
+    -- Визначення, чи застосовувати фільтрацію по даті
+    IF p_date_start IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := NVL(p_date_end, SYSDATE);
+    ELSIF p_date_end IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := p_date_end;
+    END IF;
+
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+      COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- Люди
+    SELECT 
+      NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0),  -- фірма
+      NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0)   -- підрядник
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- Формування HTML
+    v_html := 'По Unit: ' || p_unit || '<br>';
+    v_html := v_html || v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>';
+    v_html := v_html || v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/

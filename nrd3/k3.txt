@@ -1,0 +1,162 @@
+Окей! 👇 Нижче — **повністю автономна версія функції `get_unit_quick_stats`**, яка:
+
+---
+
+## ✅ Підтримує:
+- `unit` – номер юніта
+- `p_departments` – список департаментів (`'DEP1:DEP2'`)
+- `p_date_start`, `p_date_end` – інтервал часу (необов’язкові)
+- **НЕ використовує `APEX_STRING`** → підходить для Oracle 12.1 без APEX
+
+---
+
+## 🧩 Крок 1. Тип для масиву:
+
+```sql
+CREATE OR REPLACE TYPE t_varchar2_tab IS TABLE OF VARCHAR2(4000);
+```
+
+(Виконується один раз в схемі)
+
+---
+
+## 🧩 Крок 2. Функція для split:
+
+```sql
+CREATE OR REPLACE FUNCTION split_string (
+  p_string IN VARCHAR2,
+  p_delim  IN VARCHAR2 := ':'
+) RETURN t_varchar2_tab IS
+  v_result t_varchar2_tab := t_varchar2_tab();
+  v_start  PLS_INTEGER := 1;
+  v_end    PLS_INTEGER;
+  v_index  PLS_INTEGER := 1;
+BEGIN
+  LOOP
+    v_end := INSTR(p_string, p_delim, v_start);
+    EXIT WHEN v_end = 0;
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start, v_end - v_start);
+    v_index := v_index + 1;
+    v_start := v_end + LENGTH(p_delim);
+  END LOOP;
+
+  IF v_start <= LENGTH(p_string) THEN
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start);
+  END IF;
+
+  RETURN v_result;
+END;
+```
+
+---
+
+## 🧩 Крок 3. Основна функція `get_unit_quick_stats`
+
+```sql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL, -- 'DEP1:DEP2'
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_end         DATE;
+    v_has_date    BOOLEAN := FALSE;
+
+    v_dep_tbl t_varchar2_tab := split_string(p_departments, ':');
+BEGIN
+    -- Визначення, чи потрібно фільтрувати по часу
+    IF p_date_start IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := NVL(p_date_end, SYSDATE);
+    ELSIF p_date_end IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := p_date_end;
+    END IF;
+
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 1 THEN 1 END),
+      COUNT(CASE WHEN org = 0 THEN 1 END)
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- Люди
+    SELECT 
+      NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0),
+      NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0)
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- Формування HTML
+    v_html := 'По Unit: ' || p_unit || '<br>';
+    v_html := v_html || v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>';
+    v_html := v_html || v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+## 🧪 Приклад виклику:
+
+```sql
+BEGIN
+  DBMS_OUTPUT.put_line(
+    get_unit_quick_stats(
+      p_unit => 1,
+      p_departments => 'DEP1:DEP2',
+      p_date_start => TRUNC(SYSDATE),
+      p_date_end => NULL -- означає: до SYSDATE
+    )
+  );
+END;
+```
+
+---
+
+## ✅ Повністю автономна:
+
+| Компонент        | Потрібен APEX |
+|------------------|---------------|
+| `t_varchar2_tab` | ❌            |
+| `split_string`   | ❌            |
+| `get_unit_quick_stats` | ❌     |
+
+---
+
+Хочеш — можу зробити окрему версію, яка повертає не HTML, а `JSON`, якщо будеш використовувати на JS-сторінках.

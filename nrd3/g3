@@ -1,0 +1,59 @@
+Так, можна **переписати `split_string`**, щоб **не використовувати свій власний тип `t_varchar2_tab`**, а натомість використати **вбудований тип Oracle 12c — `SYS.ODCIVARCHAR2LIST`**, який є колекцією `TABLE OF VARCHAR2(4000)`.
+
+Цей тип можна використовувати для передачі таблиці рядків і з ним працює оператор `MEMBER OF`.
+
+---
+
+### Ось переписана версія функції `split_string`:
+
+```sql
+CREATE OR REPLACE FUNCTION split_string (
+  p_string IN VARCHAR2,
+  p_delim  IN VARCHAR2 := ':'
+) RETURN SYS.ODCIVARCHAR2LIST IS
+  v_result SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+  v_start  PLS_INTEGER := 1;
+  v_end    PLS_INTEGER;
+  v_index  PLS_INTEGER := 1;
+BEGIN
+  LOOP
+    v_end := INSTR(p_string, p_delim, v_start);
+    EXIT WHEN v_end = 0;
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start, v_end - v_start);
+    v_index := v_index + 1;
+    v_start := v_end + LENGTH(p_delim);
+  END LOOP;
+
+  IF v_start <= LENGTH(p_string) THEN
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start);
+  END IF;
+
+  RETURN v_result;
+END;
+/
+```
+
+---
+
+### Приклад використання у вашій функції:
+
+```sql
+v_dep_tbl SYS.ODCIVARCHAR2LIST := split_string(p_departments, ':');
+```
+
+І далі можна так:
+
+```sql
+AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+```
+
+---
+
+### Переваги такого підходу:
+- Не потрібно створювати свій тип `t_varchar2_tab`.
+- `SYS.ODCIVARCHAR2LIST` підтримується Oracle «з коробки».
+- Працює з `TABLE`, `MEMBER OF`, `IN`, `MULTISET`, і т.п.
+
+Якщо потрібно — можу оновити і всю вашу основну функцію `get_unit_quick_stats`, щоб використовувала `SYS.ODCIVARCHAR2LIST`.

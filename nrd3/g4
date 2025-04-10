@@ -1,0 +1,125 @@
+Окей! Ось оновлена версія функції `get_unit_quick_stats`, яка **використовує вбудований тип `SYS.ODCIVARCHAR2LIST`** замість користувацького `t_varchar2_tab`, і також враховує виправлення з `IF` для обробки дат:
+
+---
+
+### **Оновлена функція:**
+
+```sql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL, -- 'DEP1:DEP2'
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_end         DATE;
+    v_dep_tbl     SYS.ODCIVARCHAR2LIST := split_string(p_departments, ':');
+BEGIN
+    -- Визначення кінцевої дати
+    IF p_date_start IS NOT NULL THEN
+        v_end := NVL(p_date_end, SYSDATE);
+    ELSIF p_date_end IS NOT NULL THEN
+        v_end := p_date_end;
+    END IF;
+
+    -- Бригади
+    IF p_date_start IS NOT NULL OR p_date_end IS NOT NULL THEN
+        SELECT 
+            COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+            COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+        INTO v_firm_brig, v_cont_brig
+        FROM your_view
+        WHERE unit = p_unit
+          AND outfit_open = 6
+          AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+          AND ((p_date_start IS NULL OR data_start >= p_date_start) AND
+               (p_date_end IS NULL OR data_start <= v_end));
+    ELSE
+        SELECT 
+            COUNT(CASE WHEN org = 0 THEN 1 END),
+            COUNT(CASE WHEN org = 1 THEN 1 END)
+        INTO v_firm_brig, v_cont_brig
+        FROM your_view
+        WHERE unit = p_unit
+          AND outfit_open = 6
+          AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl);
+    END IF;
+
+    -- Люди
+    IF p_date_start IS NOT NULL OR p_date_end IS NOT NULL THEN
+        SELECT 
+            NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0),
+            NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0)
+        INTO v_firm_people, v_cont_people
+        FROM your_view
+        WHERE unit = p_unit
+          AND outfit_open = 6
+          AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl)
+          AND ((p_date_start IS NULL OR data_start >= p_date_start) AND
+               (p_date_end IS NULL OR data_start <= v_end));
+    ELSE
+        SELECT 
+            NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0),
+            NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0)
+        INTO v_firm_people, v_cont_people
+        FROM your_view
+        WHERE unit = p_unit
+          AND outfit_open = 6
+          AND (p_departments IS NULL OR department MEMBER OF v_dep_tbl);
+    END IF;
+
+    -- Формування HTML
+    v_html := 'По Unit: ' || p_unit || '<br>';
+    v_html := v_html || v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>';
+    v_html := v_html || v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+### Примітка:
+Функція `split_string` при цьому має вигляд:
+
+```sql
+CREATE OR REPLACE FUNCTION split_string (
+  p_string IN VARCHAR2,
+  p_delim  IN VARCHAR2 := ':'
+) RETURN SYS.ODCIVARCHAR2LIST IS
+  v_result SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+  v_start  PLS_INTEGER := 1;
+  v_end    PLS_INTEGER;
+  v_index  PLS_INTEGER := 1;
+BEGIN
+  LOOP
+    v_end := INSTR(p_string, p_delim, v_start);
+    EXIT WHEN v_end = 0;
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start, v_end - v_start);
+    v_index := v_index + 1;
+    v_start := v_end + LENGTH(p_delim);
+  END LOOP;
+
+  IF v_start <= LENGTH(p_string) THEN
+    v_result.EXTEND;
+    v_result(v_index) := SUBSTR(p_string, v_start);
+  END IF;
+
+  RETURN v_result;
+END;
+/
+```
+
+---
+
+Готово! Тепер все працює тільки з системними типами Oracle, без зайвих об'єктів. Якщо хочеш — можу додати ще кешування, логування чи JSON-формат.

@@ -1,0 +1,133 @@
+Це суперпрактичне питання — і ось **чітка відповідь з варіантами**, як діяти.
+
+---
+
+## 📌 Коротка відповідь:
+
+> **Ні**, стандартна `VIEW` в Oracle **не підтримує bind-параметри** (типу `:P_MODAL_TIMEMODE`, `:P_MODAL_ORG` тощо).
+
+---
+
+## 🧠 Чому так?
+- `VIEW` — це **фіксована SQL-конструкція**, яку не можна "параметризувати".
+- `:P_...` — це **bind-перемінні APEX** або PL/SQL, вони працюють тільки у динамічному SQL (запити, які виконуються на льоту).
+- У `VIEW` неможливо використовувати:
+  - `:bind_variable`
+  - `APEX_UTIL.GET_SESSION_STATE(...)`
+  - `V('P_ITEM')`  
+  ❗ Бо це PL/SQL/SQL*Plus/HTML context, а не pure SQL.
+
+---
+
+## ✅ ВАРІАНТИ РІШЕННЯ
+
+---
+
+### 🔸 ВАРІАНТ 1: View **без фільтрів**, а фільтрування — на рівні APEX (РЕКОМЕНДОВАНО)
+
+Створи view:
+
+```sql
+CREATE OR REPLACE VIEW v_outfit_pivot_base AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start
+  FROM your_view
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    unit,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    unit
+),
+pivoted AS (
+  SELECT
+    group_name,
+    org,
+    NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+    NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+    NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+    NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+    NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+    NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+    SUM(people) AS total_people,
+    SUM(brigades) AS total_brigades
+  FROM agg_data
+  GROUP BY group_name, org
+)
+SELECT * FROM pivoted
+UNION ALL
+SELECT 
+  'Усього',
+  NULL,
+  SUM(u1_people),
+  SUM(u1_brigades),
+  SUM(u2_people),
+  SUM(u2_brigades),
+  SUM(u3_people),
+  SUM(u3_brigades),
+  SUM(total_people),
+  SUM(total_brigades)
+FROM pivoted;
+```
+
+### ✅ У APEX просто додаєш Dynamic WHERE:
+
+```sql
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    :P_MODAL_TIMEMODE = 'NOW' AND data_start <= SYSDATE
+    OR :P_MODAL_TIMEMODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE
+    OR :P_MODAL_TIMEMODE = 'SHIFT' AND data_start BETWEEN :P_SHIFT_START AND SYSDATE
+  )
+```
+
+🟩 **Переваги:**
+- `VIEW` кешується Oracle
+- можна перевикористовувати в APEX, SQL, PL/SQL
+- у звітах працює швидко, оскільки логіка групування і pivot — вже в view
+
+---
+
+### 🔸 ВАРІАНТ 2: Використати **pipeline-функцію** з параметрами
+
+📌 Якщо потрібно _виконувати запит з параметрами в SQL_, можна зробити **функцію**, яка повертає `TABLE`, і використовує ці параметри.
+
+📌 Але це складніше і потребує `PIPELINED FUNCTION` + типу RECORD/OBJECT.
+
+Якщо цікавить — можу навести приклад.
+
+---
+
+## 🔚 Підсумок:
+
+| Параметри у view | Можливо? |
+|------------------|----------|
+| `:P_PAGE_ITEM`   | ❌        |
+| Використати у APEX | ✅ через `WHERE` умови |
+| Альтернатива     | ✅ pipeline function |
+
+Хочеш — можу створити `v_outfit_pivot_base` і SQL з параметрами для твоєї APEX-сторінки прямо зараз.

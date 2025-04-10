@@ -1,0 +1,120 @@
+Супер! Давай додамо передачу `:P_SHIFT_START` як **динамічного значення**, щоб у модальне вікно потрапляв актуальний час початку зміни.
+
+---
+
+## 📌 Що потрібно зробити:
+
+- Розрахувати `:P_SHIFT_START` на основній сторінці
+- Передати його в `openUnitModal(...)` через AJAX
+- Присвоїти в модальному вікні (`:P_SHIFT_START`)
+
+---
+
+## ✅ 1. Додай Hidden Item `P_SHIFT_START` на основну сторінку (де є звіт)
+
+- Тип: **Hidden**
+- Static ID: залиш порожнім
+- **Value Protected**: `No`
+- Назва: `P_SHIFT_START`
+
+---
+
+## ✅ 2. Додай динамічну обробку цього поля (PL/SQL)
+
+Створи **"Dynamic Action" → "Page Load"** або "When Button Clicked", далі:
+
+### ➕ True Action → **Set Value**
+
+| Параметр             | Значення                                   |
+|----------------------|--------------------------------------------|
+| Set Type             | PL/SQL Function Body                       |
+| PL/SQL Code          | ⬇️ (див нижче)                              |
+| Affected Items       | `P_SHIFT_START`                            |
+| Fire on Initialization | ✅ (якщо потрібно автоматично при завантаженні) |
+
+### 🔢 PL/SQL Code:
+
+```plsql
+DECLARE
+  v_shift_start DATE;
+BEGIN
+  IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+    v_shift_start := TRUNC(SYSDATE) + 6/24;
+  ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+    v_shift_start := TRUNC(SYSDATE) + 14/24;
+  ELSIF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+    v_shift_start := TRUNC(SYSDATE) + 22/24;
+  ELSE
+    v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+  END IF;
+
+  RETURN TO_CHAR(v_shift_start, 'YYYY-MM-DD HH24:MI:SS');
+END;
+```
+
+> 📝 Якщо хочеш передавати DATE напряму — не конвертуй у `TO_CHAR`.
+
+---
+
+## ✅ 3. Онови JavaScript `openUnitModal(...)`
+
+Тепер додаємо `x04` — shift_start:
+
+```js
+function openUnitModal(mode, unit) {
+  apex.server.process("OPEN_MODAL", {
+    x01: mode,
+    x02: unit,
+    x03: $v("P1_DEPARTMENTS"),
+    x04: $v("P_SHIFT_START")  // ← Ось тут ми передаємо значення
+  }, {
+    success: function() {
+      apex.navigation.dialog.open({
+        pageId: "P_MODAL_UNIT_STATS",
+        dialog: "modal",
+        modal: true,
+        reloadOnClose: true
+      });
+    }
+  });
+}
+```
+
+---
+
+## ✅ 4. Онови AJAX Callback `OPEN_MODAL`
+
+Тепер додаємо 4-е значення:
+
+```plsql
+:P_MODAL_TIME_MODE := apex_application.g_x01;
+:P_MODAL_UNITS := apex_application.g_x02;
+:P_MODAL_DEPARTMENTS := apex_application.g_x03;
+:P_SHIFT_START := TO_DATE(apex_application.g_x04, 'YYYY-MM-DD HH24:MI:SS');
+```
+
+---
+
+## ✅ 5. На модальному вікні
+
+Обов’язково створити **елемент `P_SHIFT_START` (Hidden)** на сторінці модального вікна.  
+Зроби `Value Protected = No`.
+
+---
+
+## ✅ 6. Приклад використання в SQL модального вікна
+
+```sql
+...
+AND (
+  :P_MODAL_TIME_MODE = 'NOW' AND data_start <= SYSDATE
+  OR :P_MODAL_TIME_MODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE
+  OR :P_MODAL_TIME_MODE = 'SHIFT' AND data_start BETWEEN :P_SHIFT_START AND SYSDATE
+)
+```
+
+---
+
+✅ Тепер модальне вікно автоматично отримує актуальний час початку зміни — розраховується один раз на головній сторінці й передається при відкритті 🎯
+
+🔧 Якщо хочеш, можу зробити це ще більш гнучким, наприклад: дозволити змінювати `SHIFT_START` вручну в модальному вікні.

@@ -1,0 +1,95 @@
+Чудово! 👍 Якщо ти плануєш використовувати `v_outfit_pivot_base` у звітах APEX **з динамічною фільтрацією за `org`, `unit`, `department`, `data_start`**, тоді твоя view **має обов’язково містити** ці колонки у фінальному `SELECT`.
+
+---
+
+## ✅ Як зробити правильно
+
+Ось оновлений і правильний варіант твоєї view:
+
+```sql
+CREATE OR REPLACE VIEW v_outfit_pivot_base AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start
+  FROM your_view
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    unit,
+    department,
+    data_start,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    unit,
+    department,
+    data_start
+)
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  unit,
+  department,
+  data_start;
+```
+
+---
+
+## 💡 Пояснення:
+
+- `department`, `org`, `unit`, `data_start` — **обов’язково в `GROUP BY`**, щоб зберегти їх у `SELECT`.
+- `group_name` — потрібен, якщо ти хочеш формувати груповані заголовки типу "Фірма" або "Підрядник".
+- Ця view не містить сумарного рядка `Усього` — бо ти хочеш працювати з деталізацією для фільтрів. Але якщо потрібно — можу показати, як додати `UNION ALL` для `Усього` без втрати фільтрації.
+
+---
+
+## 🟢 І тепер ти можеш спокійно писати в APEX:
+
+```sql
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    :P_MODAL_TIMEMODE = 'NOW' AND data_start <= SYSDATE
+    OR :P_MODAL_TIMEMODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE
+    OR :P_MODAL_TIMEMODE = 'SHIFT' AND data_start BETWEEN :P_SHIFT_START AND SYSDATE
+  )
+```
+
+---
+
+🔧 Якщо хочеш додати до view ще й зведений рядок "Усього" (але без конфлікту фільтрів) — дай знати, зроблю окремий підхід.

@@ -1,0 +1,107 @@
+Чудове питання — ти хочеш:
+
+1. Прийняти рядок типу `'1023:1234'` (або `NULL`);
+2. Якщо не `NULL`, то перетворити його на `'1023','1234'` або `'1023,1234'`;
+3. Використати це у `IN`-фільтрі `department IN (...)` в SQL.
+
+Є кілька способів, ось найзручніший для вашого кейсу:
+
+---
+
+## **Варіант 1: Через SQL-friendly CLOB-рядок для IN (...):**
+
+### 1. Перетворити `:` у `,`:
+
+```plsql
+v_dep_id_list VARCHAR2(4000);
+```
+
+```plsql
+IF p_departments IS NOT NULL THEN
+    v_dep_id_list := REPLACE(p_departments, ':', ',');
+END IF;
+```
+
+Тепер `v_dep_id_list = '1023,1234'`
+
+---
+
+### 2. Використати його в динамічному SQL:
+
+```plsql
+EXECUTE IMMEDIATE '
+    SELECT COUNT(*) 
+    INTO :cnt 
+    FROM your_view 
+    WHERE department IN (' || v_dep_id_list || ')
+' USING OUT v_count;
+```
+
+**Але!** Це працює лише якщо всі значення — **числові**. Інакше треба додати лапки.
+
+---
+
+## **Варіант 2: Без динамічного SQL — через колекцію**
+
+1. **Створити власну функцію-розділювач** (якщо ще не маєш):
+
+```plsql
+CREATE OR REPLACE FUNCTION split_string (
+    p_str IN VARCHAR2,
+    p_delim IN VARCHAR2 := ':'
+) RETURN SYS.ODCIVARCHAR2LIST IS
+    v_result SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+    v_index PLS_INTEGER := 1;
+    v_temp_str VARCHAR2(4000) := p_str;
+    v_pos PLS_INTEGER;
+BEGIN
+    IF p_str IS NULL THEN
+        RETURN v_result;
+    END IF;
+
+    LOOP
+        v_pos := INSTR(v_temp_str, p_delim);
+        IF v_pos > 0 THEN
+            v_result.EXTEND;
+            v_result(v_index) := SUBSTR(v_temp_str, 1, v_pos - 1);
+            v_temp_str := SUBSTR(v_temp_str, v_pos + 1);
+            v_index := v_index + 1;
+        ELSE
+            v_result.EXTEND;
+            v_result(v_index) := v_temp_str;
+            EXIT;
+        END IF;
+    END LOOP;
+
+    RETURN v_result;
+END;
+```
+
+2. **Ініціалізувати список у тілі функції**:
+
+```plsql
+v_dep_tbl SYS.ODCIVARCHAR2LIST;
+```
+
+```plsql
+IF p_departments IS NOT NULL THEN
+    v_dep_tbl := split_string(p_departments, ':');
+END IF;
+```
+
+3. **Використати в WHERE через `IN (SELECT ...)`**:
+
+```sql
+AND (p_departments IS NULL OR department IN (
+    SELECT COLUMN_VALUE FROM TABLE(v_dep_tbl)
+))
+```
+
+---
+
+## Який варіант краще?
+
+- Якщо у тебе **тільки числові значення** і ти готовий до **динамічного SQL**, варіант 1 простіший.
+- Якщо ти хочеш **надійність, безпечність та гнучкість**, використовуй **варіант 2** — з колекцією.
+
+Хочеш — я можу вставити цей код прямо у твою функцію `get_unit_quick_stats`.

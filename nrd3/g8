@@ -1,0 +1,109 @@
+Так, **це чудовий підхід** — **виносити обчислення без підсумкового рядка в окремий `VIEW`**, а потім **виконувати `SUM(...)` по цьому `VIEW`**, щоб сформувати "Усього". І ось чому це пришвидшує:
+
+---
+
+### **Чому це працює швидше:**
+
+1. **Oracle один раз виконує логіку агрегації** (у `VIEW`), незалежно від того, скільки разів ти потім звертаєшся до результатів.
+2. Якщо `VIEW` — це **не складний SELECT, а просто агрегований набір**, то Oracle зможе його **оптимізувати та кешувати**.
+3. **SUM по `VIEW`** виконується **набагато швидше**, ніж `UNION ALL` з повторним виконанням у WITH-запиті.
+
+---
+
+### **Приклад:**
+
+#### 1. Створюєш `VIEW` без підсумку:
+
+```sql
+CREATE OR REPLACE VIEW v_unit_summary AS
+WITH base_data AS (
+  SELECT 
+    id_outfit, org, org_txt, department, unit, team_count, data_start
+  FROM your_view
+  WHERE outfit_open = 6
+    AND (
+      (:P_MODAL_TIMEMODE = 'NOW' AND data_start <= SYSDATE)
+      OR (:P_MODAL_TIMEMODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE)
+      OR (:P_MODAL_TIMEMODE = 'SHIFT' AND data_start BETWEEN :P_SHIFT_START AND SYSDATE)
+    )
+    AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+    AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+    AND (
+      :P_MODAL_DEPARTMENTS IS NULL 
+      OR department IN (
+        SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+      )
+    )
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    unit,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY CASE WHEN org = 0 THEN department ELSE org_txt END, org, unit
+)
+SELECT
+  group_name,
+  org,
+  SUM(CASE WHEN unit = 0 THEN people ELSE 0 END) AS u1_people,
+  SUM(CASE WHEN unit = 0 THEN brigades ELSE 0 END) AS u1_brigades,
+  SUM(CASE WHEN unit = 1 THEN people ELSE 0 END) AS u2_people,
+  SUM(CASE WHEN unit = 1 THEN brigades ELSE 0 END) AS u2_brigades,
+  SUM(CASE WHEN unit = 2 THEN people ELSE 0 END) AS u3_people,
+  SUM(CASE WHEN unit = 2 THEN brigades ELSE 0 END) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY group_name, org;
+```
+
+> Цей `VIEW` містить агреговані дані **по групах**, але **без рядка "Усього"**
+
+---
+
+#### 2. Основний запит (без підсумку):
+
+```sql
+SELECT * FROM v_unit_summary
+ORDER BY
+  CASE 
+    WHEN org = 0 THEN 1
+    WHEN org = 1 THEN 2
+    ELSE 3
+  END,
+  group_name;
+```
+
+---
+
+#### 3. Підсумковий окремий запит:
+
+```sql
+SELECT 
+  'Усього' AS group_name,
+  NULL AS org,
+  SUM(u1_people) AS u1_people,
+  SUM(u1_brigades) AS u1_brigades,
+  SUM(u2_people) AS u2_people,
+  SUM(u2_brigades) AS u2_brigades,
+  SUM(u3_people) AS u3_people,
+  SUM(u3_brigades) AS u3_brigades,
+  SUM(total_people) AS total_people,
+  SUM(total_brigades) AS total_brigades
+FROM v_unit_summary;
+```
+
+---
+
+### **Переваги:**
+
+- **Гнучкість** — "Усього" можна рахувати або ні, в залежності від контексту.
+- **Швидкість** — `VIEW` використовується як кешований набір.
+- **Легше підтримувати** — логіка групування вся в одному місці (`v_unit_summary`), підсумки — де треба.
+
+---
+
+Якщо ти хочеш, я можу зробити версію з `MATERIALIZED VIEW` або пояснити, як використовувати це в APEX або PL/SQL інтерактивно.

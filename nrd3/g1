@@ -1,0 +1,65 @@
+Помилка `ORA-00920: invalid relational operator` у вашому випадку викликана тим, що Oracle SQL **не підтримує використання булевих змінних напряму в SQL-виразах**. Ви використовуєте змінну `v_has_date` типу `BOOLEAN` в умові `WHERE`:
+
+```sql
+AND (
+    NOT v_has_date OR (
+      (p_date_start IS NULL OR data_start >= p_date_start) AND
+      (p_date_end IS NULL OR data_start <= v_end)
+    )
+)
+```
+
+Це не працює, бо `v_has_date` — PL/SQL булева змінна, а SQL (на відміну від PL/SQL) не знає, що з нею робити.
+
+---
+
+### Як виправити
+
+Вам потрібно **переписати логіку так, щоб булеву змінну не використовувати в SQL**, а натомість будувати умови SQL динамічно або використати `IF` в PL/SQL, щоб виконувати різні запити в залежності від умови.
+
+Ось один із способів це зробити — **розділити логіку виконання SQL запиту залежно від `v_has_date`**:
+
+#### Виправлений блок (приклад для бригад):
+
+```sql
+-- Бригади
+IF v_has_date THEN
+    SELECT 
+      COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+      COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      )
+      AND (
+        (p_date_start IS NULL OR data_start >= p_date_start) AND
+        (p_date_end IS NULL OR data_start <= v_end)
+      );
+ELSE
+    SELECT 
+      COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+      COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL OR department MEMBER OF v_dep_tbl
+      );
+END IF;
+```
+
+Так само зробіть окремо блок `IF...ELSE` і для другого запиту (де рахуються люди).
+
+---
+
+### Додатково
+
+Oracle не має типу `BOOLEAN` у SQL. Якщо хочете уніфікувати логіку, іноді булеві змінні в PL/SQL замінюють на `NUMBER(1)` — 0 або 1. Але в цьому випадку краще саме використати `IF`.
+
+Хочеш — можу допомогти переписати повністю з обома блоками.
+
+Хочеш перепис повного блоку з урахуванням цієї логіки?

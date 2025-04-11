@@ -1,0 +1,8 @@
+apex.navigation.dialog(
+  "f?p=&APP_ID.:6:&SESSION.",  // <-- це URL
+  {
+    modal: true,
+    title: "Модальне вікно",
+    reloadOnClose: true
+  }
+);

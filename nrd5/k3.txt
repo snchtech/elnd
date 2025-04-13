@@ -1,0 +1,84 @@
+Звіт по підрозділам
+Classic Report
+
+SQL Query
+
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1=1
+  --AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  --AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    :P_MODAL_TIMEMODE = 'NOW' AND data_start <= SYSDATE
+    OR :P_MODAL_TIMEMODE = 'DAY' AND data_start BETWEEN TRUNC(SYSDATE) AND SYSDATE
+    OR :P_MODAL_TIMEMODE = 'SHIFT' AND data_start BETWEEN :P_SHIFT_START AND SYSDATE
+  )
+
+
+static id - pivotReport
+
+--------------------------------------------------------------------
+
+P_MODAL_DEPARTMENTS - hidden
+Value Protected - off
+
+P_MODAL_TIMEMODE - hidden
+Value Protected - off
+
+P_SHIFT_START - hidden
+Value Protected - off
+
+P_MODAL_UNIT - hidden
+Value Protected - off
+
+P_MODAL_ORG - hidden
+Value Protected - off
+
+----------------------------------------------------------------------
+
+DA
+
+Page load
+
+add_group_title_to_report
+
+execute javascript code
+
+console.log('test')
+  setTimeout(function() {
+const table = document.querySelector("#pivotReport table.t-Report-report");
+  console.log(table, 'TTTTTTTTTTT')
+  if (!table) return;
+
+  const thead = table.querySelector("thead");
+  console.log(thead, 'YYYYYYYYYYYYYY')
+  const extraRow = document.createElement("tr");
+  extraRow.innerHTML = `
+    <th colspan="5"></th>
+    <th colspan="2" style="text-align:center;">Unit 1</th>
+    <th colspan="2" style="text-align:center;">Unit 2</th>
+    <th colspan="2" style="text-align:center;">Unit 3</th>
+    <th colspan="2" style="text-align:center;">Усього</th>
+  `;
+
+  // Додаємо клас до кожного <th>
+  /*extraRow.querySelectorAll("th").forEach(th => {
+    th.classList.add("with-border");
+  });*/
+
+  const ths = extraRow.querySelectorAll("th");
+ths.forEach((th, index) => {
+  th.classList.add("with-border");
+  if (index === ths.length - 1) {
+    th.classList.remove("with-border"); // або додай інший клас
+  }
+});
+
+  thead.prepend(extraRow);
+  }, 500)
+  

@@ -1,0 +1,28 @@
+js static file
+
+function openUnitModal(mode, unit) {
+  apex.server.process("GEN_MODAL_URL", {
+    x01: mode,
+    x02: unit,
+    x03: $v("P3_DEPARTMENTS")
+  }, {
+    dataType: 'text',
+    success: function(dialogUrl) {
+     //var dialogUrl = $v('P3_DIALOG_URL');
+//console.log('🧪 URL:', dialogUrl);
+
+//openApexDialogFromUrl(dialogUrl);
+
+apex.navigation.redirect(dialogUrl);
+
+/*if (dialogUrl.startsWith("javascript:")) {
+  eval(dialogUrl.replace("javascript:", ""));
+} else {
+  console.warn("URL не є JavaScript діалогом");
+}*/
+    },
+    error: function() {
+      console.log("❌ ПОМИЛКА при виклику process GEN_MODAL_URL");
+    }
+  });
+}

@@ -1,0 +1,57 @@
+Ось готова JavaScript-функція `updateOutfitData(data)`:
+
+```js
+function updateOutfitData(data) {
+  for (let i = 1; i <= 3; i++) {
+    const unitKey = `unit${i}`;
+    const unitData = data.outfit[unitKey];
+
+    // Пропустити, якщо даних для цього юніта немає
+    if (!unitData) continue;
+
+    const container = document.querySelector(`.outfit-unit${i}`);
+    if (!container) continue;
+
+    // Оновити значення в елементах
+    const firmBrigades = container.querySelector('.firm-brigades');
+    if (firmBrigades) firmBrigades.innerText = unitData.firm_brigades ?? 0;
+
+    const contractorBrigades = container.querySelector('.contractor-brigades');
+    if (contractorBrigades) contractorBrigades.innerText = unitData.contractor_brigades ?? 0;
+
+    const firmPeople = container.querySelector('.firm-people');
+    if (firmPeople) firmPeople.innerText = unitData.firm_people ?? 0;
+
+    const contractorPeople = container.querySelector('.contractor-people');
+    if (contractorPeople) contractorPeople.innerText = unitData.contractor_people ?? 0;
+  }
+}
+```
+
+---
+
+### ✅ Очікуваний формат `data`:
+```js
+const data = {
+  outfit: {
+    unit1: {
+      firm_brigades: 5,
+      contractor_brigades: 2,
+      firm_people: 18,
+      contractor_people: 6
+    },
+    unit2: { ... },
+    unit3: { ... }
+  }
+};
+```
+
+---
+
+### 🔁 Що робить ця функція:
+- Для кожного юніта (1, 2, 3):
+  - Шукає відповідний HTML-блок `.outfit-unit{X}`.
+  - Якщо він існує — оновлює значення `<span>`-елементів у цьому блоці.
+  - Безпечна до `null` або відсутніх елементів (використано `??` та перевірки).
+
+Готовий для вставки у ваш WebSocket `onmessage` обробник. Якщо треба — допоможу адаптувати.

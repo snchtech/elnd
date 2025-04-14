@@ -1,0 +1,121 @@
+Ось оновлена версія функції `get_unit_quick_stats`, в якій значення обгорнуті у `<span>` з унікальними `id`/`class`, а все вміщено в `div` з класом `outfit-unitX` (де `X = p_unit`):
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL, -- 'DEP1:DEP2'
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_end         DATE;
+    v_has_date    BOOLEAN := FALSE;
+
+    v_dep_tbl SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+BEGIN
+    -- Розбити департаменти, якщо передано
+    IF p_departments IS NOT NULL THEN
+        v_dep_tbl := split_string(p_departments, ':');
+    END IF;
+
+    -- Визначити фільтр по часу
+    IF p_date_start IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := NVL(p_date_end, SYSDATE);
+    ELSIF p_date_end IS NOT NULL THEN
+        v_has_date := TRUE;
+        v_end := p_date_end;
+    END IF;
+
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+      COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL 
+        OR department IN (SELECT COLUMN_VALUE FROM TABLE(v_dep_tbl))
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- Люди
+    SELECT 
+      NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0),  -- фірма
+      NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0)   -- підрядник
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL 
+        OR department IN (SELECT COLUMN_VALUE FROM TABLE(v_dep_tbl))
+      )
+      AND (
+        NOT v_has_date OR (
+          (p_date_start IS NULL OR data_start >= p_date_start) AND
+          (p_date_end IS NULL OR data_start <= v_end)
+        )
+      );
+
+    -- HTML з span-обгортками
+    v_html := '<div class="outfit-unit' || p_unit || '">' ||
+              '<div>По Unit: <span class="unit-label">' || p_unit || '</span></div>' ||
+              '<div>' ||
+                '<span class="firm-brigades" id="firm-brigades-u' || p_unit || '">' || v_firm_brig || '</span> бригад Фірма, ' ||
+                '<span class="contractor-brigades" id="contractor-brigades-u' || p_unit || '">' || v_cont_brig || '</span> Підрядники' ||
+              '</div>' ||
+              '<div>' ||
+                '<span class="firm-people" id="firm-people-u' || p_unit || '">' || v_firm_people || '</span> чол. Фірма, ' ||
+                '<span class="contractor-people" id="contractor-people-u' || p_unit || '">' || v_cont_people || '</span> Підрядники' ||
+              '</div>' ||
+              '</div>';
+
+    RETURN v_html;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+/
+```
+
+---
+
+### 🔍 Як це виглядає в HTML:
+
+```html
+<div class="outfit-unit1">
+  <div>По Unit: <span class="unit-label">1</span></div>
+  <div><span class="firm-brigades" id="firm-brigades-u1">4</span> бригад Фірма, <span class="contractor-brigades" id="contractor-brigades-u1">2</span> Підрядники</div>
+  <div><span class="firm-people" id="firm-people-u1">12</span> чол. Фірма, <span class="contractor-people" id="contractor-people-u1">5</span> Підрядники</div>
+</div>
+```
+
+---
+
+### ✅ Переваги:
+
+- Можеш оновлювати окремі `span` елементи через JavaScript:
+```js
+document.getElementById('firm-people-u1').innerText = 15;
+```
+
+- Можна використовувати селектори для стилізації чи WebSocket оновлення:
+```js
+document.querySelector('.outfit-unit2 .contractor-brigades').textContent = '3';
+```
+
+Якщо потрібно — можу допомогти з `JS` кодом для динамічного оновлення цих значень через WebSocket.

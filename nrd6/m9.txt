@@ -1,0 +1,50 @@
+Щоб вирівняти **всі чекбокси і їх заголовки в ряд** у APEX 22 за допомогою JavaScript — виконай наступне:
+
+---
+
+### ✅ Крок 1: Додай `Static ID` для Checkbox Group
+
+Перейдіть до свого елемента Checkbox Group (наприклад `P3_DEPARTMENTS`) і в полі **"Static ID"** вкажи:
+
+```
+departments_group
+```
+
+---
+
+### ✅ Крок 2: Додай JavaScript
+
+Перейдіть у **Page → Execute when Page Loads** (або `Function and Global Variable Declaration`, якщо треба кілька разів запускати):
+
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+  const container = document.querySelector("#departments_group .apex-item-options");
+  if (!container) return;
+
+  // Застосовуємо Flexbox для обгортки чекбоксів
+  container.style.display = "flex";
+  container.style.flexWrap = "wrap";
+  container.style.gap = "1rem";
+
+  // Окремо стилізуємо кожен блок з checkbox + label
+  const options = container.querySelectorAll(".apex-item-option");
+  options.forEach(opt => {
+    opt.style.display = "inline-flex";
+    opt.style.alignItems = "center";
+    opt.style.marginRight = "20px";
+    opt.style.whiteSpace = "nowrap";
+  });
+});
+```
+
+---
+
+### ✅ Результат:
+- Всі checkbox'и та їхні підписи (`label`) будуть в один ряд або переноситимуться вниз, якщо не вміщаються.
+- Можна змінити `gap`, `marginRight`, `flexWrap` тощо для кращої адаптації.
+
+---
+
+🔄 **Бонус**: Якщо елемент генерується після динамічного оновлення (наприклад через `Dynamic Action` → `Refresh`) — потрібно викликати цей JS-код повторно після оновлення.
+
+Хочеш — покажу приклад, як це зробити через `Dynamic Action → JavaScript Code` після `Refresh`.

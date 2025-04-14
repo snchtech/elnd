@@ -1,0 +1,39 @@
+Якщо `unit` у вас має значення **0, 1, 2** (а не 1, 2, 3), тоді просто змініть початкову ітерацію в циклі на `i = 0` до `i < 3`, і селектор `.outfit-unit${i}` буде відповідати `.outfit-unit0`, `.outfit-unit1`, `.outfit-unit2`.
+
+Ось оновлений код:
+
+```js
+function updateOutfitData(data) {
+  for (let i = 0; i < 3; i++) {
+    const unitKey = `unit${i}`;
+    const unitData = data.outfit[unitKey];
+
+    // Пропустити, якщо даних для цього юніта немає
+    if (!unitData) continue;
+
+    const container = document.querySelector(`.outfit-unit${i}`);
+    if (!container) continue;
+
+    // Оновити значення в елементах
+    const firmBrigades = container.querySelector('.firm-brigades');
+    if (firmBrigades) firmBrigades.innerText = unitData.firm_brigades ?? 0;
+
+    const contractorBrigades = container.querySelector('.contractor-brigades');
+    if (contractorBrigades) contractorBrigades.innerText = unitData.contractor_brigades ?? 0;
+
+    const firmPeople = container.querySelector('.firm-people');
+    if (firmPeople) firmPeople.innerText = unitData.firm_people ?? 0;
+
+    const contractorPeople = container.querySelector('.contractor-people');
+    if (contractorPeople) contractorPeople.innerText = unitData.contractor_people ?? 0;
+  }
+}
+```
+
+---
+
+✅ **Що змінилось:**
+- Цикл: `for (let i = 0; i < 3; i++)`
+- Селектори тепер працюють з класами `.outfit-unit0`, `.outfit-unit1`, `.outfit-unit2`
+
+Якщо потрібно — можу допомогти з HTML-шаблоном для цих блоків.

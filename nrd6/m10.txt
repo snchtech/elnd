@@ -1,0 +1,56 @@
+Щоб **застосувати вирівнювання чекбоксів після оновлення (Refresh)** елемента `P3_DEPARTMENTS`, зроби ось що:
+
+---
+
+### ✅ КРОК 1: Вкажи `Static ID`
+
+У властивостях елемента **P3_DEPARTMENTS**, у полі **Static ID** вкажи:
+
+```
+departments_group
+```
+
+---
+
+### ✅ КРОК 2: Створи Dynamic Action
+
+1. **Name**: `Style Checkbox Group`
+2. **Event**: `After Refresh`
+3. **Selection Type**: `Item(s)`
+4. **Item(s)**: `P3_DEPARTMENTS`
+5. **True Action**: `Execute JavaScript Code`
+
+---
+
+### ✅ КРОК 3: Код для JavaScript Action
+
+```javascript
+(function () {
+  const container = document.querySelector("#departments_group .apex-item-options");
+  if (!container) return;
+
+  container.style.display = "flex";
+  container.style.flexWrap = "wrap";
+  container.style.gap = "1rem";
+
+  const options = container.querySelectorAll(".apex-item-option");
+  options.forEach(opt => {
+    opt.style.display = "inline-flex";
+    opt.style.alignItems = "center";
+    opt.style.marginRight = "20px";
+    opt.style.whiteSpace = "nowrap";
+  });
+})();
+```
+
+---
+
+✅ **Коли це спрацює?**
+
+- При завантаженні сторінки (якщо хочеш — додай ще один `Execute when Page Loads`)
+- При `apex.item("P3_DEPARTMENTS").refresh();`
+- При `Dynamic Action → Refresh` елемента `P3_DEPARTMENTS`
+
+---
+
+🔧 Якщо потрібна адаптація під інший компонент (наприклад, `shuttle`, `select list` або `inline checkboxes`) — скажи, покажу окремий варіант.

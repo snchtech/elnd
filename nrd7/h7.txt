@@ -1,0 +1,50 @@
+Чудово, що ти вже маєш оновлену view з `status_start_date`, `status_end_date` — тепер замінимо стару умову на нову, яка базується **на актуальному статусі outfit** (тобто `status_id = 6`) та його **періоді активності**.
+
+---
+
+### ✅ Оновлена умова фільтрації по `:P_MODAL_TIMEMODE`
+
+```sql
+AND (
+  (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+  OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+  OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+)
+```
+
+---
+
+### 📌 Пояснення логіки:
+
+| Режим часу (`:P_MODAL_TIMEMODE`) | Умова |
+|----------------------------------|-------|
+| `NOW`                            | статус почався до `SYSDATE` і ще не завершився |
+| `DAY`                            | статус почався до `SYSDATE` і **ще триває або завершився після початку доби** |
+| `SHIFT`                          | статус почався до `SYSDATE` і **ще триває або завершився після `:P_SHIFT_START`** |
+
+---
+
+### 🔁 Повна оновлена версія SELECT
+
+```sql
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1=1
+  --AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  --AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+```
+
+---
+
+🔧 Тепер при зміні часу (`NOW`, `DAY`, `SHIFT`) — звіт правильно обробляє ті `outfit`, які активні в заданому часовому інтервалі.  
+Повідом, якщо потрібно додатково врахувати `unit`, `org`, або додати `GROUP BY` у цей запит — допоможу оптимізувати.

@@ -1,0 +1,86 @@
+Ось оновлена версія `V_OUTFIT_PIVOT_BASE`, яка враховує поля `status_start_date` та `status_end_date` з `TEST_OUTFIT_DATA`:
+
+---
+
+### ✅ Оновлена `VIEW` з `status_start_date` та `status_end_date`
+
+```sql
+CREATE OR REPLACE FORCE EDITIONABLE VIEW "V_OUTFIT_PIVOT_BASE" (
+  "GROUP_NAME", "ORG", "UNIT", "DEPARTMENT", "DATA_START", 
+  "STATUS_START_DATE", "STATUS_END_DATE",
+  "U1_PEOPLE", "U1_BRIGADES", 
+  "U2_PEOPLE", "U2_BRIGADES", 
+  "U3_PEOPLE", "U3_BRIGADES", 
+  "TOTAL_PEOPLE", "TOTAL_BRIGADES"
+) AS 
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    unit,
+    department,
+    data_start,
+    status_start_date,
+    status_end_date,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    unit,
+    department,
+    data_start,
+    status_start_date,
+    status_end_date
+)
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+### 🧠 Що змінилося:
+- У `base_data` і `agg_data` додано `status_start_date`, `status_end_date`.
+- Ці ж поля винесено у фінальний `SELECT`, щоб мати можливість **фільтрувати** по ним на рівні SQL-запиту в APEX.
+
+---
+
+✅ **Наступний крок:** покажи, який саме SQL ти хочеш використати у APEX-звіті на базі цієї view — я допоможу додати фільтрацію по часах `NOW`, `SHIFT`, `DAY` через `:P_MODAL_TIMEMODE` тощо.

@@ -1,0 +1,177 @@
+Ось оновлена версія функції `get_unit_matrix_html`, де для **всіх `SELECT`** додано умову з `status_start_date` / `status_end_date` з урахуванням режимів `NOW`, `DAY`, `SHIFT`.
+
+---
+
+### ✅ Оновлена функція:
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_matrix_html (
+    p_departments IN VARCHAR2
+) RETURN CLOB IS
+    v_html       CLOB := '';
+    v_unit1      NUMBER;
+    v_unit2      NUMBER;
+    v_unit3      NUMBER;
+    v_total      NUMBER;
+
+    v_shift_start DATE;
+    v_shift_end   DATE;
+
+    v_departments_tbl SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+
+    CURSOR cur_periods IS
+        SELECT 'Зараз' AS period_key, 'NOW' AS mode, SYSDATE AS start_time, NULL AS end_time FROM DUAL
+        UNION ALL
+        SELECT 'З початку доби', 'DAY', TRUNC(SYSDATE), SYSDATE FROM DUAL
+        UNION ALL
+        SELECT 'З початку зміни', 'SHIFT', NULL, NULL FROM DUAL;
+
+    FUNCTION clickable_cell(p_value NUMBER, p_mode VARCHAR2, p_org NUMBER, p_unit NUMBER, p_data_type VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<a href="javascript:void(0);" onclick="openUnitModal(''' 
+              || p_mode || ''',' 
+              || p_org || ',' 
+              || p_unit || ',''' 
+              || p_data_type || ''')">' 
+              || NVL(p_value, 0) || '</a>';
+    END;
+BEGIN
+    -- Парсимо департаменти
+    IF p_departments IS NOT NULL THEN
+        v_departments_tbl := split_string(p_departments, ':');
+    END IF;
+
+    -- Початок і кінець зміни
+    IF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '06:00' AND '13:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 6/24;
+        v_shift_end   := TRUNC(SYSDATE) + 14/24;
+    ELSIF TO_CHAR(SYSDATE, 'HH24:MI') BETWEEN '14:00' AND '21:59' THEN
+        v_shift_start := TRUNC(SYSDATE) + 14/24;
+        v_shift_end   := TRUNC(SYSDATE) + 22/24;
+    ELSE
+        IF TO_CHAR(SYSDATE, 'HH24:MI') >= '22:00' THEN
+            v_shift_start := TRUNC(SYSDATE) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE + 1) + 6/24;
+        ELSE
+            v_shift_start := TRUNC(SYSDATE - 1) + 22/24;
+            v_shift_end   := TRUNC(SYSDATE) + 6/24;
+        END IF;
+    END IF;
+
+    v_html := '<table border="1" cellpadding="5" cellspacing="0">';
+    v_html := v_html || '<tr><th>Час</th><th>Тип</th><th>Unit 1</th><th>Unit 2</th><th>Unit 3</th><th>Всього</th></tr>';
+
+    FOR rec IN cur_periods LOOP
+        DECLARE
+            v_start DATE := rec.start_time;
+            v_end   DATE := rec.end_time;
+        BEGIN
+            IF rec.period_key = 'З початку зміни' THEN
+                v_start := v_shift_start;
+                v_end   := SYSDATE;
+            END IF;
+
+            -- Загальна умова по інтервалу
+            -- Додамо у WHERE для кожного запиту
+            -- 1. Бригади фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (
+                p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+              )
+              AND (
+                (v_start IS NOT NULL AND status_start_date < v_end AND (status_end_date IS NULL OR v_start < status_end_date))
+                OR (v_start IS NULL AND status_start_date < v_end AND status_end_date IS NULL)
+              );
+
+            v_html := v_html || '<tr><td rowspan="4">' || rec.period_key || '</td><td>Бригад фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- 2. Бригади підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+                COUNT(*)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (
+                p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+              )
+              AND (
+                (v_start IS NOT NULL AND status_start_date < v_end AND (status_end_date IS NULL OR v_start < status_end_date))
+                OR (v_start IS NULL AND status_start_date < v_end AND status_end_date IS NULL)
+              );
+
+            v_html := v_html || '<tr><td>Бригад підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'brigades') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- 3. Люди фірми
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 0
+              AND (
+                p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+              )
+              AND (
+                (v_start IS NOT NULL AND status_start_date < v_end AND (status_end_date IS NULL OR v_start < status_end_date))
+                OR (v_start IS NULL AND status_start_date < v_end AND status_end_date IS NULL)
+              );
+
+            v_html := v_html || '<tr><td>Людей фірми</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 0, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 0, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 0, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+
+            -- 4. Люди підрядників
+            SELECT 
+                SUM(CASE WHEN unit = 0 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 1 THEN team_count ELSE 0 END),
+                SUM(CASE WHEN unit = 2 THEN team_count ELSE 0 END),
+                SUM(team_count)
+            INTO v_unit1, v_unit2, v_unit3, v_total
+            FROM your_view
+            WHERE org = 1
+              AND (
+                p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+              )
+              AND (
+                (v_start IS NOT NULL AND status_start_date < v_end AND (status_end_date IS NULL OR v_start < status_end_date))
+                OR (v_start IS NULL AND status_start_date < v_end AND status_end_date IS NULL)
+              );
+
+            v_html := v_html || '<tr><td>Людей підрядників</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit1, rec.mode, 1, 0, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit2, rec.mode, 1, 1, 'people') || '</td>';
+            v_html := v_html || '<td>' || clickable_cell(v_unit3, rec.mode, 1, 2, 'people') || '</td>';
+            v_html := v_html || '<td>' || NVL(v_total, 0) || '</td></tr>';
+        END;
+    END LOOP;
+
+    v_html := v_html || '</table>';
+    RETURN v_html;
+END;
+/
+```
+
+---
+
+Якщо хочеш, можу винести умову `status_start_date/status_end_date` як окремий `FUNCTION` або `VIEW`, щоб не дублювати.

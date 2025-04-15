@@ -1,0 +1,76 @@
+Так, ви абсолютно правильно думаєте: такий SQL-запит можна **оптимізувати**, і справді краще **використати `WITH` (common table expression)**, щоб:
+
+1. Зменшити **повторення логіки** (`outfit_open = 6`, `status_start_date < SYSDATE`).
+2. Покращити **читабельність**.
+3. У деяких випадках – трохи пришвидшити виконання, якщо Oracle оптимізатор краще зможе розпізнати загальні умови.
+
+---
+
+### ✅ Оптимізований варіант із `WITH`
+
+```sql
+WITH filtered_data AS (
+  SELECT department
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+    AND status_start_date < SYSDATE
+    AND department IS NOT NULL
+)
+SELECT DISTINCT department AS display_value, department AS return_value
+FROM (
+  SELECT department FROM filtered_data
+  WHERE status_end_date IS NULL
+
+  UNION
+
+  SELECT department FROM filtered_data
+  WHERE status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)
+
+  UNION
+
+  SELECT department FROM filtered_data
+  WHERE status_end_date IS NULL OR status_end_date >= :P_SHIFT_START
+)
+ORDER BY department
+```
+
+---
+
+### 🧠 Ще краще: **замість `UNION` → `UNION ALL` + `DISTINCT`**
+Oracle не обов’язково оптимізує `UNION`, тому заміна на `UNION ALL` із `DISTINCT` на зовнішньому рівні може бути **ефективнішою**, особливо якщо `department` вже унікальні.
+
+```sql
+WITH filtered_data AS (
+  SELECT department, status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+    AND status_start_date < SYSDATE
+    AND department IS NOT NULL
+)
+SELECT DISTINCT department AS display_value, department AS return_value
+FROM (
+  SELECT department FROM filtered_data WHERE status_end_date IS NULL
+  UNION ALL
+  SELECT department FROM filtered_data WHERE status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)
+  UNION ALL
+  SELECT department FROM filtered_data WHERE status_end_date IS NULL OR status_end_date >= :P_SHIFT_START
+)
+ORDER BY department
+```
+
+---
+
+### 🧪 Пояснення продуктивності:
+- `UNION` виконує **сортування та усунення дублікатів** — це повільніше.
+- `UNION ALL` швидше, бо **не прибирає дублікати** — ми це робимо один раз через `DISTINCT` на рівні зовнішнього запиту.
+
+---
+
+### ✅ Додатково:
+- Якщо `TEST_OUTFIT_DATA` — це `VIEW`, можна створити **матеріалізований view** для `status_start_date < SYSDATE AND outfit_open = 6` і використовувати її в цьому запиті.
+- Якщо є індекс по `(status_start_date, status_end_date, outfit_open, department)`, це теж значно прискорить запит.
+
+---
+
+🔚 **Рекомендація:**  
+Використайте останній варіант з `UNION ALL` + `DISTINCT`, і винесіть `status_start_date < SYSDATE AND outfit_open = 6` у `WITH filtered_data`. Це дасть як читабельність, так і продуктивність.

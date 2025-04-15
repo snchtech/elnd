@@ -1,0 +1,75 @@
+Ось адаптований `SELECT`-запит для WebSocket-сценарію, який повертає агреговані **брігади та персонал** по `unit`, враховуючи статус 6 з урахуванням `status_start_date` / `status_end_date`.
+
+---
+
+### ✅ WebSocket-friendly SQL-запит (без функції):
+
+```sql
+SELECT
+  unit,
+  COUNT(CASE WHEN org = 0 THEN 1 END) AS firm_brigades,
+  COUNT(CASE WHEN org = 1 THEN 1 END) AS contractor_brigades,
+  SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END) AS firm_people,
+  SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END) AS contractor_people
+FROM your_view
+WHERE outfit_open = 6
+  AND unit = :p_unit
+  AND (
+    :p_departments IS NULL 
+    OR department IN (
+      SELECT column_value FROM TABLE(split_string(:p_departments, ':'))
+    )
+  )
+  AND (
+    -- Часовий інтервал передано
+    (
+      :p_date_start IS NOT NULL OR :p_date_end IS NOT NULL
+    AND
+      (
+        status_start_date < NVL(:p_date_end, SYSDATE)
+        AND (status_end_date IS NULL OR NVL(:p_date_start, TO_DATE('1900','YYYY')) < status_end_date)
+      )
+    )
+    -- Часовий інтервал не передано — поточні відкриті
+    OR (
+      :p_date_start IS NULL AND :p_date_end IS NULL
+      AND status_start_date < SYSDATE
+      AND status_end_date IS NULL
+    )
+  )
+GROUP BY unit;
+```
+
+---
+
+### 📥 Параметри, які ти маєш передавати з WebSocket:
+
+| Назва параметра | Приклад | Примітка |
+|-----------------|---------|----------|
+| `:p_unit`       | `0`, `1`, `2` | Потрібно викликати запит тричі для кожного unit |
+| `:p_departments`| `'1257:1523'` | Може бути NULL |
+| `:p_date_start` | NULL або `TO_DATE('2024-04-13 06:00', 'YYYY-MM-DD HH24:MI')` | Залежить від режиму |
+| `:p_date_end`   | NULL або `SYSDATE` | Залежить від режиму |
+
+---
+
+### 📤 Формат очікуваного результату (один рядок на `unit`):
+
+```json
+{
+  "unit": 0,
+  "firm_brigades": 3,
+  "contractor_brigades": 2,
+  "firm_people": 15,
+  "contractor_people": 8
+}
+```
+
+---
+
+### 🧠 Примітки:
+
+- Можеш використати `bindParams` у `oracledb.execute(...)` на Node.js для безпечного підставлення значень.
+- Якщо хочеш отримати дані одразу по **всіх unit**, просто прибери `AND unit = :p_unit` і `GROUP BY unit`.
+
+Хочеш, я відразу покажу запит, який повертає всі 3 `unit` у вигляді масиву — як `unit1`, `unit2`, `unit3` у твоєму `dataOutfit`?

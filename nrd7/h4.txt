@@ -1,0 +1,122 @@
+Ось переписана версія функції `get_unit_quick_stats`, адаптована під нову логіку, де `your_view` може повертати **декілька рядків на `id_outfit`** через різні `status_start_date` / `status_end_date`, і потрібно враховувати статус у часовому інтервалі.
+
+---
+
+### ✅ Основна логіка:
+
+1. Якщо передано `p_date_start` і/або `p_date_end` → перевіряємо, чи статус 6 **перетинається** з цим інтервалом.
+2. Якщо дати не задані → беремо тільки ті рядки, де `status_end_date IS NULL`, а `status_start_date < SYSDATE`.
+3. Замість `data_start` тепер у фільтрації використовується `status_start_date` і `status_end_date`.
+
+---
+
+### 🧩 Перевірені сценарії:
+
+| Сценарій | Фільтр |
+|----------|--------|
+| `status_start_date < p_date_end` AND `p_date_start < status_end_date OR status_end_date IS NULL` | коли заданий інтервал |
+| `status_start_date < SYSDATE AND status_end_date IS NULL` | коли дати не задані |
+
+---
+
+### ✅ Оновлена функція:
+
+```plsql
+CREATE OR REPLACE FUNCTION get_unit_quick_stats (
+    p_unit         IN NUMBER,
+    p_departments  IN VARCHAR2 DEFAULT NULL,
+    p_date_start   IN DATE DEFAULT NULL,
+    p_date_end     IN DATE DEFAULT NULL
+) RETURN CLOB IS
+    v_html        CLOB := '';
+    v_firm_brig   NUMBER := 0;
+    v_cont_brig   NUMBER := 0;
+    v_firm_people NUMBER := 0;
+    v_cont_people NUMBER := 0;
+
+    v_dep_tbl SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();
+    v_now     DATE := SYSDATE;
+BEGIN
+    IF p_departments IS NOT NULL THEN
+        v_dep_tbl := split_string(p_departments, ':');
+    END IF;
+
+    -- Бригади
+    SELECT 
+      COUNT(CASE WHEN org = 0 THEN 1 END),  -- фірма
+      COUNT(CASE WHEN org = 1 THEN 1 END)   -- підрядник
+    INTO v_firm_brig, v_cont_brig
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL 
+        OR department IN (SELECT column_value FROM TABLE(v_dep_tbl))
+      )
+      AND (
+        -- Якщо передано часовий інтервал
+        (
+          p_date_start IS NOT NULL OR p_date_end IS NOT NULL
+        AND
+          (
+            status_start_date < NVL(p_date_end, v_now) AND
+            (status_end_date IS NULL OR NVL(p_date_start, TO_DATE('1900','YYYY')) < status_end_date)
+          )
+        )
+        -- Якщо часовий інтервал не задано
+        OR (
+          p_date_start IS NULL AND p_date_end IS NULL AND
+          status_start_date < v_now AND status_end_date IS NULL
+        )
+      );
+
+    -- Люди
+    SELECT 
+      NVL(SUM(CASE WHEN org = 0 THEN team_count ELSE 0 END), 0),  -- фірма
+      NVL(SUM(CASE WHEN org = 1 THEN team_count ELSE 0 END), 0)   -- підрядник
+    INTO v_firm_people, v_cont_people
+    FROM your_view
+    WHERE unit = p_unit
+      AND outfit_open = 6
+      AND (
+        p_departments IS NULL 
+        OR department IN (SELECT column_value FROM TABLE(v_dep_tbl))
+      )
+      AND (
+        (
+          p_date_start IS NOT NULL OR p_date_end IS NOT NULL
+        AND
+          (
+            status_start_date < NVL(p_date_end, v_now) AND
+            (status_end_date IS NULL OR NVL(p_date_start, TO_DATE('1900','YYYY')) < status_end_date)
+          )
+        )
+        OR (
+          p_date_start IS NULL AND p_date_end IS NULL AND
+          status_start_date < v_now AND status_end_date IS NULL
+        )
+      );
+
+    v_html := 'По Unit: ' || p_unit || '<br>' ||
+              v_firm_brig || ' бригад Фірма, ' || v_cont_brig || ' Підрядники<br>' ||
+              v_firm_people || ' чол. Фірма, ' || v_cont_people || ' Підрядники';
+
+    RETURN v_html;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Помилка: ' || SQLERRM;
+END;
+```
+
+---
+
+### 🔍 Коментарі:
+
+- Використано `NVL(p_date_end, SYSDATE)` і `NVL(p_date_start, '1900')`, щоб уникнути null'ів у перевірках.
+- `status_start_date < p_date_end` перевіряє, що статус почався **до кінця інтервалу**.
+- `status_end_date IS NULL OR status_end_date > p_date_start` перевіряє, що він **ще не завершився до початку інтервалу**.
+
+---
+
+Готовий адаптувати до інших форматів (наприклад JSON замість CLOB) або вивести це у вигляді SQL-запиту, якщо хочеш замінити цю функцію на `SELECT` для WebSocket-сценарію.

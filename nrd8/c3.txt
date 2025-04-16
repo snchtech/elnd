@@ -1,0 +1,94 @@
+Дуже влучне зауваження — справді, якщо ти винесеш `unit` у `agg_data`, а далі зробиш **агрегацію без `GROUP BY unit`** у фінальному `SELECT`, то на рівні APEX вже **не зможеш** фільтрувати по `unit`, бо цього поля просто не буде в результаті view.
+
+---
+
+### ✅ Висновок:
+
+Щоб **можна було фільтрувати по `unit` у APEX**, поле `unit` **обов’язково повинно бути у фінальному SELECT** без агрегування по ньому. Отже:
+
+🔁 Повертаємо `unit` назад у `GROUP BY` фінального select.
+
+---
+
+### 🔄 Виправлена `view` з `unit` у фінальному SELECT:
+
+```sql
+CREATE OR REPLACE FORCE VIEW v_outfit_pivot_base AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    department,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date,
+    COUNT(DISTINCT id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    department,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date
+)
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  -- значення лише по одному unit (бо ми вже по ньому групували)
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+### ✅ У твоєму APEX-запиті:
+
+```sql
+AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+```
+
+буде працювати коректно, бо `unit` зберігається на рівні фінального результату.
+
+---
+
+🔔 Якщо ж ти колись захочеш зробити **справжній pivot**, щоб один рядок мав одразу `unit1`, `unit2`, `unit3` в одному записі — тоді `unit` не можна включати у `GROUP BY`, і фільтрація за ним має відбуватись **на рівні підзапиту або в WITH**.
+
+Хочеш я покажу обидва варіанти в дії (pivot vs per-unit-row)?

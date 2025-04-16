@@ -1,0 +1,66 @@
+Ось приклад SQL-коду для створення `VIEW v_outfit_summary_pivot`, яка агрегує дані по `group_name` (підрозділи та підрядники) з розбиттям по `unit`:
+
+```sql
+CREATE OR REPLACE VIEW v_outfit_summary_pivot AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    status_start_date,
+    status_end_date,
+    CASE WHEN org = 0 THEN TO_CHAR(department) ELSE org_txt END AS group_name
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    group_name,
+    org,
+    unit,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY group_name, org, unit
+)
+SELECT
+  group_name,
+  org,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY group_name, org;
+```
+
+---
+
+### 📌 Пояснення:
+
+- `base_data`: вибирає всі outfit, які відкриті (`outfit_open = 6`), і створює логічне поле `group_name`:
+  - Якщо це **фірма** (`org = 0`), то використовує `department`
+  - Якщо це **підрядник** (`org = 1`), то використовує `org_txt`
+- `agg_data`: підрахунок кількості outfit і суми `team_count` по `group_name`, `org` та `unit`
+- Фінальний select: робить pivot (розгортання) по unit і обчислює підсумки
+
+---
+
+### 🧩 Що далі?
+
+На основі цієї view:
+- Можна робити просту `SELECT * FROM v_outfit_summary_pivot`
+- У APEX використовувати умови фільтрації по `org`, `group_name`, наприклад:
+
+```sql
+WHERE (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+```
+
+Хочеш — можу одразу сформувати SQL для інтеграції цієї view у Classic Report з умовами часу та підрозділів.

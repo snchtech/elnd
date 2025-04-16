@@ -1,0 +1,108 @@
+Ось оновлений та **оптимізований варіант `view` `v_outfit_pivot_base`**, з урахуванням:
+
+- Виправлення `GROUP BY` (без `unit`);
+- Коректної pivot-агрегації;
+- Збереження `status_start_date`, `status_end_date` для подальшої фільтрації;
+- Сумісності з APEX-запитом.
+
+---
+
+### 🔧 Оновлена `VIEW v_outfit_pivot_base`
+
+```sql
+CREATE OR REPLACE FORCE VIEW v_outfit_pivot_base AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    -- групування по назві підрозділу або підрядника
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    department,
+    data_start,
+    status_start_date,
+    status_end_date,
+    unit,
+    COUNT(DISTINCT id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    department,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date
+)
+SELECT
+  group_name,
+  org,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  -- pivot по unit
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+### ✅ Фільтрація в APEX (`WHERE`)
+
+```sql
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1 = 1
+  -- майбутнє використання
+  --AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  --AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+  AND (
+    :P_MODAL_DEPARTMENTS IS NULL 
+    OR department IN (
+      SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+    )
+  )
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+```
+
+---
+
+### 📝 Коментарі
+
+- У `GROUP BY` **unit винесений в agg_data**, а не у фінальний select.
+- `COUNT(DISTINCT id_outfit)` — захист від дублювання outfit, якщо з якоїсь причини в базі є однакові `id_outfit` з різним `status_start_date`.
+- Така `view` максимально сумісна з динамічною фільтрацією у APEX і буде синхронізована з логікою `get_unit_matrix_html`.
+
+Готовий допомогти далі — якщо хочеш, можу також адаптувати `checkbox group LOV SQL`, щоб враховувала ці дані.

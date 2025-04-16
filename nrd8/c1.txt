@@ -1,0 +1,143 @@
+Добре, розберемо ситуацію детально. У вас є:
+
+- `VIEW v_outfit_pivot_base`, яка агрегує дані за `department` і `org_txt`.
+- Фільтрація даних відбувається по `status_start_date`, `status_end_date`, `department`, `unit`, `org`.
+- Ви отримуєте **неспівпадіння даних** з функцією `get_unit_matrix_html`.
+
+---
+
+## 🔍 Аналіз можливих причин розбіжностей
+
+### 1. **Групування в `agg_data` включає `unit`**
+У `agg_data` ви **групуєте** за `unit`, а далі в `SELECT` знову агрегуєте по `unit`:
+
+```sql
+NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+...
+```
+
+🔶 Це означає: **кожен рядок містить уже тільки один `unit`**, і всі інші — `0`. Але ви все одно намагаєтесь **зробити pivot** всередині по цьому самому `unit`.  
+🟠 У результаті — дублювання, неточне pivot-агрегування.
+
+---
+
+### ✅ Рішення: **перенесіть pivot-агрегацію в окремий шар**
+Переробіть `agg_data` так, щоб вона не включала `unit` у `GROUP BY`. Тоді pivot-агрегація буде правильно працювати:
+
+```sql
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+agg_data AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    department,
+    data_start,
+    status_start_date,
+    status_end_date,
+    unit,
+    COUNT(id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    department,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date
+)
+SELECT
+  group_name,
+  org,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  -- pivot aggregation
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+### 2. **`group_name` ≠ `department`**
+В `group_name` ви маєте:
+
+```sql
+CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name
+```
+
+А у `WHERE` ви фільтруєте по `department`, а не `group_name`. Якщо `org = 1`, тоді `department` може бути в `NULL`, або не тим, що потрібно.
+
+✅ Рішення:
+- Якщо `group_name` використовується у `report`, фільтрацію варто синхронізувати з `group_name`, а не `department`.
+
+Або у `WHERE` можна додати умовну фільтрацію:
+
+```sql
+AND (
+  :P_MODAL_DEPARTMENTS IS NULL
+  OR (
+    (org = 0 AND department IN (SELECT COLUMN_VALUE FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))))
+    OR (org = 1 AND org_txt IN (SELECT COLUMN_VALUE FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))))
+  )
+)
+```
+
+Якщо ви точно передаєте лише `department` ID (а не `org_txt`), тоді фільтрація має бути тільки для `org = 0`.
+
+---
+
+### 3. **Можливі дублікати outfit по часу**
+У `status_start_date`, `status_end_date` можуть бути **кілька записів для одного `id_outfit`**, і ви їх не прибираєте перед `GROUP BY`, отже:
+
+- Вони накопичуються у `COUNT`, `SUM`.
+- Дані можуть бути завищені.
+
+✅ Рішення:
+- Застосувати `DISTINCT id_outfit` перед `GROUP BY`, або агрегацію тільки по `id_outfit`, обмежену найактуальнішими записами (наприклад, останній статус).
+
+---
+
+## 📌 Підсумок
+
+### 🔧 Що виправити:
+1. Прибрати `unit` з `GROUP BY` в `agg_data`.
+2. Перевірити, чи `group_name` = `department` у контексті `org = 0`, і фільтрувати лише тоді.
+3. Врахувати можливе дублювання `id_outfit` — за потреби зробити попередню агрегацію.
+
+### ❓ Чому get_unit_matrix_html працює правильно:
+- Вона **виконує окремий `SELECT` для кожного типу unit/org**, без `GROUP BY` по всьому.
+- Тобто, вона працює з базовими даними без pivot-агрегації — тому точніше.
+
+---
+
+Хочеш — я можу переписати `view` і `WHERE` блок на основі цих виправлень.

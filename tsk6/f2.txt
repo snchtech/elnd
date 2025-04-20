@@ -1,0 +1,77 @@
+Чудово, давай реалізуємо це поетапно:
+
+---
+
+## 🔧 **1. LOV Item (наприклад `P50_COLLECTION_LOV`)**
+
+### 📦 Джерело LOV:
+```sql
+SELECT c.COLLECTION_ITEM_CONTENT AS display_value,
+       c.ID AS return_value
+FROM TASK_COLLECTIONS c
+WHERE c.TYPE_ID = 1
+  AND (
+    c.DEPARTMENT_ID = :P50_USER_DEPARTMENT_ID
+    OR (c.IS_PERSONAL = 1 AND c.CREATOR_ID = :P50_USER_ID)
+  )
+ORDER BY c.DATE_CREATE DESC
+```
+
+> `:P50_USER_DEPARTMENT_ID` та `:P50_USER_ID` — це page item, які повинні бути встановлені раніше (можна прихованими).
+
+---
+
+## 👁️‍🗨️ **2. Умова видимості LOV item**
+
+Щоб `P50_COLLECTION_LOV` з’являвся **лише якщо є доступні записи**, створимо **`Server-side condition`**:
+
+### Condition Type:
+`PL/SQL Function (returning Boolean)`
+
+```plsql
+RETURN EXISTS (
+  SELECT 1
+  FROM TASK_COLLECTIONS c
+  WHERE c.TYPE_ID = 1
+    AND (
+      c.DEPARTMENT_ID = :P50_USER_DEPARTMENT_ID
+      OR (c.IS_PERSONAL = 1 AND c.CREATOR_ID = :P50_USER_ID)
+    )
+);
+```
+
+---
+
+## 📝 **3. Textarea (`P50_TASK_CONTENT`) + Автовставка тексту**
+
+### Кроки:
+
+1. LOV `P50_COLLECTION_LOV` повертає ID запису.
+2. Додай **Dynamic Action**:
+   - **Name**: `Set Content from Collection`
+   - **Event**: `Change`
+   - **Selection Type**: `Item(s)` → `P50_COLLECTION_LOV`
+   - **True Action**: **Set Value**
+     - Set Type: **SQL Query (returning single value)**
+     - SQL:
+
+     ```sql
+     SELECT COLLECTION_ITEM_CONTENT
+     FROM TASK_COLLECTIONS
+     WHERE ID = :P50_COLLECTION_LOV
+     ```
+
+     - Affected Item: `P50_TASK_CONTENT`
+
+---
+
+## ✅ Результат:
+
+- Якщо у користувача є записи в TASK_COLLECTIONS — з’являється LOV.
+- Коли користувач вибирає запис — текст автоматично вставляється в textarea.
+- Користувач може редагувати цей текст далі вручну.
+- LOV прихований, якщо даних немає.
+
+---
+
+🔁 Наступний крок — зробимо блок для **розширеного завдання**, або додамо логіку для **перемикання між цими двома блоками** в залежності від `TASK_TYPE`. Переходимо до цього?

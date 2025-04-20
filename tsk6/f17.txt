@@ -1,0 +1,173 @@
+Прекрасно, ти вже маєш потужну базу — тепер розширимо логіку, щоб **одна сторінка створювала як завдання, так і шаблони**, з обробкою відповідних таблиць.
+
+---
+
+## ✅ **1. Основна змінна-перемикач: `P50_IS_TEMPLATE`**
+
+### Тип: `Switch`  
+- Значення:
+  - `'N'` – **Завдання**
+  - `'Y'` – **Шаблон**
+
+Це буде ключовим умовним фільтром для всіх дій.
+
+---
+
+## ✅ **2. Розширюємо логіку по 4 основним напрямках**
+
+| Етап                      | Якщо завдання                  | Якщо шаблон                          |
+|---------------------------|--------------------------------|--------------------------------------|
+| Таблиця (головна)         | `TASKS`                        | `TASK_TEMPLATES`                     |
+| Таблиця (підзавдання)     | `TASK_SUBTASKS`                | `TASK_TEMPLATE_SUBTASKS`             |
+| Процеси INSERT/UPDATE     | у `TASKS`                      | у `TASK_TEMPLATES`                   |
+| Процеси підзавдань        | оновлення `TASK_ID` / `PARENT_ID` | оновлення `TEMPLATE_ID` / `PARENT_ID` |
+
+---
+
+## ✅ **3. Що потрібно додати до існуючої логіки**
+
+### 🟧 A. Item `P50_IS_TEMPLATE`
+- Вже є (тип switch)
+- Має значення `'N'` або `'Y'`
+
+---
+
+### 🟩 B. **Процеси INSERT/UPDATE для ШАБЛОНУ**
+
+#### 🆕 Process `Insert Task Template`
+**Condition**:
+```plsql
+:REQUEST = 'CREATE_TASK'
+AND :P50_IS_TEMPLATE = 'Y'
+```
+
+**PL/SQL Code**:
+```plsql
+DECLARE
+  v_id NUMBER;
+BEGIN
+  INSERT INTO TASK_TEMPLATES (
+    DATE_CREATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    HOURLY_TIME,
+    NEXT_RUN_DATE
+  ) VALUES (
+    SYSDATE,
+    :P50_TASK_CONTENT,
+    :G_USER_ID,
+    1,
+    :G_DEPARTMENT_ID,
+    :G_UNIT_ID,
+    :P50_TASK_TYPE,
+    :G_PAGE_LIST_ID,
+    :P50_PERIOD_MODE,
+    :P50_PERIOD_INTERVAL,
+    :P50_PERIOD_TIME,
+    :P50_HOURLY_TIME,
+    :P50_NEXT_RUN_DATE
+  )
+  RETURNING ID INTO :P50_TASK_ID;
+END;
+```
+
+> Той самий `P50_TASK_ID` використовується як `TEMPLATE_ID` у підзавданнях шаблону
+
+---
+
+#### 🆕 Process `Update Task Template`
+**Condition**:
+```plsql
+:REQUEST = 'UPDATE_TASK'
+AND :P50_IS_TEMPLATE = 'Y'
+```
+
+---
+
+### 🟩 C. **Зміна Data Source у Interactive Grid динамічно**
+
+Оскільки IG не може змінити джерело таблиці на льоту — ти можеш:
+1. Додати два IG:
+   - `IG_TASK_SUBTASKS` (TASK_SUBTASKS)
+   - `IG_TEMPLATE_SUBTASKS` (TASK_TEMPLATE_SUBTASKS)
+
+2. Відображати лише один залежно від `P50_IS_TEMPLATE`:
+   - За допомогою `Server-side Condition`:
+     - `:P50_IS_TEMPLATE = 'N'` → для `IG_TASK_SUBTASKS`
+     - `:P50_IS_TEMPLATE = 'Y'` → для `IG_TEMPLATE_SUBTASKS`
+
+3. Усі процеси вставки/оновлення `TASK_ID`/`TEMPLATE_ID`, `PARENT_ID` — дублюються у двох варіантах, але з різними таблицями.
+
+---
+
+### 🟩 D. **Процеси для підзавдань шаблону**
+
+#### `Update TEMPLATE_ID`:
+
+```plsql
+UPDATE TASK_TEMPLATE_SUBTASKS
+SET TEMPLATE_ID = :P50_TASK_ID
+WHERE DRAFT_ID = :P50_DRAFT_ID
+  AND TEMPLATE_ID IS NULL;
+```
+
+#### `Update PARENT_ID` (шаблони):
+
+```plsql
+MERGE INTO TASK_TEMPLATE_SUBTASKS dst
+USING (
+  SELECT s1.ID AS CHILD_ID,
+         s2.ID AS REAL_PARENT_ID
+  FROM TASK_TEMPLATE_SUBTASKS s1
+  JOIN TASK_TEMPLATE_SUBTASKS s2
+    ON s1.DRAFT_ID = s2.DRAFT_ID
+   AND s1.PARENT_TEMP_ID = s2.TEMP_ROW_ID
+  WHERE s1.DRAFT_ID = :P50_DRAFT_ID
+) mapping
+ON (dst.ID = mapping.CHILD_ID)
+WHEN MATCHED THEN
+  UPDATE SET dst.PARENT_ID = mapping.REAL_PARENT_ID;
+```
+
+---
+
+## 🔀 Зведена умова для кожного Process:
+
+| Процес                      | Умова `Server-side Condition`                                |
+|-----------------------------|---------------------------------------------------------------|
+| Insert Task                 | `:REQUEST = 'CREATE_TASK' AND :P50_IS_TEMPLATE = 'N'`         |
+| Update Task                 | `:REQUEST = 'UPDATE_TASK' AND :P50_IS_TEMPLATE = 'N'`         |
+| Insert Task Template        | `:REQUEST = 'CREATE_TASK' AND :P50_IS_TEMPLATE = 'Y'`         |
+| Update Task Template        | `:REQUEST = 'UPDATE_TASK' AND :P50_IS_TEMPLATE = 'Y'`         |
+| Update TASK_ID in subtasks  | `:P50_IS_TEMPLATE = 'N' AND :P50_TASK_ID IS NOT NULL`         |
+| Update TEMPLATE_ID          | `:P50_IS_TEMPLATE = 'Y' AND :P50_TASK_ID IS NOT NULL`         |
+| Update PARENT_ID (task)     | `:P50_IS_TEMPLATE = 'N' AND :P50_TASK_ID IS NOT NULL`         |
+| Update PARENT_ID (template) | `:P50_IS_TEMPLATE = 'Y' AND :P50_TASK_ID IS NOT NULL`         |
+
+---
+
+## 🧩 Керування елементами сторінки
+
+Можеш використовувати `P50_IS_TEMPLATE` для:
+- керування видимістю блоків
+- перемикання елементів (`PERIOD_MODE`, `PERIOD_INTERVAL` тільки для шаблону)
+
+Наприклад:
+- `P50_PERIOD_MODE` → Server-side Condition:
+  ```plsql
+  :P50_IS_TEMPLATE = 'Y'
+  ```
+
+---
+
+✅ Тепер твоя сторінка підтримує **створення як завдань, так і шаблонів**, з повноцінним керуванням формою, підзавданнями і обробкою на сервері.
+
+🔁 Хочеш — допоможу створити `Unified View` для перегляду змішаних записів завдань + шаблонів або додати логіку генерації завдання з шаблону.

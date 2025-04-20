@@ -1,0 +1,168 @@
+Окей, розглянемо реалізацію **повного процесу створення завдання з підзавданнями** в Oracle APEX, використовуючи `DRAFT_ID`, `TEMP_ROW_ID`, і APEX механізми (items, dynamic actions, processes).
+
+---
+
+## ✅ **1. Генерація `:P50_DRAFT_ID` при відкритті сторінки**
+
+### 📦 Що потрібно:
+
+- Створити `Hidden` item: `P50_DRAFT_ID`
+- Додати `Dynamic Action` (DA):  
+  - **Name**: `Set Draft ID on Load`
+  - **Event**: `Page Load`
+  - **True Action**: `Set Value`
+    - **Set Type**: `PL/SQL Expression`
+    - **PL/SQL**:
+      ```plsql
+      SYS_GUID()
+      ```
+    - Affected Item: `P50_DRAFT_ID`
+
+> Це згенерує унікальний `RAW(16)` як `VARCHAR2`, що буде ключем чернетки для підзавдань.
+
+---
+
+## ✅ **2. IG створює підзавдання з `DRAFT_ID` + `TEMP_ROW_ID`**
+
+### 📦 Налаштування IG (напряму на таблицю `TASK_SUBTASKS`):
+
+#### Додай колонки в IG:
+- `DRAFT_ID` — `Hidden`, Default: `:P50_DRAFT_ID`
+- `TEMP_ROW_ID` — `Hidden`, значення задаємо через JavaScript
+- `PARENT_TEMP_ID` — `Visible` або `Hidden`, Select List по `TEMP_ROW_ID` інших записів
+
+#### JS: Генерація `TEMP_ROW_ID` при додаванні нового рядка
+
+**У кнопці “Додати підзавдання”:**
+
+```js
+var ig$ = apex.region("subtask_ig").call("getViews", "grid");
+var model = ig$.model;
+var newRec = model.createRecord();
+
+// Генерація тимчасового ID
+var tempId = "tmp_" + new Date().getTime();
+model.setValue(newRec, "TEMP_ROW_ID", tempId);
+model.setValue(newRec, "DRAFT_ID", $v("P50_DRAFT_ID"));
+
+model.addRecord(newRec);
+```
+
+---
+
+## ✅ **3. Користувач натискає "Зберегти" → IG зберігає підзавдання**
+
+> Це вже працює автоматично, якщо:
+- IG має `Automatic Row Processing (DML)`
+- Таблиця — `TASK_SUBTASKS`
+- Поля `TEMP_ROW_ID`, `DRAFT_ID`, `PARENT_TEMP_ID` збережуться разом із підзавданням
+
+🔔 **Не забудь встановити Required: No** для `TASK_ID`, бо воно поки що `NULL`.
+
+---
+
+## ✅ **4. Після створення TASK → оновлення TASK_ID та PARENT_ID**
+
+### 📦 APEX Processes (After Submit), коли натискається "Створити завдання"
+
+#### ✅ 4.1: Process `Insert New Task` (тип: PL/SQL Code)
+```plsql
+DECLARE
+  v_id NUMBER;
+BEGIN
+  INSERT INTO TASKS (
+    DATE_CREATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    PLANNING_DATE_START,
+    PLANNING_DATE_END,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    IS_GENERATED,
+    GENERATED_DATE,
+    TEMPLATE_ID,
+    NOTE
+  ) VALUES (
+    SYSDATE,
+    :P50_TASK_CONTENT,
+    :G_USER_ID,
+    :P50_PLANNING_DATE_START,
+    :P50_PLANNING_DATE_END,
+    1,
+    :G_DEPARTMENT_ID,
+    :G_UNIT_ID,
+    :P50_TASK_TYPE,
+    :G_PAGE_LIST_ID,
+    :P50_IS_GENERATED,
+    :P50_GENERATED_DATE,
+    :P50_TEMPLATE_ID,
+    :P50_NOTE
+  )
+  RETURNING ID INTO v_id;
+
+  -- Зберегти в item для наступних процесів
+  :P50_TASK_ID := v_id;
+END;
+```
+
+---
+
+#### ✅ 4.2: Process `Update TASK_ID in TASK_SUBTASKS`
+```plsql
+UPDATE TASK_SUBTASKS
+SET TASK_ID = :P50_TASK_ID
+WHERE DRAFT_ID = :P50_DRAFT_ID
+  AND TASK_ID IS NULL;
+```
+
+---
+
+#### ✅ 4.3: Process `Update PARENT_ID in TASK_SUBTASKS`
+```plsql
+MERGE INTO TASK_SUBTASKS dst
+USING (
+  SELECT s1.ID AS CHILD_ID,
+         s2.ID AS REAL_PARENT_ID
+  FROM TASK_SUBTASKS s1
+  JOIN TASK_SUBTASKS s2
+    ON s1.DRAFT_ID = s2.DRAFT_ID
+   AND s1.PARENT_TEMP_ID = s2.TEMP_ROW_ID
+  WHERE s1.DRAFT_ID = :P50_DRAFT_ID
+) mapping
+ON (dst.ID = mapping.CHILD_ID)
+WHEN MATCHED THEN
+  UPDATE SET dst.PARENT_ID = mapping.REAL_PARENT_ID;
+```
+
+---
+
+## 🧼 (Опційно) Очистка тимчасових полів після збереження
+
+```plsql
+UPDATE TASK_SUBTASKS
+SET DRAFT_ID = NULL,
+    TEMP_ROW_ID = NULL,
+    PARENT_TEMP_ID = NULL
+WHERE TASK_ID = :P50_TASK_ID;
+```
+
+---
+
+## 📌 Порядок елементів на сторінці:
+
+| Компонент        | Ім’я / Призначення                    |
+|------------------|----------------------------------------|
+| `P50_DRAFT_ID`   | Hidden item (генерується при завантаженні сторінки) |
+| `P50_TASK_ID`    | Hidden item (записується після вставки TASK) |
+| IG `subtask_ig`  | Data Source: `TASK_SUBTASKS`           |
+
+---
+
+🔁 Якщо хочеш — можу допомогти:
+- реалізувати LOV для `PARENT_TEMP_ID`,
+- або шаблон модального діалогу для редагування `SUBTASK_CONTENT`.
+
+Хочеш допрацювати ці пункти?

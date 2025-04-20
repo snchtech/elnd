@@ -1,0 +1,119 @@
+Супер! Додаємо повну логіку **редагування завдання** в тій самій формі (`P50`), щоб вона підтримувала як **створення нового**, так і **редагування існуючого** завдання, з урахуванням `UPDATE_TASK`.
+
+---
+
+## ✅ Загальна логіка:
+| Дія                | Кнопка             | REQUEST          | Ключова умова |
+|--------------------|--------------------|------------------|----------------|
+| Створити завдання  | `Створити`         | `CREATE_TASK`    | `:P50_TASK_ID IS NULL` |
+| Редагувати завдання| `Оновити`          | `UPDATE_TASK`    | `:P50_TASK_ID IS NOT NULL` |
+
+---
+
+## 🔧 Що потрібно зробити:
+
+### 🔹 1. Кнопка `"Оновити"` для редагування
+
+- **Name**: `BTN_UPDATE_TASK`
+- **Label**: `Оновити`
+- **Action**: `Submit Page`
+- **Button Name**: `UPDATE_TASK`
+- **Server Condition** *(щоб показувалась лише при редагуванні)*:
+  - Type: **PL/SQL Expression**
+  - Expression:
+    ```plsql
+    :P50_TASK_ID IS NOT NULL
+    ```
+
+---
+
+### 🔹 2. Процес `Update Task` (оновлює TASK)
+
+- **Name**: `Update Task`
+- **Type**: PL/SQL Code
+- **Point**: `After Submit`
+- **Server-side Condition**:
+  - Type: **PL/SQL Expression**
+  - Expression:
+    ```plsql
+    :REQUEST = 'UPDATE_TASK'
+    ```
+
+**PL/SQL Code:**
+```plsql
+UPDATE TASKS
+SET 
+    TASK_CONTENT = :P50_TASK_CONTENT,
+    PLANNING_DATE_START = :P50_PLANNING_DATE_START,
+    PLANNING_DATE_END = :P50_PLANNING_DATE_END,
+    DEPARTMENT_ID = :G_DEPARTMENT_ID,
+    UNIT_ID = :G_UNIT_ID,
+    PAGE_LIST_ID = :G_PAGE_LIST_ID,
+    NOTE = :P50_NOTE,
+    TYPE_ID = :P50_TASK_TYPE,
+    IS_GENERATED = :P50_IS_GENERATED,
+    GENERATED_DATE = :P50_GENERATED_DATE,
+    TEMPLATE_ID = :P50_TEMPLATE_ID
+WHERE ID = :P50_TASK_ID;
+```
+
+---
+
+### 🔹 3. Оновлення підзавдань (ті ж процеси, але додати `UPDATE_TASK` в умову)
+
+#### 🛠️ Process: `Update TASK_ID in TASK_SUBTASKS`
+
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+#### 🛠️ Process: `Update PARENT_ID in TASK_SUBTASKS`
+
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+#### 🛠️ Process: `Очистка тимчасових полів`
+
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+---
+
+### 🔹 4. При відкритті форми: заповнення item-ів, якщо `P50_TASK_ID` передано
+
+**Page Load Dynamic Action**:
+- Condition:
+  ```plsql
+  :P50_TASK_ID IS NOT NULL
+  ```
+- Action: `Set Value`, `SQL Query`
+- SQL (приклад):
+  ```sql
+  SELECT 
+    TASK_CONTENT,
+    PLANNING_DATE_START,
+    PLANNING_DATE_END,
+    NOTE,
+    TYPE_ID,
+    IS_GENERATED,
+    GENERATED_DATE,
+    TEMPLATE_ID
+  FROM TASKS
+  WHERE ID = :P50_TASK_ID
+  ```
+- Affected Items: `P50_TASK_CONTENT`, `P50_PLANNING_DATE_START`, ...
+
+---
+
+## 📦 Тепер у тебе:
+
+| Кнопка         | Умова відображення         | Дія                        |
+|----------------|-----------------------------|-----------------------------|
+| Створити       | `:P50_TASK_ID IS NULL`      | INSERT → TASK + SUBTASKS    |
+| Оновити        | `:P50_TASK_ID IS NOT NULL`  | UPDATE → TASK + SUBTASKS    |
+
+---
+
+🔁 Якщо хочеш — допоможу реалізувати автоматичне встановлення режиму `P50_MODE := 'edit'/'new'` для керування відображенням елементів/заголовків сторінки.

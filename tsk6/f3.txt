@@ -1,0 +1,130 @@
+Добре, давай реалізуємо це поетапно — з урахуванням всієї вказаної логіки.
+
+---
+
+## 🔧 **1. Створення `Interactive Grid` для підзавдань**
+
+### Джерело: `TASK_SUBTASKS`
+- Додай **IG region** з SQL-запитом, який включає також підрахунок `№`, і додаткове поле `actual_date_end`:
+
+```sql
+SELECT 
+    ROWNUM AS SUBTASK_ROW_NUM, -- Порядковий номер (тимчасовий, для виводу)
+    t.ID,
+    t.TASK_ID,
+    t.SUBTASK_CONTENT,
+    t.STATUS_ID,
+    t.PLANNING_DATE_END,
+    t.PARENT_ID,
+    t.SUBTASK_ORDER,
+    t.TEMPLATE_SUBTASK_ID,
+    t.DRAFT_ID,
+
+    -- Реальне закінчення: шукаємо дату підпису по SIGNATURERIGHTS/STAGE=3
+    (
+        SELECT h.SIGNER_DATE
+        FROM SIGNATURERIGHTS r
+        JOIN SIGNATUREHISTORY h ON h.SIGNRIGHT_ID = r.ID
+        WHERE r.SUBTASK_ID = t.ID
+          AND r.TASK_ID = t.TASK_ID
+          AND h.NEW_STATUS_ID = 3
+          AND ROWNUM = 1
+    ) AS ACTUAL_DATE_END
+
+FROM TASK_SUBTASKS t
+WHERE t.TASK_ID = :P50_TASK_ID
+ORDER BY t.SUBTASK_ORDER
+```
+
+> Якщо `P50_TASK_ID` порожній (тобто ми створюємо нове завдання), то IG буде пустим.
+
+---
+
+## 📑 **2. Колонки IG**
+
+- **№ по порядку (`SUBTASK_ROW_NUM`)** — `Display Only`
+- **`SUBTASK_CONTENT`** — текст, редагований
+- **`PLANNING_DATE_END`** — `Date Picker`
+- **`PARENT_ID`** — Select List (буде заповнено нижче)
+- **`ACTUAL_DATE_END`** — `Display Only`, не редагується
+
+---
+
+## 🧠 **3. Select List для `PARENT_ID`**
+
+### LOV типу `Dynamic SQL`:
+```sql
+SELECT TO_CHAR(s.SUBTASK_ROW_NUM) AS display_value, s.ID AS return_value
+FROM (
+    SELECT ROWNUM AS SUBTASK_ROW_NUM, ID
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P50_TASK_ID
+) s
+ORDER BY SUBTASK_ROW_NUM
+```
+
+> Це відображає `№ по порядку`, але повертає `ID` підзавдання.
+
+---
+
+## 🛠️ **4. Кнопки над IG: додати, редагувати, видалити, зберегти**
+
+Створи **4 кнопки** у **"Static Region"** над IG (наприклад у окремому регіоні з шаблоном "Button Container").
+
+### A. Кнопка: **Додати підзавдання**
+- Dynamic Action: `Execute JavaScript`
+```js
+var ig$ = apex.region("your_ig_static_id").widget();
+ig$.interactiveGrid("getActions").invoke("selection-add-row");
+```
+
+### B. Кнопка: **Видалити підзавдання**
+```js
+var ig$ = apex.region("your_ig_static_id").widget();
+ig$.interactiveGrid("getActions").invoke("selection-delete");
+```
+
+### C. Кнопка: **Редагувати підзавдання**
+- IG має бути в режимі "Editable"
+- За потреби, можна зробити: `Start Row Edit`:
+
+```js
+var model = apex.region("your_ig_static_id").call("getViews", "grid").model;
+var selected = apex.region("your_ig_static_id").call("getSelectedRecords");
+if (selected.length > 0) {
+  model.editRecord(selected[0]);
+}
+```
+
+### D. Кнопка: **Зберегти підзавдання**
+```js
+apex.region("your_ig_static_id").call("getActions").invoke("save");
+```
+
+> Заміни `"your_ig_static_id"` на Static ID IG-області (наприклад, `subtask_ig`).
+
+---
+
+## 🧩 **5. Нумерація “№ по порядку” в JS (опціонально)**
+
+Щоб це було **динамічно** — можна додати **JS у “After Refresh”** IG:
+
+```js
+var rows = apex.region("subtask_ig").call("getViews", "grid").view$.find("tr");
+rows.each(function(i, row) {
+  $(row).find("td[headers='SUBTASK_ROW_NUM']").text(i);
+});
+```
+
+Або на рівні `SQL` залишити `ROWNUM` — працює просто та надійно для read-only відображення.
+
+---
+
+✅ Тепер в тебе:
+- Працюючий IG для розширених завдань;
+- Динамічне завантаження з `TASK_ID`;
+- Підрахунок фактичної дати завершення з підпису;
+- Підтримка ієрархії через `PARENT_ID`;
+- Кнопки для керування підзавданнями.
+
+🔁 Наступний крок — умовна видимість блока звичайного/розширеного змісту залежно від `TASK_TYPE`, чи переходимо до збереження завдання з підзавданнями?

@@ -1,0 +1,140 @@
+Так, зараз покажу **два приклади SQL (PL/SQL) коду для збереження підзавдань (`subtasks`)**, коли:
+
+1. 🔹 **`INSERT`** — під час `CREATE_TASK` / `UPDATE_TASK` (оновлення `TASK_ID` або `TEMPLATE_ID`)
+2. 🔹 **`SAVE_ALL`** — коли користувач окремо натискає кнопку `"Зберегти підзавдання"`
+
+---
+
+## 🟢 📥 1. `INSERT` або `UPDATE` (створення завдання / шаблону)
+
+> Цей процес не вставляє нові записи, бо IG зберігає їх сам, але **прив'язує `TASK_ID` або `TEMPLATE_ID` до записів з `DRAFT_ID`**, які раніше були створені без зв'язку.
+
+---
+
+### ✅ Випадок: **TASK (Завдання)**
+
+```plsql
+UPDATE TASK_SUBTASKS
+SET TASK_ID = :P50_TASK_ID
+WHERE DRAFT_ID = :P50_DRAFT_ID
+  AND TASK_ID IS NULL;
+```
+
+---
+
+### ✅ Випадок: **TEMPLATE (Шаблон)**
+
+```plsql
+UPDATE TASK_TEMPLATE_SUBTASKS
+SET TEMPLATE_ID = :P50_TASK_ID
+WHERE DRAFT_ID = :P50_DRAFT_ID
+  AND TEMPLATE_ID IS NULL;
+```
+
+---
+
+## 🟠 💾 2. Процес `SAVE_ALL`: ручне збереження підзавдань (на вимогу)
+
+> Тут основна мета — **оновити значення, які не були встановлені вручну**, наприклад:
+- `CREATOR_ID`
+- `STATUS_ID` по замовчуванню
+- очищення `DRAFT_ID`, `TEMP_ROW_ID` після вставки
+- додавання сортування `SUBTASK_ORDER` за порядком
+
+---
+
+### ✅ TASK_SUBTASKS (для `P50_IS_TEMPLATE = 'N'`)
+
+```plsql
+BEGIN
+  FOR rec IN (
+    SELECT ID
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P50_TASK_ID
+      AND DRAFT_ID = :P50_DRAFT_ID
+  )
+  LOOP
+    UPDATE TASK_SUBTASKS
+    SET 
+      CREATOR_ID = :G_USER_ID,
+      STATUS_ID = NVL(STATUS_ID, 1),
+      DRAFT_ID = NULL,
+      TEMP_ROW_ID = NULL,
+      PARENT_TEMP_ID = NULL
+    WHERE ID = rec.ID;
+  END LOOP;
+
+  -- Опціонально: оновлення порядку
+  UPDATE TASK_SUBTASKS t
+  SET SUBTASK_ORDER = (
+    SELECT ROWNUM
+    FROM (
+      SELECT ID
+      FROM TASK_SUBTASKS
+      WHERE TASK_ID = :P50_TASK_ID
+      ORDER BY PLANNING_DATE_END NULLS LAST, ID
+    )
+    WHERE ID = t.ID
+  )
+  WHERE t.TASK_ID = :P50_TASK_ID;
+END;
+```
+
+---
+
+### ✅ TASK_TEMPLATE_SUBTASKS (для `P50_IS_TEMPLATE = 'Y'`)
+
+```plsql
+BEGIN
+  FOR rec IN (
+    SELECT ID
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE TEMPLATE_ID = :P50_TASK_ID
+      AND DRAFT_ID = :P50_DRAFT_ID
+  )
+  LOOP
+    UPDATE TASK_TEMPLATE_SUBTASKS
+    SET 
+      CREATOR_ID = :G_USER_ID,
+      STATUS_ID = NVL(STATUS_ID, 1),
+      DRAFT_ID = NULL,
+      TEMP_ROW_ID = NULL,
+      PARENT_TEMP_ID = NULL
+    WHERE ID = rec.ID;
+  END LOOP;
+
+  -- Опціонально: оновлення порядку
+  UPDATE TASK_TEMPLATE_SUBTASKS t
+  SET SUBTASK_ORDER = (
+    SELECT ROWNUM
+    FROM (
+      SELECT ID
+      FROM TASK_TEMPLATE_SUBTASKS
+      WHERE TEMPLATE_ID = :P50_TASK_ID
+      ORDER BY PLANNING_DATE_END NULLS LAST, ID
+    )
+    WHERE ID = t.ID
+  )
+  WHERE t.TEMPLATE_ID = :P50_TASK_ID;
+END;
+```
+
+---
+
+## 🧩 Коли ці процеси викликаються:
+
+| Процес                          | Умова виконання                          |
+|----------------------------------|------------------------------------------|
+| `UPDATE TASK_ID in SUBTASKS`    | `:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK') AND :P50_IS_TEMPLATE = 'N'` |
+| `UPDATE TEMPLATE_ID in SUBTASKS`| `:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK') AND :P50_IS_TEMPLATE = 'Y'` |
+| `SAVE_ALL` для завдання         | `:REQUEST = 'SAVE_ALL' AND :P50_IS_TEMPLATE = 'N'` |
+| `SAVE_ALL` для шаблону          | `:REQUEST = 'SAVE_ALL' AND :P50_IS_TEMPLATE = 'Y'` |
+
+---
+
+🔁 Хочеш — я можу допомогти ще з перевірками у `SAVE_ALL`, наприклад:
+- чи всі обов’язкові поля заповнені
+- чи не вибрано себе як `PARENT_ID`
+- чи не перевищено кількість підзавдань
+
+Готовий?

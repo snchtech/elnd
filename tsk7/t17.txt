@@ -1,0 +1,141 @@
+🔧 Чудово! Зараз я покажу **як створити в APEX три окремі серверні процеси (Server Processes)** для:
+
+1. 🔁 Оновлення `TASK_ID` у підзавданнях
+2. 🧭 Оновлення `PARENT_ID` через `PARENT_TEMP_ID`
+3. 🧹 Очищення тимчасових полів (`DRAFT_ID`, `TEMP_ROW_ID`, `PARENT_TEMP_ID`)
+
+А також поясню, **як їх запускати тільки при збереженні завдання або шаблону**.
+
+---
+
+## ✅ Передумови
+
+- У тебе є:
+  - `P50_TASK_ID` — створений або оновлений `TASK` або `TEMPLATE`
+  - `P50_DRAFT_ID` — чернетковий ID для підзавдань
+  - `P50_IS_TEMPLATE` — перемикач, чи це шаблон
+
+---
+
+## ✅ Створюємо 3 процеси у Page Designer → **Processing**
+
+---
+
+### 🟢 1. Process: `Update TASK_ID in TASK_SUBTASKS`
+
+| Властивість         | Значення                       |
+|----------------------|--------------------------------|
+| **Name**            | `Update TASK_ID`              |
+| **Type**            | PL/SQL                        |
+| **Point**           | `After Submit`                |
+| **Condition**       | PL/SQL Expression             |
+| **Condition Value** |
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK') 
+AND :P50_IS_TEMPLATE = 'N'
+```
+
+**PL/SQL Code:**
+```plsql
+UPDATE TASK_SUBTASKS
+SET TASK_ID = :P50_TASK_ID
+WHERE DRAFT_ID = :P50_DRAFT_ID
+  AND TASK_ID IS NULL;
+```
+
+---
+
+### 🟢 2. Process: `Update PARENT_ID in TASK_SUBTASKS`
+
+| Властивість         | Значення                      |
+|----------------------|-------------------------------|
+| **Name**            | `Update PARENT_ID`           |
+| **Type**            | PL/SQL                       |
+| **Point**           | `After Submit`               |
+| **Condition**       | PL/SQL Expression            |
+| **Condition Value** |
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK') 
+AND :P50_IS_TEMPLATE = 'N'
+```
+
+**PL/SQL Code:**
+```plsql
+MERGE INTO TASK_SUBTASKS t
+USING (
+  SELECT
+    child.ID AS CHILD_ID,
+    parent.ID AS TRUE_PARENT_ID
+  FROM TASK_SUBTASKS child
+  JOIN TASK_SUBTASKS parent
+    ON child.PARENT_TEMP_ID = parent.TEMP_ROW_ID
+   AND child.DRAFT_ID = parent.DRAFT_ID
+  WHERE child.DRAFT_ID = :P50_DRAFT_ID
+) mapping
+ON (t.ID = mapping.CHILD_ID)
+WHEN MATCHED THEN
+  UPDATE SET t.PARENT_ID = mapping.TRUE_PARENT_ID;
+```
+
+---
+
+### 🟢 3. Process: `Clear TEMP fields in TASK_SUBTASKS`
+
+| Властивість         | Значення                      |
+|----------------------|-------------------------------|
+| **Name**            | `Clear TEMP fields`          |
+| **Type**            | PL/SQL                       |
+| **Point**           | `After Submit`               |
+| **Condition**       | PL/SQL Expression            |
+| **Condition Value** |
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK') 
+AND :P50_IS_TEMPLATE = 'N'
+```
+
+**PL/SQL Code:**
+```plsql
+UPDATE TASK_SUBTASKS
+SET 
+  DRAFT_ID = NULL,
+  TEMP_ROW_ID = NULL,
+  PARENT_TEMP_ID = NULL
+WHERE TASK_ID = :P50_TASK_ID;
+```
+
+---
+
+## ✅ Як ці процеси запускати?
+
+1. У тебе вже є кнопка **"Зберегти завдання/шаблон"**, наприклад:
+   - Кнопка: `BTN_CREATE_TASK` → `Submit Page`
+   - **Button Name (Request)**: `CREATE_TASK`
+
+2. У кожному процесі ми перевіряємо:
+   - `:REQUEST = 'CREATE_TASK'` або `'UPDATE_TASK'`
+   - `:P50_IS_TEMPLATE = 'N'` (щоб не запускати для шаблонів)
+
+> Таким чином ці процеси **запускаються автоматично при натисканні кнопки**, якщо умови виконуються.
+
+---
+
+## ✅ Альтернатива для шаблонів?
+
+- Копіюєш ці ж процеси, але:
+  - Змінюєш назви (наприклад `Update TEMPLATE_ID`)
+  - Таблиця: `TASK_TEMPLATE_SUBTASKS`
+  - Умова: `:P50_IS_TEMPLATE = 'Y'`
+
+---
+
+## 🟩 Після цього:
+
+| Що ти отримуєш                     | Ефект                                    |
+|-------------------------------------|-------------------------------------------|
+| Плавне оновлення `TASK_ID`         | Прив'язка підзавдань до основного запису |
+| Заміна `PARENT_TEMP_ID → PARENT_ID`| Побудова ієрархії                         |
+| Очистка тимчасових полів           | Не лишається "сміття" в таблиці           |
+
+---
+
+🔁 Хочеш — можу допомогти об’єднати це в шаблон із динамічною обробкою і для шаблонів (`TEMPLATES`). Готово?

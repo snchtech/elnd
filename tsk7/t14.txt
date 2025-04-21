@@ -1,0 +1,86 @@
+З радістю! 👇  
+Нижче — **універсальний приклад**, який дозволяє оновити колонку `SUBTASK_CONTENT` в `Interactive Grid`, використовуючи:
+
+1. Спочатку `ID` (якщо запис уже збережений у БД)
+2. Якщо `ID` відсутній (тобто запис новий) — тоді `TEMP_ROW_ID`
+
+---
+
+## ✅ Передумови:
+
+- У тебе є **дві колонки в IG**:
+  - `ID` — первинний ключ (може бути `null` для нових)
+  - `TEMP_ROW_ID` — тимчасовий ID (генерується через JS)
+- Під час відкриття модального вікна ти зберігаєш **або `ID`**, або `TEMP_ROW_ID` в page item (наприклад `P50_CURRENT_ID` або `P50_CURRENT_TEMP_ID`)
+
+---
+
+## ✅ 🔧 Код JS (наприклад, при натисканні на "Застосувати"):
+
+```js
+const newContent = $v("P50_MODAL_SUBTASK_CONTENT");
+const rowId = $v("P50_CURRENT_ID");
+const tempId = $v("P50_CURRENT_TEMP_ID");
+
+const ig$ = apex.region("ig_subtasks").call("getViews", "grid");
+const model = ig$.model;
+
+let record = null;
+
+// 🟢 1. Пробуємо знайти запис по ID (збережений запис)
+if (rowId) {
+  record = model.getRecords().find(r =>
+    model.getValue(r, "ID") && model.getValue(r, "ID").toString() === rowId
+  );
+}
+
+// 🟠 2. Якщо не знайдено — пробуємо по TEMP_ROW_ID
+if (!record && tempId) {
+  record = model.getRecords().find(r =>
+    model.getValue(r, "TEMP_ROW_ID") === tempId
+  );
+}
+
+// 🟢 Якщо знайдено — оновлюємо SUBTASK_CONTENT
+if (record) {
+  model.setValue(record, "SUBTASK_CONTENT", newContent);
+  apex.region("SUBTASK_POPUP").widget().dialog("close");
+} else {
+  apex.message.alert("Не вдалося знайти запис для оновлення.");
+}
+```
+
+---
+
+## ✅ Як зберігати ID і TEMP_ROW_ID при відкритті діалогу
+
+### При відкритті модального вікна:
+
+```js
+const model = apex.region("ig_subtasks").call("getViews", "grid").model;
+const record = model.getSelectedRecords()[0]; // або по is-active
+
+const id = model.getValue(record, "ID");
+const tempId = model.getValue(record, "TEMP_ROW_ID");
+
+$s("P50_CURRENT_ID", id || "");
+$s("P50_CURRENT_TEMP_ID", tempId || "");
+
+$s("P50_MODAL_SUBTASK_CONTENT", model.getValue(record, "SUBTASK_CONTENT"));
+
+// Відкрити модалку
+apex.region("SUBTASK_POPUP").widget().dialog("open");
+```
+
+---
+
+## 📌 Підсумок:
+
+| Що оновлюється       | Як знаходиться запис                            |
+|------------------------|--------------------------------------------------|
+| Існуючий запис         | `model.getValue(r, "ID") === :P50_CURRENT_ID`   |
+| Новий, ще не збережений| `model.getValue(r, "TEMP_ROW_ID") === :P50_CURRENT_TEMP_ID` |
+
+---
+
+🔁 Якщо хочеш — я можу додати також автоматичне оновлення `SUBTASK_CONTENT_DISPLAY` у колонці для оновленого тексту. Готово продовжити?

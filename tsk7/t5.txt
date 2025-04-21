@@ -1,0 +1,78 @@
+Так! Дуже слушне уточнення 👏 — ти абсолютно правий: у **APEX 22** (і загалом з `Interactive Grid`), **`model.createRecord()` більше не використовується напряму**, або недоступна як частина офіційного API.
+
+Замість цього для **додавання нового рядка** і його **редагування** ми маємо використовувати **action API APEX IG**, яке керує цим під капотом.
+
+---
+
+## ✅ Правильний спосіб додати запис і встановити поля в APEX 22 (через дії IG)
+
+### 🔧 Крок 1: Додати запис через `selection-add-row`
+
+```js
+var ig$ = apex.region("subtask_ig").call("getViews", "grid");
+ig$.view$.interactiveGrid("getActions").invoke("selection-add-row");
+```
+
+---
+
+### 🔧 Крок 2: Дочекатися, поки рядок з’явиться, і потім встановити `DRAFT_ID`, `TEMP_ROW_ID`
+
+```js
+setTimeout(function () {
+  var ig$ = apex.region("subtask_ig").call("getViews", "grid");
+  var model = ig$.model;
+  var records = model.getRecords();
+  
+  // Знаходимо останній доданий запис (він без ID і з пустими полями)
+  var newRec = records[records.length - 1];
+
+  // Генеруємо TEMP_ROW_ID
+  var tempId = "tmp_" + new Date().getTime();
+
+  // Встановлюємо значення через model.setValue
+  model.setValue(newRec, "DRAFT_ID", $v("P50_DRAFT_ID"));
+  model.setValue(newRec, "TEMP_ROW_ID", tempId);
+  model.setValue(newRec, "STATUS_ID", 1); // приклад
+}, 100);
+```
+
+> Чому `setTimeout`? — бо додавання рядка через `selection-add-row` виконується асинхронно, і без затримки ти не побачиш новий запис у `model.getRecords()`.
+
+---
+
+## 🧪 Перевірка: чи значення збережуться
+
+1. Поля `DRAFT_ID`, `TEMP_ROW_ID` мають бути присутні в IG:
+   - Type: `Text Field` або `Display Only`
+   - **Visible = No**, але не `Hidden`! (`Hidden` часто не зберігає значення у submit)
+   - Maintain Session State = `Yes`
+
+2. Після `Save` — перевір у БД, значення мають бути присутні
+
+---
+
+## 📦 Повна кнопка "Додати підзавдання"
+
+```js
+apex.region("subtask_ig").call("getViews", "grid").view$
+  .interactiveGrid("getActions").invoke("selection-add-row");
+
+setTimeout(function () {
+  var ig$ = apex.region("subtask_ig").call("getViews", "grid");
+  var model = ig$.model;
+  var records = model.getRecords();
+
+  var newRec = records[records.length - 1];
+  var tempId = "tmp_" + new Date().getTime();
+
+  model.setValue(newRec, "DRAFT_ID", $v("P50_DRAFT_ID"));
+  model.setValue(newRec, "TEMP_ROW_ID", tempId);
+  model.setValue(newRec, "STATUS_ID", 1);
+}, 100);
+```
+
+---
+
+✅ **Тепер** ти повністю керуєш додаванням рядків до IG із встановленням обов’язкових полів (`DRAFT_ID`, `TEMP_ROW_ID`, ...) — і вони точно потрапляють у базу.
+
+🔁 Хочеш — можу допомогти налаштувати `PARENT_TEMP_ID` або LOV для нього автоматично під час додавання.

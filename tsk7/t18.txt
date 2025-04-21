@@ -1,0 +1,98 @@
+Чудово! Ось повний шаблон для обробки і **звичайних завдань, і шаблонів** на одному процесному рівні в Oracle APEX.  
+Ти отримаєш універсальне рішення для сторінки, де створюються і зберігаються як TASKS/TASK_SUBTASKS, так і TASK_TEMPLATES/TASK_TEMPLATE_SUBTASKS.
+
+---
+
+## ✅ 1. Створюємо універсальні процеси
+
+### 🟢 1. Оновлення головного ID у підзавданнях
+
+**Назва**: `Update Main ID in Subtasks`  
+**Type**: PL/SQL  
+**After Submit**  
+**Condition (PL/SQL Expression):**
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+**PL/SQL Code:**
+```plsql
+IF :P50_IS_TEMPLATE = 'N' THEN
+  UPDATE TASK_SUBTASKS
+  SET TASK_ID = :P50_TASK_ID
+  WHERE DRAFT_ID = :P50_DRAFT_ID
+    AND TASK_ID IS NULL;
+ELSE
+  UPDATE TASK_TEMPLATE_SUBTASKS
+  SET TEMPLATE_ID = :P50_TASK_ID
+  WHERE DRAFT_ID = :P50_DRAFT_ID
+    AND TEMPLATE_ID IS NULL;
+END IF;
+```
+
+---
+
+### 🟢 2. Оновлення PARENT_ID у підзавданнях
+
+**Назва**: `Update PARENT_ID in Subtasks`  
+**Type**: PL/SQL  
+**After Submit**  
+**Condition (PL/SQL Expression):**
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+**PL/SQL Code:**
+```plsql
+IF :P50_IS_TEMPLATE = 'N' THEN
+  MERGE INTO TASK_SUBTASKS t
+  USING (
+    SELECT
+      child.ID AS CHILD_ID,
+      parent.ID AS TRUE_PARENT_ID
+    FROM TASK_SUBTASKS child
+    JOIN TASK_SUBTASKS parent
+      ON child.PARENT_TEMP_ID = parent.TEMP_ROW_ID
+     AND child.DRAFT_ID = parent.DRAFT_ID
+    WHERE child.DRAFT_ID = :P50_DRAFT_ID
+  ) mapping
+  ON (t.ID = mapping.CHILD_ID)
+  WHEN MATCHED THEN
+    UPDATE SET t.PARENT_ID = mapping.TRUE_PARENT_ID;
+ELSE
+  MERGE INTO TASK_TEMPLATE_SUBTASKS t
+  USING (
+    SELECT
+      child.ID AS CHILD_ID,
+      parent.ID AS TRUE_PARENT_ID
+    FROM TASK_TEMPLATE_SUBTASKS child
+    JOIN TASK_TEMPLATE_SUBTASKS parent
+      ON child.PARENT_TEMP_ID = parent.TEMP_ROW_ID
+     AND child.DRAFT_ID = parent.DRAFT_ID
+    WHERE child.DRAFT_ID = :P50_DRAFT_ID
+  ) mapping
+  ON (t.ID = mapping.CHILD_ID)
+  WHEN MATCHED THEN
+    UPDATE SET t.PARENT_ID = mapping.TRUE_PARENT_ID;
+END IF;
+```
+
+---
+
+### 🟢 3. Очищення тимчасових полів
+
+**Назва**: `Clear TEMP fields in Subtasks`  
+**Type**: PL/SQL  
+**After Submit**  
+**Condition (PL/SQL Expression):**
+```plsql
+:REQUEST IN ('CREATE_TASK', 'UPDATE_TASK')
+```
+
+**PL/SQL Code:**
+```plsql
+IF :P50_IS_TEMPLATE = 'N' THEN
+  UPDATE TASK_SUBTASKS
+  SET
+    DRAFT_ID = NULL,
+    TEMP_ROW_ID = NULL,

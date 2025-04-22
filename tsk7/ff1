@@ -1,0 +1,117 @@
+Чудова задача! Ось покроково як реалізувати **порядкову нумерацію рядків (1, 2, 3, ...) у Interactive Grid (IG)** в Oracle APEX **без використання реального ID**, а також щоб **нові записи додавались внизу списку** та одразу отримували наступний номер.
+
+---
+
+## **Мета:**
+1. Додати псевдоколонку "№" з порядковим номером.
+2. Показувати її в IG.
+3. Нові записи додаються знизу й отримують правильний номер одразу.
+
+---
+
+## **Рішення**
+
+### **1. Додай псевдоколонку в IG**
+
+#### Варіант A: **Звичайна колонка тільки для відображення**
+- У SQL запиті IG додай щось типу:
+
+```sql
+select 
+  t.rownum_id, -- your temporary PK like 't1001', 't1002'
+  t.name,
+  null as row_number_display -- псевдоколонка
+from your_table t
+```
+
+- У IG створи нову колонку `ROW_NUMBER_DISPLAY`:
+  - Відображення: `Yes`
+  - Editable: `No`
+  - Source: `ROW_NUMBER_DISPLAY`
+
+---
+
+### **2. Автоматична нумерація через JavaScript**
+
+Встав у **Advanced > JavaScript Initialization Code** свого IG:
+
+```javascript
+function(config) {
+  config.defaultGridViewOptions = {
+    rowInitialized: function(row, model, record) {
+      let allRecords = model.getRecords();
+      let index = allRecords.indexOf(record);
+
+      // Встановлюємо номер рядка (індекс + 1)
+      model.setValue(record, "ROW_NUMBER_DISPLAY", index + 1);
+    }
+  };
+  return config;
+}
+```
+
+Цей код:
+- При ініціалізації кожного рядка додає поле `ROW_NUMBER_DISPLAY`.
+- Вираховує індекс в моделі (тобто черговий номер).
+
+---
+
+### **3. Нові записи додаються знизу**
+
+У властивостях IG:
+- Знайди `Edit > Add Row` або `Toolbar > Add Row` опції.
+- Встанови:  
+  `Add Row Position: **Bottom**`
+
+---
+
+### **4. Автообновлення нумерації при додаванні/видаленні рядків**
+
+Щоб підтримувати коректну нумерацію при зміні кількості рядків, можеш додати **Dynamic Action** на події:
+
+#### Подія:
+- Event: **Selection Change [Interactive Grid]** або **After Refresh**
+
+#### Дія: **Execute JavaScript Code**
+
+```javascript
+var model = apex.region("your_ig_static_id").widget().interactiveGrid("getViews", "grid").model;
+var records = model.getRecords();
+
+records.forEach(function(rec, index) {
+  model.setValue(rec, "ROW_NUMBER_DISPLAY", index + 1);
+});
+```
+
+Заміни `your_ig_static_id` на Static ID твого IG.
+
+---
+
+## **Бонус: Генерація t1001, t1002, ... для тимчасового PK**
+
+Якщо ти хочеш створювати `t1001`, `t1002` автоматично для нових записів (до збереження в БД), ось короткий приклад:
+
+```javascript
+var model = apex.region("your_ig_static_id").widget().interactiveGrid("getViews", "grid").model;
+var records = model.getRecords();
+
+var maxIndex = 0;
+records.forEach(function(r) {
+  var id = model.getValue(r, "ROWNUM_ID"); // assuming your temp ID column
+  if (id && id.startsWith("t")) {
+    var num = parseInt(id.slice(1));
+    if (!isNaN(num)) {
+      maxIndex = Math.max(maxIndex, num);
+    }
+  }
+});
+
+// When adding new record:
+var newRec = model.insertNewRecord();
+maxIndex++;
+model.setValue(newRec, "ROWNUM_ID", "t" + maxIndex);
+```
+
+---
+
+Хочеш — можу зробити повний приклад на базі твого SQL. Напиши, який запит у тебе в IG і які назви колонок.

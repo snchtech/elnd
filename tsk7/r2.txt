@@ -1,0 +1,53 @@
+P6_TASK_ID - hidden
+P6_SUBTASK_CONTENT - textarea
+P6_PLANNING_DATE_END - datepicker DD.MM.YYYY HH24:MI
+P6_PARENT_ID - number
+P6_PARENT_NAME - text
+P6_SUBTASK_ORDER - hidden
+P6_STATUS_ID - hidden
+Default static 1
+
+Button ADD_SUBTASK
+Submit page
+
+----------------------------------------
+
+Processing
+
+INSERT_SUBTASK
+Type - execute code
+
+-- Встановлюємо статус і subtask_order
+:P6_STATUS_ID := 1;
+
+-- Обчислюємо subtask_order
+SELECT NVL(MAX(SUBTASK_ORDER), 0) + 1
+INTO :P6_SUBTASK_ORDER
+FROM TASK_SUBTASKS
+WHERE TASK_ID = :P6_TASK_ID
+  AND PARENT_ID IS NULL; -- Поки не підтримуємо ієрархію
+
+
+INSERT INTO TASK_SUBTASKS (
+    TASK_ID,
+    SUBTASK_CONTENT,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID
+) VALUES (
+    :P6_TASK_ID,
+    :P6_SUBTASK_CONTENT,
+    TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+    :P6_PARENT_ID,
+    :P6_SUBTASK_ORDER,
+    :P6_STATUS_ID
+);
+
+When Button Pressed - ADD_SUBTASK
+
+-------------------------------
+
+Close subtask form - type close dialog
+When Button Pressed - ADD_SUBTASK
+

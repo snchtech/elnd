@@ -1,0 +1,137 @@
+🔧 Із задоволенням! Давай **розширимо наше власне меню** у `Interactive Grid`, додавши ще два пункти:
+
+1. ✅ **Редагувати підзавдання** — відкриває **модальну форму**
+2. ✅ **Дублювати підзавдання** — створює новий запис із копією вмісту
+
+---
+
+## 🧩 КРОК 1. Онови HTML-шаблон кастомного меню
+
+```js
+if (!document.getElementById("custom-ig-menu")) {
+  const menu = document.createElement("ul");
+  menu.id = "custom-ig-menu";
+  menu.style = "position:absolute; display:none; background:white; border:1px solid #ccc; z-index:10000; list-style:none; padding:4px 0; margin:0;";
+  menu.innerHTML = `
+    <li id="menu-edit-subtask" style="padding:6px 12px; cursor:pointer;">✏️ Редагувати підзавдання</li>
+    <li id="menu-duplicate-subtask" style="padding:6px 12px; cursor:pointer;">📄 Дублювати підзавдання</li>
+    <li id="menu-delete-subtask" style="padding:6px 12px; cursor:pointer;">🗑️ Видалити підзавдання</li>
+  `;
+  document.body.appendChild(menu);
+}
+```
+
+---
+
+## 🧩 КРОК 2. Передай `id` у всі пункти меню при кліку
+
+У тому ж місці, де показуєш меню:
+
+```js
+document.getElementById("menu-edit-subtask").dataset.id = id;
+document.getElementById("menu-duplicate-subtask").dataset.id = id;
+document.getElementById("menu-delete-subtask").dataset.id = id;
+```
+
+---
+
+## 🧩 КРОК 3. Обробка пункту **"Редагувати підзавдання"**
+
+```js
+document.getElementById("menu-edit-subtask").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  // 🔁 відкриття модального вікна з передачею ID
+  apex.navigation.dialog(
+    "f?p=&APP_ID.:SUBTASK_FORM:&SESSION.::NO::P6_ID:" + id,
+    {
+      title: "Редагування підзавдання",
+      height: "auto",
+      width: "600",
+      modal: true
+    }
+  );
+
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+> 📝 Заміні `SUBTASK_FORM` на `page number` форми редагування (наприклад `6`)
+
+---
+
+## 🧩 КРОК 4. Обробка пункту **"Дублювати підзавдання"**
+
+```js
+document.getElementById("menu-duplicate-subtask").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  // Зробимо запит на AJAX, який скопіює підзавдання
+  apex.server.process("DUPLICATE_SUBTASK", {
+    x01: id
+  }, {
+    success: function () {
+      apex.region("TASK_SUBTASKS_IG").refresh();
+    },
+    error: function () {
+      alert("Помилка при дублюванні");
+    }
+  });
+
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+---
+
+## 🧩 КРОК 5. Серверний процес `DUPLICATE_SUBTASK`
+
+У сторінці (тип: `AJAX Callback`, ім’я: `DUPLICATE_SUBTASK`):
+
+```plsql
+DECLARE
+  v_new_id TASK_SUBTASKS.ID%TYPE;
+BEGIN
+  INSERT INTO TASK_SUBTASKS (
+    TASK_ID,
+    SUBTASK_CONTENT,
+    STATUS_ID,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    TEMPLATE_SUBTASK_ID
+  )
+  SELECT
+    TASK_ID,
+    SUBTASK_CONTENT,
+    1, -- статус "нове"
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    TEMPLATE_SUBTASK_ID
+  FROM TASK_SUBTASKS
+  WHERE ID = APEX_APPLICATION.G_X01
+  RETURNING ID INTO v_new_id;
+
+  -- Відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ Результат:
+
+| Дія | Поведінка |
+|-----|-----------|
+| ✏️ Редагувати | відкриває модальну форму з переданим ID |
+| 📄 Дублювати | вставляє копію поточного підзавдання |
+| 🗑️ Видалити | видаляє запис через AJAX |
+
+---
+
+💬 Хочеш — додамо `toast-повідомлення` після кожної дії або розширимо дублювання з копією підпідзавдань.

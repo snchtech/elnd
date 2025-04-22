@@ -1,0 +1,246 @@
+Before header
+
+INIT_TASK_ID_IF_NEW
+
+BEGIN
+null;
+    --:P5_TASK_ID := TASKS_SEQ.NEXTVAL;
+END;
+
+server_side - item is null P5_TASK_ID
+
+for test
+
+:P5_TASK_ID := 4;
+
+-------------------
+
+
+button
+
+ADD_SUBTASK
+
+redirect to page
+
+P6_TASK_ID - &P5_TASK_ID.
+
+----------------------------------
+
+Grid підзавдань
+
+select * from TASK_SUBTASKS WHERE TASK_ID = :P5_TASK_ID
+
+static id - TASK_SUBTASKS_IG
+
+Attributes
+edit enable
+checkbox unchecked
+
+-----------------------------
+
+P5_TASK_ID
+hidden
+
+P5_DELETE_SUBTASK_ID
+hidden
+
+
+----------------------------------
+
+DA
+------------------------------
+
+Add custom menu row disabled - page load
+
+javascript expression
+(function () {
+  apex.jQuery(document).on("click", ".a-Button--actions", function () {
+    const $button = apex.jQuery(this);
+    const $row = $button.closest("tr");
+    const rowId = $row.data("id");
+
+    const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+    const gridView = ig$.interactiveGrid("getViews", "grid");
+    const model = gridView.model;
+
+    if (!rowId || !model) return;
+
+    const record = model.getRecord(rowId);
+    if (!record) return;
+
+    const id = model.getValue(record, "ID");
+    if (!id) return;
+
+    setTimeout(function () {
+      const menu$ = apex.jQuery("div.a-Menu-content:visible");
+      const ul = menu$.find("ul");
+      if (!ul.length || ul.find(".custom-delete-subtask").length) return;
+
+     
+
+      const li = $("<li>", {
+  class: "custom-no-apex",
+  style: "padding: 4px 12px; cursor: pointer; font-weight: 500;",
+  text: "Видалити підзавдання"
+}).on("click", function (e) {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  if (confirm("Видалити?")) {
+    $s("P5_DELETE_SUBTASK_ID", id);
+    apex.server.process("DELETE_SUBTASK", {
+      x01: id
+    }, {
+      success: function () {
+        apex.region("TASK_SUBTASKS_IG").refresh();
+      }
+    });
+  }
+});
+
+
+      // 🔗 Збираємо DOM
+      labelContainer.append(iconSpan, button);
+      div.append(labelContainer, '<span class="a-Menu-accelContainer"><span class="a-Menu-subMenuCol"></span></span>');
+      li.append(div);
+      ul.append(li);
+    }, 50);
+  });
+})();
+
+------------------------------------------
+
+work for menu - page load
+// Додаємо меню в DOM лише 1 раз
+if (!document.getElementById("custom-ig-menu")) {
+  const menu = document.createElement("ul");
+  menu.id = "custom-ig-menu";
+  menu.style = "position:absolute; display:none; background:white; border:1px solid #ccc; z-index:10000; list-style:none; padding:4px 0; margin:0;";
+  menu.innerHTML = `
+    <li id="menu-delete-subtask" style="padding:6px 12px; cursor:pointer;">🗑️ Видалити підзавдання</li>
+  `;
+  document.body.appendChild(menu);
+}
+
+
+------------------------
+
+work for menu 2 - page load
+
+apex.jQuery(document).on("click", ".a-Button--actions", function (e) {
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  const $btn = apex.jQuery(this);
+  const $row = $btn.closest("tr");
+  const rowId = $row.data("id");
+
+  const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+  const gridView = ig$.interactiveGrid("getViews", "grid");
+  const model = gridView.model;
+  const record = model.getRecord(rowId);
+
+  if (!record) return;
+  const id = model.getValue(record, "ID");
+
+  // Зберігаємо ID в DOM
+  document.getElementById("menu-delete-subtask").dataset.id = id;
+
+  // Показуємо кастомне меню
+  const menu = document.getElementById("custom-ig-menu");
+  menu.style.left = `${e.pageX}px`;
+  menu.style.top = `${e.pageY}px`;
+  menu.style.display = "block";
+});
+
+document.addEventListener("click", function (event) {
+  const menu = document.getElementById("custom-ig-menu");
+  if (!menu.contains(event.target)) {
+    menu.style.display = "none";
+  }
+});
+
+setTimeout( function() {
+document.getElementById("menu-delete-subtask").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  if (confirm("Ви впевнені, що хочете видалити підзавдання?")) {
+    $s("P5_DELETE_SUBTASK_ID", id);
+    apex.server.process("DELETE_SUBTASK", {
+  x01: id
+}, {
+  dataType: "json", // 🔁 чітко вказати, що очікуємо JSON
+  success: function (pData) {
+    console.log("✅ Сервер повернув:", pData);
+    if (pData.status === "ok") {
+      apex.region("TASK_SUBTASKS_IG").refresh();
+    } else {
+      alert("⚠️ Помилка на сервері: " + (pData.message || "невідомо"));
+    }
+    document.getElementById("custom-ig-menu").style.display = "none";
+  },
+  error: function () {
+    alert("💥 Не вдалося виконати запит до сервера");
+  }
+});
+  }
+});
+}, 500);
+
+---------------------------------------
+
+REFRESH_IG_AFTER_DIALOG_CLOSE - Dialog Closed
+
+Dialog Closed
+Selection Type Button
+Button - ADD_SUBTASK
+
+refresh
+
+region
+Grid підзавдань
+
+----------------------------------------------
+
+Processing
+Process
+Grid підзавдань - Save Interactive Grid Data
+
+Type - Interactive grid Automatic Row Processing
+Editable Region - Grid підзавдань
+
+prevent lost update on
+return primary - on
+
+---------------------------------------------------
+
+Ajax callback
+
+DELETE_SUBTASK
+
+BEGIN
+  DELETE FROM TASK_SUBTASKS
+  WHERE ID = APEX_APPLICATION.G_X01;
+
+  -- 🔁 Обов'язкова відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+
+-- BEGIN
+--   DELETE FROM TASK_SUBTASKS
+--   WHERE ID = APEX_APPLICATION.G_X01;
+-- EXCEPTION
+--   WHEN OTHERS THEN
+--     -- для відладки (тимчасово)
+--     raise_application_error(-20001, 'Помилка при видаленні: ' || SQLERRM);
+-- END;

@@ -1,0 +1,153 @@
+🔧 Чудово — ти хочеш мати **одну спільну форму в Oracle APEX**, яка:
+
+1. ✅ Дозволяє перемикатись між **створенням завдання та шаблону**
+2. ✅ В залежності від режиму, зберігає дані в різні таблиці:
+   - **TASKS / TASK_SUBTASKS** для завдань
+   - **TASK_TEMPLATES / TASK_TEMPLATE_SUBTASKS** для шаблонів
+3. ✅ Пізніше дає змогу відкривати **інформаційну картку** із IR, яка:
+   - Визначає тип запису
+   - Показує відповідні поля
+   - Дозволяє редагування, якщо дозволено
+
+---
+
+## ✅ СТРУКТУРА: Один регіон, один набір полів, перемикач типу
+
+---
+
+### 🔹 Перемикач типу:
+
+```apex
+Item: P50_TASK_MODE
+Type: Radio Group
+Values:
+- STANDARD (Завдання)
+- TEMPLATE (Шаблон)
+Default: STANDARD
+```
+
+---
+
+### 🔹 Алгоритм показу/приховування полів:
+
+Створи Dynamic Actions:
+
+| Подія             | Умова                   | Дія                                 |
+|-------------------|-------------------------|--------------------------------------|
+| Change `P50_TASK_MODE` | `= 'STANDARD'`         | Show: поля, які потрібні для завдань |
+| Change `P50_TASK_MODE` | `= 'TEMPLATE'`         | Show: поля шаблону                  |
+
+---
+
+## ✅ ЗБЕРЕЖЕННЯ:
+
+### 🔧 Створюємо 2 **Server Process** (тип: PL/SQL):
+
+---
+
+#### 🟦 Process: `CREATE_TASK`
+
+```plsql
+INSERT INTO TASKS (
+  TASK_CONTENT, DEPARTMENT_ID, UNIT_ID, STATUS_ID, ...
+) VALUES (
+  :P50_TASK_CONTENT, :P50_DEPARTMENT_ID, :P50_UNIT_ID, 1, ...
+) RETURNING ID INTO :P50_TASK_ID;
+
+-- Запис підзавдань в TASK_SUBTASKS
+FOR i IN 1 .. apex_application.g_f01.count LOOP
+  INSERT INTO TASK_SUBTASKS (
+    TASK_ID, SUBTASK_CONTENT, PLANNING_DATE_END, STATUS_ID
+  ) VALUES (
+    :P50_TASK_ID, apex_application.g_f01(i), apex_application.g_f02(i), 1
+  );
+END LOOP;
+```
+
+➡️ Умова виконання процесу: `:P50_TASK_MODE = 'STANDARD'`
+
+---
+
+#### 🟨 Process: `CREATE_TEMPLATE`
+
+```plsql
+INSERT INTO TASK_TEMPLATES (
+  TEMPLATE_CONTENT, DEPARTMENT_ID, UNIT_ID, STATUS_ID, ...
+) VALUES (
+  :P50_TASK_CONTENT, :P50_DEPARTMENT_ID, :P50_UNIT_ID, 1, ...
+) RETURNING ID INTO :P50_TEMPLATE_ID;
+
+-- Запис шаблонних підзавдань
+FOR i IN 1 .. apex_application.g_f01.count LOOP
+  INSERT INTO TASK_TEMPLATE_SUBTASKS (
+    TEMPLATE_ID, SUBTASK_CONTENT, PLANNING_DATE_END, STATUS_ID
+  ) VALUES (
+    :P50_TEMPLATE_ID, apex_application.g_f01(i), apex_application.g_f02(i), 1
+  );
+END LOOP;
+```
+
+➡️ Умова виконання процесу: `:P50_TASK_MODE = 'TEMPLATE'`
+
+---
+
+## ✅ ВІДКРИТТЯ КАРТОК ІЗ IR
+
+---
+
+### 🔧 В IR додаємо колонку:
+
+```sql
+CASE 
+  WHEN IS_TEMPLATE = 1 THEN 'TEMPLATE'
+  ELSE 'STANDARD'
+END AS MODE_TYPE
+```
+
+---
+
+### 🔧 Кнопка "Переглянути / Редагувати" → Dynamic Action → Redirect → Target URL:
+
+```apex
+f?p=&APP_ID.:50:&SESSION.::NO::P50_ID,P50_TASK_MODE:#ID#,#MODE_TYPE#
+```
+
+---
+
+### 🔧 На сторінці 50 (форма), додаємо у `Page Load`:
+
+```plsql
+IF :P50_TASK_MODE = 'TEMPLATE' THEN
+  SELECT ...
+  INTO ...
+  FROM TASK_TEMPLATES
+  WHERE ID = :P50_ID;
+ELSIF :P50_TASK_MODE = 'STANDARD' THEN
+  SELECT ...
+  INTO ...
+  FROM TASKS
+  WHERE ID = :P50_ID;
+END IF;
+```
+
+---
+
+## ✅ Опціонально:
+
+- Встанови `P50_READ_ONLY_MODE = 'Y'` для блокування полів
+- Додай умову на кнопку "Зберегти" → `P50_READ_ONLY_MODE = 'N'`
+
+---
+
+## 📌 Підсумок:
+
+| Частина | Рішення |
+|---------|---------|
+| Форма одна | Працює на перемикачі `P50_TASK_MODE` |
+| Зберігання | Два процеси: INSERT в різні таблиці |
+| Відкриття картки | Через передачу ID + типу |
+| Умови відображення | Через Dynamic Actions |
+
+---
+
+💬 Хочеш — зберемо це як компонент-експорт сторінки в APEX?

@@ -1,0 +1,146 @@
+button 
+ADD_SUBTASK
+item is null P6_ID
+
+--------------------------------
+
+UPDATE_SUBTASK
+item is not null P6_ID
+
+P6_ID
+hidden
+
+-------------------------------
+
+before header
+
+CLEAR_FIELDS - disabled
+
+BEGIN
+  IF :P6_ID IS NULL THEN
+    :P6_SUBTASK_CONTENT := NULL;
+    :P6_PLANNING_DATE_END := NULL;
+    :P6_PARENT_ID := NULL;
+    :P6_PARENT_NAME := NULL;
+    -- інші поля, які треба очистити
+  END IF;
+END;
+
+---------------------------------------
+
+SET_DATA_BY_SUBTASK_ID
+
+DECLARE
+  v_content           TASK_SUBTASKS.SUBTASK_CONTENT%TYPE;
+  v_planning_date_end TASK_SUBTASKS.PLANNING_DATE_END%TYPE;
+  v_parent_id         TASK_SUBTASKS.PARENT_ID%TYPE;
+BEGIN
+  IF :P6_ID IS NOT NULL THEN
+    SELECT
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID
+    INTO
+      v_content,
+      v_planning_date_end,
+      v_parent_id
+    FROM TASK_SUBTASKS
+    WHERE ID = :P6_ID;
+
+    :P6_SUBTASK_CONTENT   := v_content;
+    :P6_PLANNING_DATE_END := v_planning_date_end;
+    :P6_PARENT_ID         := v_parent_id;
+
+    -- Поки немає даних для PARENT_NAME – залишаємо NULL
+    :P6_PARENT_NAME := NULL;
+  END IF;
+END;
+
+----------------------------------------------------------------
+
+PROCESSING
+
+INSERT_SUBTASK
+DECLARE
+  v_base_order VARCHAR2(100);
+  v_next_suffix NUMBER;
+
+BEGIN
+
+-- Встановлюємо статус і subtask_order
+:P6_STATUS_ID := 1;
+
+-- Обчислюємо subtask_order
+-- SELECT NVL(MAX(SUBTASK_ORDER), 0) + 1
+-- INTO :P6_SUBTASK_ORDER
+-- FROM TASK_SUBTASKS
+-- WHERE TASK_ID = :P6_TASK_ID
+--   AND PARENT_ID IS NULL; -- Поки не підтримуємо ієрархію
+
+-- Якщо немає батьківського, формуємо перший рівень (2, 3, 4, ...)
+  IF :P6_PARENT_ID IS NULL THEN
+    SELECT NVL(MAX(CAST(SUBTASK_ORDER AS NUMBER)), 0) + 1
+    INTO v_next_suffix
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P6_TASK_ID AND PARENT_ID IS NULL;
+
+    :P6_SUBTASK_ORDER := TO_CHAR(v_next_suffix);
+
+  ELSE
+    -- Якщо є батьківське, формуємо вкладений рівень (2.1, 2.1.1, ...)
+    SELECT SUBTASK_ORDER INTO v_base_order
+    FROM TASK_SUBTASKS
+    WHERE ID = :P6_PARENT_ID;
+
+    SELECT COUNT(*) + 1
+    INTO v_next_suffix
+    FROM TASK_SUBTASKS
+    WHERE PARENT_ID = :P6_PARENT_ID;
+
+    :P6_SUBTASK_ORDER := v_base_order || '.' || v_next_suffix;
+  END IF;
+
+
+INSERT INTO TASK_SUBTASKS (
+    TASK_ID,
+    SUBTASK_CONTENT,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID
+) VALUES (
+    :P6_TASK_ID,
+    :P6_SUBTASK_CONTENT,
+    TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+    :P6_PARENT_ID,
+    :P6_SUBTASK_ORDER,
+    :P6_STATUS_ID
+);
+END;
+
+item is null P6_ID
+
+-------------------------------------------
+
+Close subtask form
+item is null P6_ID
+------------------------------------------
+
+UPDATE_SUBTASK
+BEGIN
+  UPDATE TASK_SUBTASKS
+  SET
+    SUBTASK_CONTENT    = :P6_SUBTASK_CONTENT,
+    PLANNING_DATE_END  = TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+    PARENT_ID          = :P6_PARENT_ID
+  WHERE ID = :P6_ID;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при оновленні підзавдання: ' || SQLERRM);
+END;
+
+item is not null P6_ID
+---------------------------------------------
+Close s form
+item is not null P6_ID

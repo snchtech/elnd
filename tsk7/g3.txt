@@ -1,0 +1,58 @@
+Ось оновлена версія коду `SET_DATA_BY_SUBTASK_ID`, яка **додає встановлення `:P6_PARENT_NAME`** шляхом витягування назви підзавдання-батька з тієї ж таблиці `TASK_SUBTASKS`:
+
+---
+
+## ✅ Оновлений код:
+
+```plsql
+DECLARE
+  v_content           TASK_SUBTASKS.SUBTASK_CONTENT%TYPE;
+  v_planning_date_end TASK_SUBTASKS.PLANNING_DATE_END%TYPE;
+  v_parent_id         TASK_SUBTASKS.PARENT_ID%TYPE;
+  v_parent_name       TASK_SUBTASKS.SUBTASK_CONTENT%TYPE;
+BEGIN
+  IF :P6_ID IS NOT NULL THEN
+    -- Витягуємо підзавдання
+    SELECT
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID
+    INTO
+      v_content,
+      v_planning_date_end,
+      v_parent_id
+    FROM TASK_SUBTASKS
+    WHERE ID = :P6_ID;
+
+    -- Присвоюємо значення
+    :P6_SUBTASK_CONTENT   := v_content;
+    :P6_PLANNING_DATE_END := v_planning_date_end;
+    :P6_PARENT_ID         := v_parent_id;
+
+    -- Якщо є батьківський ID – тягнемо його назву
+    IF v_parent_id IS NOT NULL THEN
+      SELECT SUBTASK_CONTENT
+      INTO v_parent_name
+      FROM TASK_SUBTASKS
+      WHERE ID = v_parent_id;
+
+      :P6_PARENT_NAME := v_parent_name;
+    ELSE
+      :P6_PARENT_NAME := NULL;
+    END IF;
+  END IF;
+END;
+```
+
+---
+
+### ✅ Що змінено:
+| Зміна | Опис |
+|-------|------|
+| `v_parent_name` | Додано нову змінну |
+| Додатковий `SELECT` | Отримує `SUBTASK_CONTENT` для `PARENT_ID` |
+| Присвоєння `:P6_PARENT_NAME` | Встановлює значення тільки якщо `PARENT_ID IS NOT NULL` |
+
+---
+
+💬 Хочеш — можемо розширити цей процес для багаторівневої навігації по предках (`2.1.1 → 2.1 → 2`) або зробити breadcrumb.

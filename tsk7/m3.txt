@@ -1,0 +1,194 @@
+///////////////////////////////////
+
+// Згрупуй tbody IG за parent_id (кожен блок → окрема sortable-група)
+// function groupRowsByParent() {
+//   const $trs = $('#TASK_SUBTASKS_IG').find('tbody > tr');
+//   const groups = {};
+
+//   $trs.each(function () {
+//     const parentId = $(this).find('td[data-col-name="PARENT_ID"]').text().trim() || 'ROOT';
+//     if (!groups[parentId]) {
+//       groups[parentId] = $('<tbody class="sortable-group">').attr('data-parent-id', parentId);
+//     }
+//     groups[parentId].append($(this));
+//   });
+
+//   const $table = $('#TASK_SUBTASKS_IG').find('tbody').first().closest('table');
+//   Object.values(groups).forEach(group => $table.append(group));
+// }
+
+// function groupRowsByParent() {
+//   const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+//   const view = ig$.interactiveGrid("getViews", "grid");
+//   const model = view.model;
+//   const $tbody = view.view$.find('tbody');
+//   const $table = $tbody.closest('table');
+
+//   // Збираємо всі записи
+//   const parentGroups = {};
+
+//   $tbody.find('tr[data-id]').each(function () {
+//     const $tr = $(this);
+//     const rowId = $tr.attr('data-id');
+//     const record = model.getRecord(rowId);
+//     if (!record) return;
+
+//     const parentId = model.getValue(record, "PARENT_ID") || "ROOT";
+
+//     if (!parentGroups[parentId]) {
+//       parentGroups[parentId] = $('<tbody class="sortable-group">')
+//         .attr('data-parent-id', parentId);
+//     }
+
+//     parentGroups[parentId].append($tr);
+//   });
+
+//   // Очищаємо оригінальний <tbody>
+//   $tbody.remove();
+
+//   // Додаємо всі згруповані <tbody> назад у таблицю
+//   Object.values(parentGroups).forEach($group => {
+//     $table.append($group);
+//   });
+// }
+
+
+
+//Ініціалізуй .sortable() для кожної групи окремо
+// function enableSortable() {
+//   $('.sortable-group').each(function () {
+//     const group = $(this);
+//     const parentId = group.data('parent-id');
+
+//     group.sortable({
+//       connectWith: '[data-parent-id="' + parentId + '"]',
+//       handle: '.drag-handle', // чи ти справді маєш .drag-handle?
+//       placeholder: "ui-state-highlight",
+//       stop: function () {
+//         updateSubtaskOrder(group);
+//       }
+//     });
+//   });
+// }
+
+function enableSortable() {
+  $('.sortable-group').each(function () {
+    const group = $(this);
+    const parentId = group.data('parent-id');
+
+    group.sortable({
+      connectWith: '.sortable-group',
+      handle: '.drag-handle',
+      placeholder: "ui-state-highlight",
+      receive: function (event, ui) {
+        const fromParentId = ui.sender.data('parent-id');
+        const toParentId = $(this).data('parent-id');
+
+        if (fromParentId !== toParentId) {
+          // Відкат переміщення
+          $(ui.sender).sortable('cancel');
+        }
+      },
+      stop: function () {
+        updateSubtaskOrder(group);
+      }
+    });
+  });
+}
+
+/////////////////
+
+
+function updateSubtaskOrder($group) {
+  const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+  const view = ig$.interactiveGrid("getViews", "grid");
+  const model = view.model;
+
+  $group.find('tr').each(function (i) {
+    const rowId = $(this).attr('data-id');
+    const record = model.getRecord(rowId);
+
+    if (record && model.allowEdit(record)) {
+      // Встановлюємо новий порядок
+      model.setValue(record, "SUBTASK_ORDER", i + 1, true);
+
+      // Додаємо data-parent-id до рядка
+      const parentId = model.getValue(record, "PARENT_ID") || "ROOT";
+      $(this).attr("data-parent-id", parentId);
+    }
+  });
+}
+
+
+// function applyParentIds() {
+//   const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+//   const view = ig$.interactiveGrid("getViews", "grid");
+//   const model = view.model;
+
+//   view.view$.find('tr[data-id]').each(function () {
+//     const rowId = $(this).attr('data-id');
+//     if (!rowId) return;
+
+//     const record = model.getRecord(rowId);
+//     if (!record) return;
+
+//     const parentId = model.getValue(record, "PARENT_ID") || "ROOT";
+//     $(this).attr("data-parent-id", parentId);
+//   });
+// }
+
+
+
+
+function enableSortableTopLevelOnly() {
+  const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+  const view = ig$.interactiveGrid("getViews", "grid");
+  const model = view.model;
+
+  const $rows = view.view$.find("tr[data-id]");
+  const $topLevelRows = [];
+
+  $rows.each(function () {
+    const $tr = $(this);
+    const rowId = $tr.attr("data-id");
+    const record = model.getRecord(rowId);
+    if (!record) return;
+
+    const parentId = model.getValue(record, "PARENT_ID");
+    if (!parentId) {
+      $tr.addClass("top-level-sortable"); // для стилів
+      $topLevelRows.push($tr[0]); // чистий DOM-елемент
+    }
+  });
+
+  // Ініціалізуємо sortable тільки для верхнього рівня
+  $( $topLevelRows ).wrapAll('<tbody id="top-level-tbody" class="sortable-group"></tbody>');
+  $("#top-level-tbody").sortable({
+    handle: ".drag-handle",
+    placeholder: "ui-state-highlight",
+    stop: function () {
+      updateSubtaskOrder($("#top-level-tbody"));
+    }
+  });
+}
+
+
+
+function addDragHandles() {
+  const ig$ = apex.region("TASK_SUBTASKS_IG").widget();
+  const view = ig$.interactiveGrid("getViews", "grid");
+  const model = view.model;
+
+  view.view$.find("tr").each(function () {
+    const $tr = $(this);
+    const rowId = $tr.attr("data-id");
+    const record = model.getRecord(rowId);
+    if (!record) return;
+
+    const parentId = model.getValue(record, "PARENT_ID");
+    if (!parentId) {
+      const $td = $tr.find('td[data-col-name="DRAG_HANDLE"]');
+      $td.html('<span class="drag-handle" title="Перетягни, щоб змінити порядок">☰</span>');
+    }
+  });
+}

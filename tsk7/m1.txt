@@ -1,0 +1,77 @@
+IG
+RETURN q'[
+WITH subtask_tree (id, task_id, parent_id, subtask_content, subtask_order, level_b, path_b, full_number, DRAG_HANDLE) AS (
+  -- 1. Кореневі записи (батьківські)
+  SELECT 
+    t.id,
+    t.task_id,
+    t.parent_id,
+    t.subtask_content,
+    t.subtask_order,
+    1 AS level_b,
+    LPAD(t.subtask_order, 5, '0') AS path_b,
+    TO_CHAR(
+      ROW_NUMBER() OVER (ORDER BY t.subtask_order)
+    ) AS full_number,
+    (CASE 
+  WHEN t.PARENT_ID IS NULL THEN '<span class="drag-handle">☰</span>' 
+  ELSE NULL 
+END) AS DRAG_HANDLE
+  FROM TASK_SUBTASKS t
+  WHERE t.task_id = :P5_TASK_ID
+    AND t.parent_id IS NULL
+
+  UNION ALL
+
+  -- 2. Дочірні записи (рекурсія)
+  SELECT 
+    c.id,
+    c.task_id,
+    c.parent_id,
+    c.subtask_content,
+    c.subtask_order,
+    p.level_b + 1,
+    p.path_b || '.' || LPAD(c.subtask_order, 5, '0') AS path_b,
+    p.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (
+        PARTITION BY c.parent_id ORDER BY c.subtask_order
+      )
+    ) AS full_number,
+    (CASE
+    WHEN c.PARENT_ID IS NULL THEN '<span class="drag-handle">☰</span>' 
+  ELSE NULL 
+END) AS DRAG_HANDLE
+  FROM TASK_SUBTASKS c
+  JOIN subtask_tree p ON c.parent_id = p.id AND c.id != p.id
+)
+SELECT
+  id,
+  task_id,
+  parent_id,
+  subtask_content,
+  subtask_order,
+  level_b,
+  full_number,
+  path_b,
+  LPAD(' ', (level_b - 1) * 4, ' ') || full_number || ' ' || subtask_content AS display_content,
+  DRAG_HANDLE
+FROM subtask_tree
+ORDER BY path_b
+]';
+
+-----------------------------------------------
+
+DA
+
+DRAG_DROP
+setTimeout(() => {
+  enableSortableTopLevelOnly();
+}, 200);
+
+// setTimeout(() => {
+// applyParentIds();
+// groupRowsByParent();
+// enableSortable();
+// }, 200);
+
+-----------------------------------------------

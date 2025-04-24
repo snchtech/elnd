@@ -1,0 +1,33 @@
+DECLARE
+  v_next_order NUMBER;
+BEGIN
+  -- Встановлюємо статус
+  :P6_STATUS_ID := 1;
+
+  -- Обчислюємо SUBTASK_ORDER:
+  -- для кожної групи (батько або NULL) визначаємо наступне значення по максимуму
+  SELECT NVL(MAX(SUBTASK_ORDER), 0) + 1
+  INTO v_next_order
+  FROM TASK_SUBTASKS
+  WHERE TASK_ID = :P6_TASK_ID
+    AND NVL(PARENT_ID, 0) = NVL(:P6_PARENT_ID, 0);
+
+  :P6_SUBTASK_ORDER := v_next_order;
+
+  -- Додаємо запис
+  INSERT INTO TASK_SUBTASKS (
+    TASK_ID,
+    SUBTASK_CONTENT,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID
+  ) VALUES (
+    :P6_TASK_ID,
+    :P6_SUBTASK_CONTENT,
+    TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+    :P6_PARENT_ID,
+    :P6_SUBTASK_ORDER,
+    :P6_STATUS_ID
+  );
+END;

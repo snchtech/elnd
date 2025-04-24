@@ -1,0 +1,41 @@
+WITH RECURSIVE task_hierarchy AS (
+    -- Початковий запис (базовий рівень)
+    SELECT 
+        id,
+        parentid,
+        taskid,
+        1 AS level,  -- Рівень глибини (1 для кореневого елемента)
+        CAST('1' AS VARCHAR2(4000)) AS hierarchy_number  -- Початковий номер
+    FROM 
+        your_table
+    WHERE 
+        taskid = :taskid  -- Замість :taskid підставте конкретний taskid
+        AND parentid IS NULL  -- Початкові елементи (без батьків)
+    
+    UNION ALL
+
+    -- Рекурсивний крок: вибірка дочірніх елементів
+    SELECT 
+        t.id,
+        t.parentid,
+        t.taskid,
+        th.level + 1 AS level,  -- Рівень глибини збільшується на 1
+        th.hierarchy_number || '.' || (ROW_NUMBER() OVER (PARTITION BY th.parentid ORDER BY t.id)) AS hierarchy_number  -- Формуємо нумерацію
+    FROM 
+        your_table t
+    INNER JOIN task_hierarchy th 
+        ON t.parentid = th.id  -- Зв'язок з батьківським записом
+    WHERE 
+        t.taskid = :taskid  -- Обмеження по taskid
+)
+-- Вибірка результатів
+SELECT 
+    hierarchy_number, 
+    id,
+    parentid,
+    taskid,
+    name
+FROM 
+    task_hierarchy
+ORDER BY 
+    hierarchy_number;  -- Сортування за ієрархічною нумерацією

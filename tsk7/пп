@@ -1,0 +1,16 @@
+WITH RECURSIVE task_hierarchy AS (
+    -- Базовий крок: вибірка самого taskid (як батьківського елемента)
+    SELECT *
+    FROM your_table
+    WHERE id = :taskid -- Замість :taskid підставте конкретний taskid
+
+    UNION ALL
+
+    -- Рекурсивний крок: вибірка дочірніх елементів
+    SELECT t.*
+    FROM your_table t
+    INNER JOIN task_hierarchy th ON t.parentid = th.id
+)
+-- Вибірка всіх батьківських і дочірніх елементів
+SELECT *
+FROM task_hierarchy;

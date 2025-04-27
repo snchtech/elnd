@@ -1,0 +1,177 @@
+Чудово! 🔥  
+Тоді показую **як оптимізувати** твій `Before Header` процес так, щоб:
+
+- менше дублювати код
+- мати чистішу і компактнішу конструкцію
+- легко підтримувати у майбутньому
+
+---
+
+# 📋 Ідея оптимізації
+
+- Замість двох окремих `SELECT ... INTO` можна використовувати **динамічний SQL** (`EXECUTE IMMEDIATE`).
+- Ми будемо **формувати назву таблиці** (`TASKS` або `TASK_TEMPLATES`) залежно від `P5_SWITCH`.
+- А потім через `EXECUTE IMMEDIATE` витягувати потрібні поля в загальні змінні.
+
+---
+
+# ✅ Ось як виглядатиме оптимізований код
+
+```plsql
+DECLARE
+  -- Загальні змінні
+  v_date_create           DATE;
+  v_task_content          VARCHAR2(4000);
+  v_creator_id            NUMBER;
+  v_planning_date_start   DATE;
+  v_planning_date_end     DATE;
+  v_status_id             NUMBER;
+  v_department_id         NUMBER;
+  v_unit_id               NUMBER;
+  v_type_id               NUMBER;
+  v_page_list_id          NUMBER;
+  v_is_generated          NUMBER;
+  v_generated_date        DATE;
+  v_template_id           NUMBER;
+  v_note                  VARCHAR2(4000);
+  
+  -- Додаткові для шаблонів
+  v_period_mode           NUMBER;
+  v_period_interval       NUMBER;
+  v_period_time           VARCHAR2(50);
+  v_hourly_times          VARCHAR2(4000);
+  v_next_run_date         DATE;
+  v_date_end              DATE;
+
+  -- Технічні
+  v_sql_stmt              VARCHAR2(4000);
+BEGIN
+  IF :P5_TASK_ACTION_MODE IN (0, 2) THEN
+  
+    IF :P5_SWITCH = 0 THEN
+      -- Формуємо запит для TASKS
+      v_sql_stmt := '
+        SELECT 
+          DATE_CREATE,
+          TASK_CONTENT,
+          CREATOR_ID,
+          PLANNING_DATE_START,
+          PLANNING_DATE_END,
+          STATUS_ID,
+          DEPARTMENT_ID,
+          UNIT_ID,
+          TYPE_ID,
+          PAGE_LIST_ID,
+          IS_GENERATED,
+          GENERATED_DATE,
+          TEMPLATE_ID,
+          NOTE,
+          NULL, NULL, NULL, NULL, NULL, NULL -- заповнюємо шаблонні поля NULL
+        FROM TASKS
+        WHERE ID = :id';
+    
+    ELSIF :P5_SWITCH = 1 THEN
+      -- Формуємо запит для TASK_TEMPLATES
+      v_sql_stmt := '
+        SELECT 
+          DATE_CREATE,
+          TASK_CONTENT,
+          CREATOR_ID,
+          NULL, NULL, -- PLANNING_DATE_START, PLANNING_DATE_END для шаблонів немає
+          STATUS_ID,
+          DEPARTMENT_ID,
+          UNIT_ID,
+          TYPE_ID,
+          PAGE_LIST_ID,
+          NULL, NULL, NULL, NULL, -- IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+          PERIOD_MODE,
+          PERIOD_INTERVAL,
+          PERIOD_TIME,
+          HOURLY_TIMES,
+          NEXT_RUN_DATE,
+          DATE_END
+        FROM TASK_TEMPLATES
+        WHERE ID = :id';
+    END IF;
+    
+    -- Виконуємо динамічний запит
+    EXECUTE IMMEDIATE v_sql_stmt
+      INTO
+        v_date_create,
+        v_task_content,
+        v_creator_id,
+        v_planning_date_start,
+        v_planning_date_end,
+        v_status_id,
+        v_department_id,
+        v_unit_id,
+        v_type_id,
+        v_page_list_id,
+        v_is_generated,
+        v_generated_date,
+        v_template_id,
+        v_note,
+        v_period_mode,
+        v_period_interval,
+        v_period_time,
+        v_hourly_times,
+        v_next_run_date,
+        v_date_end
+      USING :P5_TASK_ID;
+      
+    -- Присвоюємо значення у Page Items
+    :P5_DATE_CREATE           := v_date_create;
+    :P5_TASK_CONTENT          := v_task_content;
+    :P5_CREATOR_ID            := v_creator_id;
+    :P5_PLANNING_DATE_START   := v_planning_date_start;
+    :P5_PLANNING_DATE_END     := v_planning_date_end;
+    :P5_STATUS_ID             := v_status_id;
+    :P5_DEPARTMENT_ID         := v_department_id;
+    :P5_UNIT_ID               := v_unit_id;
+    :P5_TYPE_ID               := v_type_id;
+    :P5_PAGE_LIST_ID          := v_page_list_id;
+    :P5_IS_GENERATED          := v_is_generated;
+    :P5_GENERATED_DATE        := v_generated_date;
+    :P5_TEMPLATE_ID           := v_template_id;
+    :P5_NOTE                  := v_note;
+    :P5_PERIOD_MODE           := v_period_mode;
+    :P5_PERIOD_INTERVAL       := v_period_interval;
+    :P5_PERIOD_TIME           := v_period_time;
+    :P5_HOURLY_TIMES          := v_hourly_times;
+    :P5_NEXT_RUN_DATE         := v_next_run_date;
+    :P5_DATE_END              := v_date_end;
+
+  END IF;
+END;
+```
+
+---
+
+# 📈 Що ми виграли:
+
+| Було | Стало |
+|------|-------|
+| 2 окремі SELECT | 1 динамічний SELECT |
+| 2 набори присвоєнь | 1 набір присвоєнь |
+| Велика дублююча конструкція | Чистий і компактний код |
+
+---
+
+# ⚡ Як працює:
+
+- Якщо `P5_SWITCH = 0` — вибираємо всі реальні поля з `TASKS`, а шаблонні поля (`PERIOD_MODE`, `PERIOD_INTERVAL` і т.д.) ставимо `NULL`.
+- Якщо `P5_SWITCH = 1` — вибираємо всі реальні поля з `TASK_TEMPLATES`, а ті, яких немає в шаблонах (`PLANNING_DATE_START`, `PLANNING_DATE_END`, тощо) — також `NULL`.
+- Після `EXECUTE IMMEDIATE` значення одразу потрапляють в змінні, які ми присвоюємо до сторінкових Item.
+
+---
+
+# 📋 Дрібні нотатки:
+
+- Якщо в майбутньому додаватимеш поля у TASKS або TASK_TEMPLATES — просто оновиш тут `v_sql_stmt`.
+- Якщо поля з різними назвами — треба буде писати ще окремий код, а зараз все уніфіковано.
+- Якщо треба буде обробити відсутній запис (`NO_DATA_FOUND`) — можна легко додати обробку в `EXCEPTION`.
+
+---
+
+# 🚀 Хочеш — ще можу показати, як зробити через APEX Collections для дуже складних сценаріїв (наприклад, коли даних багато і форма велика)? 🔥  
+Сказати "так"? ✅

@@ -1,0 +1,99 @@
+function setRequired(itemName, isRequired) {
+  var item = apex.item(itemName);
+  var el = null;
+
+  // Знаходимо сам елемент
+  if (item && item.node && item.node.length > 0) {
+    el = item.node[0];
+  }
+  if (!el) {
+    el = document.getElementById(itemName + '_input');
+  }
+  if (!el) {
+    el = document.getElementById(itemName);
+  }
+  if (!el) {
+    console.warn('Не знайдено елемент для:', itemName);
+    return;
+  }
+
+  // Знаходимо обгортку елемента
+  var wrapper = el.closest('.t-Form-itemWrapper');
+
+  if (isRequired) {
+    el.setAttribute('required', 'required');
+    el.classList.add('is-required');
+    if (wrapper) {
+      wrapper.classList.add('apex-item-wrapper--required');
+    }
+  } else {
+    el.removeAttribute('required');
+    el.classList.remove('is-required');
+    if (wrapper) {
+      wrapper.classList.remove('apex-item-wrapper--required');
+    }
+  }
+}
+
+
+
+function updateRequired() {
+    console.log('iam starting')
+  var switchValue = $v('P5_SWITCH');
+  var taskTypeValue = $v('P5_SELECT_TASK_TYPE');
+  var periodModeValue = $v('P5_SELECT_PERIOD_MODE');
+  var actionMode = $v('P5_TASK_ACTION_MODE');
+
+  console.log(switchValue)
+  console.log(taskTypeValue)
+  console.log(periodModeValue)
+  console.log(actionMode)
+
+  // Виконуємо тільки якщо створення або редагування
+  if (actionMode === '1' || actionMode === '2') {
+
+    // Спочатку скидаємо все
+    setRequired('P5_DATE1', false);
+    setRequired('P5_DATE2', false);
+    setRequired('P5_DATE3', false);
+    setRequired('P5_TEXT1', false);
+    setRequired('P5_TEXT2', false);
+    setRequired('P5_TEXTAREA', false);
+
+    if (switchValue === '0') {
+      // Завдання
+      setRequired('P5_DATE1', true);
+      setRequired('P5_DATE2', true);
+
+      if (taskTypeValue === '1') {
+        // Якщо Звичайне завдання → P5_TEXTAREA
+        setRequired('P5_TEXTAREA', true);
+      }
+      // Якщо Розширене завдання (taskTypeValue = 2), треба буде перевірити кількість записів у IG окремо при сабміті
+      // тут нічого більше робити не треба для IG поки
+    }
+    else if (switchValue === '1') {
+      // Шаблон
+      if (periodModeValue === '0') {
+        setRequired('P5_DATE3', true);
+        setRequired('P5_TEXT1', true);
+        setRequired('P5_TEXT2', false);
+      }
+      else if (periodModeValue === '1') {
+        setRequired('P5_DATE3', false);
+        setRequired('P5_TEXT1', false);
+        setRequired('P5_TEXT2', true);
+      }
+    }
+
+  } else {
+    // Якщо режим тільки перегляду (P5_TASK_ACTION_MODE = 0)
+    // Скидаємо всі required
+    setRequired('P5_DATE1', false);
+    setRequired('P5_DATE2', false);
+    setRequired('P5_DATE3', false);
+    setRequired('P5_TEXT1', false);
+    setRequired('P5_TEXT2', false);
+    setRequired('P5_TEXTAREA', false);
+  }
+}

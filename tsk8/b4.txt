@@ -1,0 +1,148 @@
+Чудово! 🔥  
+Тоді давай складемо **повністю готову універсальну функцію**  
+`updateRequired()`, яка:
+
+- правильно працює з усіма твоїми правилами
+- керує атрибутом `required`
+- додає/прибирає червоний трикутник (`is-required` клас)
+- буде викликатися на `Page Load` і на зміну `P5_SWITCH`, `P5_SELECT_TASK_TYPE`, `P5_SELECT_PERIOD_MODE`
+
+---
+
+# ✅ Ось повний готовий код функції `updateRequired()`
+
+```javascript
+function setRequired(itemName, isRequired) {
+  var item = apex.item(itemName);
+  if (item && item.node.length > 0) {
+    var el = item.node[0];
+    if (isRequired) {
+      el.setAttribute("required", "required");
+      el.classList.add("is-required");
+    } else {
+      el.removeAttribute("required");
+      el.classList.remove("is-required");
+    }
+  }
+}
+
+function updateRequired() {
+  var switchValue = $v('P5_SWITCH');
+  var taskTypeValue = $v('P5_SELECT_TASK_TYPE');
+  var periodModeValue = $v('P5_SELECT_PERIOD_MODE');
+  var actionMode = $v('P5_TASK_ACTION_MODE');
+
+  // Виконуємо тільки якщо створення або редагування
+  if (actionMode === '1' || actionMode === '2') {
+
+    // Спочатку скидаємо все
+    setRequired('P5_DATE1', false);
+    setRequired('P5_DATE2', false);
+    setRequired('P5_DATE3', false);
+    setRequired('P5_TEXT1', false);
+    setRequired('P5_TEXT2', false);
+    setRequired('P5_TEXTAREA', false);
+
+    if (switchValue === '0') {
+      // Завдання
+      setRequired('P5_DATE1', true);
+      setRequired('P5_DATE2', true);
+
+      if (taskTypeValue === '1') {
+        // Якщо Звичайне завдання → P5_TEXTAREA
+        setRequired('P5_TEXTAREA', true);
+      }
+      // Якщо Розширене завдання (taskTypeValue = 2), треба буде перевірити кількість записів у IG окремо при сабміті
+      // тут нічого більше робити не треба для IG поки
+    }
+    else if (switchValue === '1') {
+      // Шаблон
+      if (periodModeValue === '0') {
+        setRequired('P5_DATE3', true);
+        setRequired('P5_TEXT1', true);
+        setRequired('P5_TEXT2', false);
+      }
+      else if (periodModeValue === '1') {
+        setRequired('P5_DATE3', false);
+        setRequired('P5_TEXT1', false);
+        setRequired('P5_TEXT2', true);
+      }
+    }
+
+  } else {
+    // Якщо режим тільки перегляду (P5_TASK_ACTION_MODE = 0)
+    // Скидаємо всі required
+    setRequired('P5_DATE1', false);
+    setRequired('P5_DATE2', false);
+    setRequired('P5_DATE3', false);
+    setRequired('P5_TEXT1', false);
+    setRequired('P5_TEXT2', false);
+    setRequired('P5_TEXTAREA', false);
+  }
+}
+```
+
+---
+
+# 📋 Як використовувати цю функцію:
+
+## 1️⃣ На `Page Load`
+
+- Створи **Dynamic Action**
+  - Event: `Page Load`
+  - True Action: `Execute JavaScript Code`
+  - Code:
+
+```javascript
+updateRequired();
+```
+
+---
+
+## 2️⃣ На `Change` події для:
+
+- `P5_SWITCH`
+- `P5_SELECT_TASK_TYPE`
+- `P5_SELECT_PERIOD_MODE`
+
+Кожен раз:
+
+- Event: `Change`
+- Selection Type: Item
+- Item: відповідний
+- True Action: `Execute JavaScript Code`
+- Code:
+
+```javascript
+updateRequired();
+```
+
+---
+
+# 📈 Що буде відбуватись:
+
+| Подія | Що відбувається |
+|-------|----------------|
+| Завантаження сторінки | Автоматичне налаштування required полів |
+| Зміна перемикача завдання/шаблону | Required поля перебудовуються |
+| Зміна типу завдання (звичайне/розширене) | Required поля перебудовуються |
+| Зміна періодичності шаблону | Required поля перебудовуються |
+
+---
+
+# ✅ Переваги:
+
+- Все централізовано в одній функції
+- Немає дублювання Dynamic Actions для кожного Item
+- Можеш легко оновлювати правила у майбутньому
+- APEX автоматично малює або прибирає червоний трикутник
+
+---
+
+# 🛠 Додатково про TASK_SUBTASKS_IG_1 (перевірка кількості записів):
+
+Я покажу тобі окремо, як при Submit перевірити кількість рядків в IG  
+(якщо `P5_SELECT_TASK_TYPE = 2` і `P5_SWITCH = 0`)  
+щоб не дозволяти зберегти, якщо немає хоча б одного підзавдання.
+
+Хочеш? ✅ 🚀 (Підготую відразу приклад PL/SQL валідації або JavaScript на сабміт)

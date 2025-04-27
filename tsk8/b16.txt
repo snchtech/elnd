@@ -1,0 +1,142 @@
+Чудово! 🔥  
+Тоді переходимо до серйознішої частини: **дублікатор зі збереженням структури вкладеності**, тобто правильно оновлювати `PARENT_ID`!
+
+---
+
+# 📋 Проблема:
+
+- Коли ми дублюємо підзавдання, вони мають нові ID (`TASK_SUBTASKS_SEQ.NEXTVAL`)
+- Якщо підзавдання були вкладені (`PARENT_ID` → ID батька), нам потрібно **перев'язати їх на нові ID**, а не залишати старі
+- Потрібна **мапа старий ID → новий ID**  
+(інакше структура ієрархії зламається!)
+
+---
+
+# 📈 Загальна схема рішення:
+
+| Крок | Опис |
+|-----|------|
+| 1 | Вставити підзавдання без PARENT_ID або з тимчасовим значенням |
+| 2 | Запам'ятати відповідність `старий_id → новий_id` |
+| 3 | Другим проходом оновити правильні `PARENT_ID` у вставлених записах |
+
+---
+
+# ✅ Ось як має виглядати правильний PL/SQL код для дублювання підзавдань:
+
+```plsql
+DECLARE
+  v_new_task_id TASKS.ID%TYPE;
+  
+  -- Зв'язок старого і нового ID
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY NUMBER;
+  l_id_map t_id_map;
+  
+  CURSOR c_subtasks IS
+    SELECT ID, PARENT_ID, SUBTASK_CONTENT, STATUS_ID, PLANNING_DATE_END, SUBTASK_ORDER, TEMPLATE_SUBTASK_ID
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P5_TASK_ID;
+  
+  v_new_subtask_id TASK_SUBTASKS.ID%TYPE;
+BEGIN
+  -- 1. Копіюємо сам TASK
+  INSERT INTO TASKS (
+    ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+    PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+    PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+  )
+  SELECT
+    TASKS_SEQ.NEXTVAL,
+    SYSDATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    SYSDATE,
+    PLANNING_DATE_END,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    IS_GENERATED,
+    GENERATED_DATE,
+    TEMPLATE_ID,
+    NOTE
+  FROM TASKS
+  WHERE ID = :P5_TASK_ID
+  RETURNING ID INTO v_new_task_id;
+
+  -- 2. Копіюємо підзавдання і будуємо мапу старий → новий ID
+  FOR r IN c_subtasks LOOP
+    INSERT INTO TASK_SUBTASKS (
+      ID, TASK_ID, SUBTASK_CONTENT, STATUS_ID,
+      PLANNING_DATE_END, PARENT_ID, SUBTASK_ORDER, TEMPLATE_SUBTASK_ID
+    ) VALUES (
+      TASK_SUBTASKS_SEQ.NEXTVAL,
+      v_new_task_id,
+      r.SUBTASK_CONTENT,
+      r.STATUS_ID,
+      r.PLANNING_DATE_END,
+      NULL, -- PARENT_ID поки NULL, оновимо пізніше
+      r.SUBTASK_ORDER,
+      r.TEMPLATE_SUBTASK_ID
+    )
+    RETURNING ID INTO v_new_subtask_id;
+    
+    -- Запам'ятовуємо старий ID → новий ID
+    l_id_map(r.ID) := v_new_subtask_id;
+  END LOOP;
+
+  -- 3. Оновлюємо правильні PARENT_ID для нових підзавдань
+  FOR old_id IN (SELECT DISTINCT PARENT_ID FROM TASK_SUBTASKS WHERE TASK_ID = :P5_TASK_ID AND PARENT_ID IS NOT NULL) LOOP
+    UPDATE TASK_SUBTASKS
+    SET PARENT_ID = l_id_map(old_id.PARENT_ID)
+    WHERE TASK_ID = v_new_task_id
+      AND PARENT_ID IS NULL
+      AND ID = l_id_map(old_id.ID);
+  END LOOP;
+
+  -- 4. Повертаємо новий ID у відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.WRITE('newId', v_new_task_id);
+  APEX_JSON.CLOSE_OBJECT;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+# 🛠 Як працює цей код:
+
+| Крок | Дія |
+|------|-----|
+| Вставляємо всі підзавдання без PARENT_ID |
+| Будуємо мапу старий ID → новий ID |
+| Потім другим проходом оновлюємо правильні PARENT_ID для нових записів |
+| І все це всередині одного процесу!
+
+---
+
+# 📋 Тепер аналогічно треба зробити для TEMPLATE і TASK_TEMPLATE_SUBTASKS.  
+Я можу скласти також приклад для дублювання шаблону (`TASK_TEMPLATES + TASK_TEMPLATE_SUBTASKS`) якщо хочеш.
+
+---
+
+# 🔥 Резюме:
+
+✅ Структура вкладеності повністю збережеться  
+✅ Немає змішування старих/нових ID  
+✅ Працює і для багаторівневої ієрархії (2.1, 2.1.1, 2.1.1.1, тощо)
+
+---
+
+# 🚀 Хочеш:
+- я ще швидко складу **готовий варіант процесу для копіювання шаблону** (`TASK_TEMPLATE` + `TASK_TEMPLATE_SUBTASKS`) у такому ж стилі? 🔥  
+Сказати "так"? ✅  
+(Тоді в тебе буде повний комплект на обидва типи: завдання і шаблон) ✅

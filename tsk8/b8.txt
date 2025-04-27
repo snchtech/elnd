@@ -1,0 +1,159 @@
+🔎 Чудово, що ти звернув на це увагу!  
+Ти правильно підмітив реальну структуру, яку **APEX** створює для required полів:  
+там не тільки клас на обгортці (`apex-item-wrapper--required`), а ще й вставляються **додаткові елементи HTML**.
+
+---
+
+# 📋 Структура стандартного required-поля в APEX (Universal Theme)
+
+```html
+<div class="t-Form-inputContainer">
+  <div class="t-Form-itemRequired-marker" aria-hidden="true"></div> <!-- маленький червоний трикутник -->
+  <div class="t-Form-itemWrapper">
+    <input id="..." name="..." class="..." required="required" ...>
+  </div>
+  <div class="t-Form-itemAssistance">
+    <span class="..." data-template-id="..."></span> <!-- placeholder для повідомлень -->
+    <div class="t-Form-itemRequired" aria-hidden="true">Required</div> <!-- текст "Required" -->
+  </div>
+</div>
+```
+
+---
+
+# ✅ Що це означає:
+
+Щоб повністю **імітувати стандартний вигляд обов'язкового поля**, треба:
+
+1. Додати атрибут `required` на `input`/`textarea`
+2. Додати клас `is-required` на елемент
+3. Додати клас `apex-item-wrapper--required` на `.t-Form-itemWrapper`
+4. Додати HTML-елементи:
+   - `<div class="t-Form-itemRequired-marker" aria-hidden="true"></div>` перед `.t-Form-itemWrapper`
+   - `<div class="t-Form-itemRequired" aria-hidden="true">Required</div>` всередині `.t-Form-itemAssistance`
+
+---
+
+# ✅ Ось повністю оновлений `setRequired()`, який генерує все правильно:
+
+```javascript
+function setRequired(itemName, isRequired) {
+  var item = apex.item(itemName);
+  var el = null;
+
+  // Знаходимо input/textarea
+  if (item && item.node && item.node.length > 0) {
+    el = item.node[0];
+  }
+  if (!el) {
+    el = document.getElementById(itemName + '_input');
+  }
+  if (!el) {
+    el = document.getElementById(itemName);
+  }
+  if (!el) {
+    console.warn('Не знайдено елемент для:', itemName);
+    return;
+  }
+
+  // Знаходимо обгортку
+  var wrapper = el.closest('.t-Form-itemWrapper');
+  var container = el.closest('.t-Form-inputContainer');
+  var assistance = container ? container.querySelector('.t-Form-itemAssistance') : null;
+
+  if (isRequired) {
+    el.setAttribute('required', 'required');
+    el.classList.add('is-required');
+
+    if (wrapper) {
+      wrapper.classList.add('apex-item-wrapper--required');
+    }
+
+    if (container && !container.querySelector('.t-Form-itemRequired-marker')) {
+      var marker = document.createElement('div');
+      marker.className = 't-Form-itemRequired-marker';
+      marker.setAttribute('aria-hidden', 'true');
+      container.insertBefore(marker, wrapper);
+    }
+
+    if (assistance && !assistance.querySelector('.t-Form-itemRequired')) {
+      var requiredDiv = document.createElement('div');
+      requiredDiv.className = 't-Form-itemRequired';
+      requiredDiv.setAttribute('aria-hidden', 'true');
+      requiredDiv.innerText = 'Required';
+      assistance.appendChild(requiredDiv);
+    }
+    
+  } else {
+    el.removeAttribute('required');
+    el.classList.remove('is-required');
+
+    if (wrapper) {
+      wrapper.classList.remove('apex-item-wrapper--required');
+    }
+
+    if (container) {
+      var marker = container.querySelector('.t-Form-itemRequired-marker');
+      if (marker) {
+        marker.remove();
+      }
+    }
+
+    if (assistance) {
+      var requiredDiv = assistance.querySelector('.t-Form-itemRequired');
+      if (requiredDiv) {
+        requiredDiv.remove();
+      }
+    }
+  }
+}
+```
+
+---
+
+# 📈 Що робить цей код:
+
+| Крок | Дія |
+|-----|-----|
+| Додає або знімає `required` атрибут на input/textarea |
+| Додає або знімає клас `is-required` |
+| Додає або знімає клас `apex-item-wrapper--required` |
+| Додає або видаляє `<div class="t-Form-itemRequired-marker">` перед `.t-Form-itemWrapper` |
+| Додає або видаляє `<div class="t-Form-itemRequired">Required</div>` в `.t-Form-itemAssistance` |
+
+**І все буде виглядати на 100% як у нативному APEX Required полі!** 🔥
+
+---
+
+# 📋 Маленькі нотатки:
+
+- Якщо обгортка `.t-Form-itemWrapper` або `.t-Form-inputContainer` не знайдені — пропускаємо, щоб не ламати DOM.
+- Все працює і для стандартних полів, і для `DatePicker`, і для `Textarea`.
+
+---
+
+# 🛠 Як використовувати:
+
+Ти викликаєш цю функцію точно так само, як і раніше:
+
+```javascript
+updateRequired();
+```
+
+А всередині `updateRequired()` ти працюєш з цим оновленим `setRequired`.
+
+---
+
+# ✅ Тепер буде:
+
+| Елемент | required="required" | трикутник | Required-текст |
+|---------|----------------------|-----------|----------------|
+| input | ✅ | ✅ | ✅ |
+| textarea | ✅ | ✅ | ✅ |
+| datepicker | ✅ | ✅ | ✅ |
+
+---
+
+# 🚀 Хочеш я ще покажу, як в кінці легко перевірити на сторінці всі обов'язкові поля й вивести список пустих перед сабмітом, без серверної валідації?  
+(для кращої UX-перевірки) ✅  
+Сказати "так"? ✅

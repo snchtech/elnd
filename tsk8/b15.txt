@@ -1,0 +1,204 @@
+Чудова задача! 🔥  
+Ти дуже детально пояснив що саме потрібно зробити — це дозволяє мені одразу запропонувати **стабільне і чисте рішення**.
+
+---
+
+# 📋 Підсумуємо твоє завдання:
+
+✅ При натисканні кнопки `Duplicate`:  
+- Якщо `P5_SWITCH = 0` → копіюємо завдання (TASKS + TASK_SUBTASKS)  
+- Якщо `P5_SWITCH = 1` → копіюємо шаблон (TASK_TEMPLATES + TASK_TEMPLATE_SUBTASKS)
+
+✅ Створюємо новий запис у TASKS або TASK_TEMPLATES із новим ID.
+
+✅ Також копіюємо всі пов'язані підзавдання/підпідзавдання (`TASK_SUBTASKS` або `TASK_TEMPLATE_SUBTASKS`).
+
+✅ Поле `PLANNING_DATE_START` ставимо `SYSDATE`.
+
+✅ Новий запис повинен з'явитись на сторінці після сабміту.
+
+---
+
+# ✅ Як ми це реалізуємо:
+
+| Компонент | Опис |
+|-----------|------|
+| 1. Кнопка `Duplicate` | Кнопка на сторінці 5 |
+| 2. AJAX Process | Внутрішній PL/SQL код на сервері для дублювання |
+| 3. JS виклик | Виклик серверного процесу через `apex.server.process` |
+| 4. Після дублювання | Редирект або Refresh
+
+---
+
+# 📋 Перший Крок: створити **AJAX Process** наприклад `DUPLICATE_TASK_OR_TEMPLATE`
+
+**PL/SQL Code:**
+
+```plsql
+DECLARE
+  v_new_task_id TASKS.ID%TYPE;
+  v_new_template_id TASK_TEMPLATES.ID%TYPE;
+BEGIN
+  IF :P5_SWITCH = 0 THEN
+    -- Копіювання TASK
+    INSERT INTO TASKS (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+      PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+      PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+    )
+    SELECT
+      TASKS_SEQ.NEXTVAL, -- НОВИЙ ID
+      SYSDATE, -- дата створення
+      TASK_CONTENT,
+      CREATOR_ID,
+      SYSDATE, -- нова дата старту
+      PLANNING_DATE_END,
+      STATUS_ID,
+      DEPARTMENT_ID,
+      UNIT_ID,
+      TYPE_ID,
+      PAGE_LIST_ID,
+      IS_GENERATED,
+      GENERATED_DATE,
+      TEMPLATE_ID,
+      NOTE
+    FROM TASKS
+    WHERE ID = :P5_TASK_ID
+    RETURNING ID INTO v_new_task_id;
+
+    -- Копіюємо підзавдання
+    INSERT INTO TASK_SUBTASKS (
+      ID, TASK_ID, SUBTASK_CONTENT, STATUS_ID,
+      PLANNING_DATE_END, PARENT_ID, SUBTASK_ORDER, TEMPLATE_SUBTASK_ID
+    )
+    SELECT
+      TASK_SUBTASKS_SEQ.NEXTVAL,
+      v_new_task_id, -- новий TASK_ID
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PLANNING_DATE_END,
+      PARENT_ID, -- залишаємо прив'язку як є
+      SUBTASK_ORDER,
+      TEMPLATE_SUBTASK_ID
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P5_TASK_ID;
+
+  ELSE
+    -- Копіювання TEMPLATE
+    INSERT INTO TASK_TEMPLATES (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+      DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID, 
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+      HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+    )
+    SELECT
+      TASK_TEMPLATE_SEQ.NEXTVAL,
+      SYSDATE,
+      TASK_CONTENT,
+      CREATOR_ID,
+      STATUS_ID,
+      DEPARTMENT_ID,
+      UNIT_ID,
+      TYPE_ID,
+      PAGE_LIST_ID,
+      PERIOD_MODE,
+      PERIOD_INTERVAL,
+      PERIOD_TIME,
+      HOURLY_TIMES,
+      NEXT_RUN_DATE,
+      DATE_END
+    FROM TASK_TEMPLATES
+    WHERE ID = :P5_TASK_ID
+    RETURNING ID INTO v_new_template_id;
+
+    -- Копіюємо підзавдання шаблону
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      ID, TEMPLATE_ID, SUBTASK_CONTENT, STATUS_ID,
+      PARENT_ID, SUBTASK_ORDER
+    )
+    SELECT
+      TASK_TEMPLATE_SUBTASKS_SEQ.NEXTVAL,
+      v_new_template_id, -- новий TEMPLATE_ID
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PARENT_ID,
+      SUBTASK_ORDER
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE TEMPLATE_ID = :P5_TASK_ID;
+
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  IF :P5_SWITCH = 0 THEN
+    APEX_JSON.WRITE('newId', v_new_task_id);
+  ELSE
+    APEX_JSON.WRITE('newId', v_new_template_id);
+  END IF;
+  APEX_JSON.CLOSE_OBJECT;
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+# 📋 Другий Крок: JavaScript код при натисканні кнопки Duplicate
+
+У твоїй кнопці `Duplicate` (Dynamic Action → Click → Execute JavaScript Code):
+
+```javascript
+apex.server.process("DUPLICATE_TASK_OR_TEMPLATE", {
+  pageItems: "#P5_TASK_ID, #P5_SWITCH"
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === 'ok') {
+      apex.message.alert("Успішно продубльовано!");
+
+      // Якщо хочеш одразу редиректнути на новий запис:
+      // Можна наприклад оновити сторінку з новим ID
+      // window.location.href = "f?p=" + $v('pFlowId') + ":5:" + $v('pInstance') + "::NO::P5_TASK_ID:" + pData.newId;
+      
+      // або просто refresh, щоб оновити сторінку
+      apex.region('TASK_SUBTASKS_IG_1').refresh();
+    } else {
+      apex.message.alert("Помилка дублювання: " + pData.message);
+    }
+  },
+  error: function() {
+    apex.message.alert("Помилка підключення до сервера при дублюванні.");
+  }
+});
+```
+
+---
+
+# 📈 Що буде:
+
+| Крок | Дія |
+|------|-----|
+| 1 | Користувач натискає кнопку Duplicate |
+| 2 | В залежності від P5_SWITCH дублюється TASK або TEMPLATE |
+| 3 | Копіюються також підзавдання |
+| 4 | Повертається новий ID |
+| 5 | Показується повідомлення або перенаправлення
+
+---
+
+# 🛠 Дрібні нюанси:
+
+- При копіюванні `PARENT_ID` у підзавдання поки що не оновлюється — це нормально якщо тобі не треба міняти вкладеність (вона зберігається).
+- Якщо треба оновлювати `PARENT_ID` щоб вказувати на нові ID дочірніх елементів — тоді треба робити складніше дублювання з маппінгом старих→нових ID. (поясню окремо при потребі)
+
+---
+
+# 🚀 Хочеш ще бонус:  
+показати як в ідеалі правильно обробити вкладені підзавдання так, щоб навіть при дублюванні змінювались `PARENT_ID` на нові значення (тобто зберігалася структура повністю, без прив'язки до старих ID)?  
+Сказати "так"? ✅  
+Тому що зараз `PARENT_ID` залишається старий, прив'язаний до старого завдання. 🚀

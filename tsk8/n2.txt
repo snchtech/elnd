@@ -1,0 +1,49 @@
+CREATE_TASK
+5
+P5_TASK_ACTION_MODE - 1
+P5_SWITCH - 0
+cc 5
+
+---------------------------
+
+UPDATE_TASK
+5
+P5_TASK_ACTION_MODE - 2
+P5_TASK_ID - 4
+P5_SWITCH - 0
+cc 5
+
+---------------------------
+
+VIEW_TASK
+5
+P5_TASK_ACTION_MODE - 0
+P5_TASK_ID - 4
+P5_SWITCH - 0
+cc 5
+
+-------------------------------
+
+CREATE_TEMPLATE
+5
+P5_TASK_ACTION_MODE - 1
+P5_SWITCH - 1
+cc 5
+
+--------------------------------
+
+UPDATE_TEMPLATE
+5
+P5_TASK_ACTION_MODE - 2
+P5_TASK_ID - 4
+P5_SWITCH - 1
+cc 5
+
+---------------------------
+
+VIEW_TEMPLATE
+5
+P5_TASK_ACTION_MODE - 0
+P5_TASK_ID - 4
+P5_SWITCH - 1
+cc 5

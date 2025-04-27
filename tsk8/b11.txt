@@ -1,0 +1,125 @@
+Чудово! 🔥  
+Тоді давай розширимо нашу функцію `validateRequiredFieldsWithApexMessages()`, щоб вона **ще й перевіряла кількість рядків у Interactive Grid (IG)**.
+
+---
+
+# 📋 Завдання:
+
+✅ Якщо `P5_SWITCH = 0` і `P5_SELECT_TASK_TYPE = 2`  
+✅ Перевірити, що у гріді `TASK_SUBTASKS_IG_1` є хоча б 1 запис  
+✅ Якщо записів немає — показати помилку через `apex.message.showErrors()`
+
+---
+
+# ✅ Ось оновлений повний код:
+
+```javascript
+function validateRequiredFieldsWithApexMessages() {
+  var errors = [];
+
+  // Очищаємо попередні повідомлення
+  apex.message.clearErrors();
+
+  // Проходимо по всіх полях input та textarea з атрибутом required
+  document.querySelectorAll('.t-Form-inputContainer input[required], .t-Form-inputContainer textarea[required]').forEach(function (el) {
+    var value = el.value.trim();
+    if (value === '') {
+      var label = document.querySelector("label[for='" + el.id + "']");
+      var labelText = label ? label.innerText.trim() : el.id;
+      
+      errors.push({
+        type:       "error",
+        location:   "inline",
+        pageItem:   el.id,
+        message:    "Заповніть поле: " + labelText,
+        unsafe:     false
+      });
+    }
+  });
+
+  // 🔥 Додаткова перевірка для IG (TASK_SUBTASKS_IG_1)
+  var switchValue = $v('P5_SWITCH');
+  var taskTypeValue = $v('P5_SELECT_TASK_TYPE');
+
+  if (switchValue === '0' && taskTypeValue === '2') {
+    var model = apex.region('TASK_SUBTASKS_IG_1').widget().interactiveGrid('getViews', 'grid').model;
+    var rowCount = model.getTotalRecords();
+
+    if (rowCount === 0) {
+      errors.push({
+        type:       "error",
+        location:   "page", // Покажемо помилку нагорі сторінки
+        message:    "Потрібно додати хоча б одне підзавдання.",
+        unsafe:     false
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    apex.message.showErrors(errors);
+
+    // Фокусуємося на перше незаповнене поле, якщо є
+    var firstFieldError = errors.find(function(error) {
+      return error.pageItem;
+    });
+    if (firstFieldError) {
+      setTimeout(function () {
+        var firstInvalid = document.getElementById(firstFieldError.pageItem);
+        if (firstInvalid) {
+          firstInvalid.focus();
+        }
+      }, 100);
+    }
+    return false; // Зупиняємо сабміт
+  }
+
+  return true; // Усе заповнено правильно
+}
+```
+
+---
+
+# 📈 Як тепер працює:
+
+| Крок | Опис |
+|------|------|
+| 1 | Очищаємо попередні помилки |
+| 2 | Перевіряємо всі поля з `required` |
+| 3 | Перевіряємо, чи є записи в `TASK_SUBTASKS_IG_1` (якщо потрібно) |
+| 4 | Виводимо всі помилки через `apex.message.showErrors()` |
+| 5 | Фокусуємося на перше незаповнене поле |
+
+---
+
+# 🔥 Додаткові моменти:
+
+- Якщо підзавдань немає → помилка виводиться нагорі сторінки, а не inline біля конкретного поля.
+- Якщо порожні поля → помилка відображається inline біля кожного поля.
+
+---
+
+# ✅ Як підключити на кнопку:
+
+**Dynamic Action** на `Click` по кнопці ("Create", "Update"):
+
+```javascript
+if (validateRequiredFieldsWithApexMessages()) {
+  apex.submit('CREATE_TASK');
+}
+```
+
+(або `UPDATE_TASK` — залежить від кнопки)
+
+---
+
+# 📋 Підсумок
+
+| Що перевіряємо | Як реагуємо |
+|----------------|-------------|
+| Обов'язкові поля пусті | Inline повідомлення під полем |
+| Немає підзавдань в IG | Помилка нагорі сторінки |
+
+---
+
+# 🚀 Якщо хочеш — можу ще скласти варіант, як при сабміті прокрутити сторінку автоматично до першої помилки! (особливо круто, коли форма велика) ✅  
+Сказати "так"? ✅

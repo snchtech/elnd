@@ -1,0 +1,392 @@
+region WRAPPER_TASK
+button - ADD_SUBTASK
+Grid підзавдань
+
+region WRAPPER_TEMPLATE
+Шаблони завдань
+
+P5_TASK_ACTION_MODE - hidden
+
+buttons
+button .. server side none
+
+create_task
+update_task
+Create_template
+update_template
+Close
+EXECUTOR
+
+Info
+P5_SWITCH 1 шаблон - 0 завдання
+P5_SELECT_PERIOD_MODE дні 0 - Години 1
+P5_SELECT_TASK_TYPE звичайне 1, розширене 2
+
+
+----------------------------------------------------------
+
+DA - All without fire initilization
+
+PAGE LOAD
+---------------
+
+Switch Page Load - Show/Hide Fields
+true
+
+show
+items
+P5_DATE1,P5_DATE2
+CS
+Item = value
+P5_SWITCH
+0
+
+hide
+item
+P5_SELECT_PERIOD_MODE,P5_DATE3,P5_TEXT1,P5_TEXT2
+CS
+Item = value
+P5_SWITCH
+0
+
+show
+P5_SELECT_PERIOD_MODE,P5_DATE3,P5_TEXT1,P5_TEXT2
+CS
+Item = value
+P5_SWITCH
+1
+
+hide
+P5_DATE1,P5_DATE2
+CS
+Item = value
+P5_SWITCH
+1
+
+execute js code
+apex.event.trigger($("#P5_SELECT_PERIOD_MODE"), "change");
+
+execute js code
+apex.event.trigger($("#P5_SELECT_TASK_TYPE"), "change");
+
+--------------------------------------------------------------------------
+
+Period Mode Page Load - Show/Hide Fields
+show
+item
+P5_DATE3,P5_TEXT1
+CS
+$v('P5_SELECT_PERIOD_MODE') === '0' && $v('P5_SWITCH') === '1'
+
+hide
+P5_TEXT2
+CS
+$v('P5_SELECT_PERIOD_MODE') === '0' && $v('P5_SWITCH') === '1'
+
+hide
+P5_DATE3,P5_TEXT1
+CS
+$v('P5_SELECT_PERIOD_MODE') === '1' && $v('P5_SWITCH') === '1'
+
+show
+P5_TEXT2
+CS
+$v('P5_SELECT_PERIOD_MODE') === '1' && $v('P5_SWITCH') === '1'
+
+----------------------------------------------------------------------------
+
+Task Type Page Load - Show/Hide Regions and Items
+
+show
+P5_TEXTAREA,P5_TIPS
+CS
+item = value
+P5_SELECT_TASK_TYPE
+1
+
+hide
+region
+WRAPPER_TASK
+item = value
+P5_SELECT_TASK_TYPE
+1
+
+hide
+region
+WRAPPER_TEmplate
+item = value
+P5_SELECT_TASK_TYPE
+1
+
+show
+region
+WRAPPER_TASK
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+hide
+WRAPPER_TEmplate
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+hide
+P5_TEXTAREA,P5_TIPS
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+show
+WRAPPER_TEmplate
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+hide
+WRAPPER_TASK
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+hide
+item
+P5_TEXTAREA,P5_TIPS
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+-----------------------------------------------------------------------
+Switch or Page Load - Show/Hide Buttons
+
+hide 
+jqueryselector
+#BTN_CREATE_TASK, #BTN_UPDATE_TASK, #BTN_CREATE_TEMPLATE, #BTN_UPDATE_TEMPLATE
+
+show
+jqueryselector
+#BTN_CREATE_TASK
+CS
+$v('P5_SWITCH') === '0' && $v('P5_TASK_ACTION_MODE') === '1'
+
+show
+jqueryselector
+#BTN_UPDATE_TASK
+CS
+$v('P5_SWITCH') === '0' && $v('P5_TASK_ACTION_MODE') === '2'
+
+show
+jqueryselector
+#BTN_CREATE_TEMPLATE
+CS
+$v('P5_SWITCH') === '1' && $v('P5_TASK_ACTION_MODE') === '1'
+
+show
+jqueryselector
+#BTN_UPDATE_TEMPLATE
+CS
+$v('P5_SWITCH') === '1' && $v('P5_TASK_ACTION_MODE') === '2'
+----------------------------------------------------------------------------
+
+Hide P5_SWITCH on Edit/View
+
+hide
+P5_SWITCH
+cs
+$v('P5_TASK_ACTION_MODE') === '2' || $v('P5_TASK_ACTION_MODE') === '0'
+-----------------------------------------------------------------------------
+Disable P5_SELECT_TASK_TYPE on Edit
+
+Disable
+P5_SELECT_TASK_TYPE
+CS
+$v('P5_TASK_ACTION_MODE') === '2'
+-----------------------------------------------------------------------------
+
+Disable P5_DATE1 when Edit Task
+
+Disable
+P5_DATE1
+CS
+$v('P5_TASK_ACTION_MODE') === '2' && $v('P5_SWITCH') === '0'
+-----------------------------------------------------------------------
+
+SET_REQUIRED
+
+execute js code
+setTimeout(function() {
+updateRequired();
+},500)
+
+-----------------------------------------------------------------------------
+
+
+CHANGE
+---------------------------
+
+Switch Change - Show/Hide Fields
+item
+P5_SWITCH
+
+show
+P5_DATE1,P5_DATE2
+item=value
+P5_SWITCH
+0
+
+hide
+P5_SELECT_PERIOD_MODE,P5_DATE3,P5_TEXT1,P5_TEXT2
+item=value
+P5_SWITCH
+0
+
+show
+P5_SELECT_PERIOD_MODE,P5_DATE3,P5_TEXT1,P5_TEXT2
+item=value
+P5_SWITCH
+1
+
+hide
+P5_DATE1,P5_DATE2
+item=value
+P5_SWITCH
+1
+
+Execute js code
+apex.event.trigger($("#P5_SELECT_PERIOD_MODE"), "change");
+
+Execute js code
+apex.event.trigger($("#P5_SELECT_TASK_TYPE"), "change");
+
+Refresh
+Region
+buttons
+
+execute js code
+setTimeout(function() {
+updateRequired();
+},500)
+
+---------------------------------------------------
+
+Period Mode Change - Show/Hide Fields
+item
+P5_SELECT_PERIOD_MODE
+
+show
+P5_DATE3,P5_TEXT1
+CS
+$v('P5_SELECT_PERIOD_MODE') === '0' && $v('P5_SWITCH') === '1'
+
+hide
+P5_TEXT2
+CS
+$v('P5_SELECT_PERIOD_MODE') === '0' && $v('P5_SWITCH') === '1'
+
+hide
+P5_DATE3,P5_TEXT1
+CS
+$v('P5_SELECT_PERIOD_MODE') === '1' && $v('P5_SWITCH') === '1'
+
+show
+P5_TEXT2
+CS
+$v('P5_SELECT_PERIOD_MODE') === '1' && $v('P5_SWITCH') === '1'
+
+Execute js code
+setTimeout(function() {
+updateRequired();
+},500)
+----------------------------------------------------------------------
+Task Type Change - Show/Hide Regions and Items
+item
+P5_SELECT_TASK_TYPE
+
+show
+P5_TEXTAREA,P5_TIPS
+item=value
+P5_SELECT_TASK_TYPE
+1
+
+hide
+WRAPPER_TASK
+item=value
+P5_SELECT_TASK_TYPE
+1
+
+hide
+WRAPPER_template
+item=value
+P5_SELECT_TASK_TYPE
+1
+
+show
+WRAPPER_TASK
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+hide
+WRAPPER_template
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+hide
+P5_TEXTAREA,P5_TIPS
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '0';
+
+show
+WRAPPER_template
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+hide
+WRAPPER_TASK
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+hide
+P5_TEXTAREA,P5_TIPS
+CS
+$v('P5_SELECT_TASK_TYPE') === '2' && $v('P5_SWITCH') === '1';
+
+Execute js code
+setTimeout(function() {
+updateRequired();
+},500)
+
+------------------------------------------------------------------------
+
+Switch or Change - Show/Hide Buttons
+item
+P5_SWITCH
+
+hide
+jqueryselector
+#BTN_CREATE_TASK, #BTN_UPDATE_TASK, #BTN_CREATE_TEMPLATE, #BTN_UPDATE_TEMPLATE
+
+show
+jqueryselector
+#BTN_CREATE_TASK
+CS
+$v('P5_SWITCH') === '0' && $v('P5_TASK_ACTION_MODE') === '1'
+
+
+show
+jqueryselector
+#BTN_UPDATE_TASK
+CS
+$v('P5_SWITCH') === '0' && $v('P5_TASK_ACTION_MODE') === '2'
+
+
+show
+jqueryselector
+#BTN_CREATE_TEMPLATE
+CS
+$v('P5_SWITCH') === '1' && $v('P5_TASK_ACTION_MODE') === '1'
+
+
+show
+jqueryselector
+#BTN_UPDATE_TEMPLATE
+CS
+$v('P5_SWITCH') === '1' && $v('P5_TASK_ACTION_MODE') === '2'
+
+
+
+
+

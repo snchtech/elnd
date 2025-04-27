@@ -1,0 +1,164 @@
+Чудово! 🔥  
+Тоді я зараз складу **готовий аналогічний PL/SQL процес для копіювання ШАБЛОНУ** (`TASK_TEMPLATES` + `TASK_TEMPLATE_SUBTASKS`), причому:
+
+- Повністю збережеться структура вкладених підшаблонів (`PARENT_ID` буде оновлений правильно)
+- Новий TEMPLATE_ID
+- Нова дата `DATE_CREATE = SYSDATE`
+
+---
+
+# 📋 Ось повний готовий код для дублювання шаблону:
+
+```plsql
+DECLARE
+  v_new_template_id TASK_TEMPLATES.ID%TYPE;
+  
+  -- Зв'язок старого і нового ID
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY NUMBER;
+  l_id_map t_id_map;
+  
+  CURSOR c_subtasks IS
+    SELECT ID, PARENT_ID, SUBTASK_CONTENT, STATUS_ID, SUBTASK_ORDER
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE TEMPLATE_ID = :P5_TASK_ID;
+  
+  v_new_subtask_id TASK_TEMPLATE_SUBTASKS.ID%TYPE;
+BEGIN
+  -- 1. Копіюємо сам TEMPLATE
+  INSERT INTO TASK_TEMPLATES (
+    ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+    DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID,
+    PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+    HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+  )
+  SELECT
+    TASK_TEMPLATE_SEQ.NEXTVAL,
+    SYSDATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    HOURLY_TIMES,
+    NEXT_RUN_DATE,
+    DATE_END
+  FROM TASK_TEMPLATES
+  WHERE ID = :P5_TASK_ID
+  RETURNING ID INTO v_new_template_id;
+
+  -- 2. Копіюємо підшаблони і будуємо мапу старий → новий ID
+  FOR r IN c_subtasks LOOP
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      ID, TEMPLATE_ID, SUBTASK_CONTENT, STATUS_ID,
+      PARENT_ID, SUBTASK_ORDER
+    ) VALUES (
+      TASK_TEMPLATE_SUBTASKS_SEQ.NEXTVAL,
+      v_new_template_id,
+      r.SUBTASK_CONTENT,
+      r.STATUS_ID,
+      NULL, -- тимчасово без parent_id
+      r.SUBTASK_ORDER
+    )
+    RETURNING ID INTO v_new_subtask_id;
+    
+    -- Запам'ятовуємо старий ID → новий ID
+    l_id_map(r.ID) := v_new_subtask_id;
+  END LOOP;
+
+  -- 3. Оновлюємо правильні PARENT_ID для нових підшаблонів
+  FOR old_id IN (
+    SELECT DISTINCT ID, PARENT_ID
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE TEMPLATE_ID = :P5_TASK_ID
+      AND PARENT_ID IS NOT NULL
+  ) LOOP
+    UPDATE TASK_TEMPLATE_SUBTASKS
+    SET PARENT_ID = l_id_map(old_id.PARENT_ID)
+    WHERE TEMPLATE_ID = v_new_template_id
+      AND ID = l_id_map(old_id.ID);
+  END LOOP;
+
+  -- 4. Повертаємо новий ID
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.WRITE('newId', v_new_template_id);
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+# 📈 Як працює:
+
+| Крок | Дія |
+|------|-----|
+| 1 | Копіюємо шаблон у `TASK_TEMPLATES` |
+| 2 | Копіюємо підшаблони (`TASK_TEMPLATE_SUBTASKS`) із новими ID |
+| 3 | Створюємо мапу старий → новий ID |
+| 4 | Оновлюємо правильні `PARENT_ID` |
+| 5 | Повертаємо JSON з новим ID нового шаблону
+
+---
+
+# 📋 Тепер логіка повністю симетрична:
+
+| Якщо P5_SWITCH = 0 | Працюємо з TASKS + TASK_SUBTASKS |
+|--------------------|----------------------------------|
+| Якщо P5_SWITCH = 1 | Працюємо з TASK_TEMPLATES + TASK_TEMPLATE_SUBTASKS |
+
+---
+
+# ✅ Підсумок:
+
+✅ Структура ієрархії повністю копіюється  
+✅ Підшаблони/підзавдання отримують нові коректні `PARENT_ID`  
+✅ Нова дата `SYSDATE` у дублікованих записах  
+✅ Логіка єдина для завдань і шаблонів
+
+---
+
+# 🛠 Як підключити на кнопку Duplicate:
+
+Ти в JS залишаєш один виклик:
+
+```javascript
+apex.server.process("DUPLICATE_TASK_OR_TEMPLATE", {
+  pageItems: "#P5_TASK_ID, #P5_SWITCH"
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === 'ok') {
+      apex.message.alert("Успішно продубльовано!");
+      apex.region('TASK_SUBTASKS_IG_1').refresh();
+    } else {
+      apex.message.alert("Помилка дублювання: " + pData.message);
+    }
+  },
+  error: function() {
+    apex.message.alert("Помилка підключення до сервера при дублюванні.");
+  }
+});
+```
+
+А серверний процес сам розбирає по `P5_SWITCH`, що дублювати.
+
+---
+
+# 🚀 Хочеш:
+- ще швидко покажу бонус:  
+  коли ми дублюємо — автоматично перевести користувача на форму нового дублікованого запису? (з редіректом на новий P5_TASK_ID)
+  
+Сказати "так"? ✅  
+(Дуже зручно для UX) 🚀

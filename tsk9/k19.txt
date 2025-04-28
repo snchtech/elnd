@@ -1,0 +1,144 @@
+Чудово! 🔥 Давай одразу покажу,  
+**як додати іконки** + **розділювачі** до твого `custom menu` в стилі справжніх професійних UI 🔥
+
+---
+
+# 📋 1. Додати іконки біля пунктів меню:
+
+**HTML структура буде така:**
+
+```html
+<ul id="custom-ig-menu" class="custom-menu">
+  <li>
+    <a href="#" class="custom-menu-link">
+      <span class="menu-icon"><i class="fa fa-edit"></i></span> Редагувати
+    </a>
+  </li>
+  <li>
+    <a href="#" class="custom-menu-link">
+      <span class="menu-icon"><i class="fa fa-copy"></i></span> Дублювати
+    </a>
+  </li>
+  <li>
+    <a href="#" class="custom-menu-link">
+      <span class="menu-icon"><i class="fa fa-trash"></i></span> Видалити
+    </a>
+  </li>
+</ul>
+```
+
+✅ Тут:
+- `<span class="menu-icon">` — окремий контейнер для іконки.
+- `<i class="fa fa-edit"></i>` — клас іконки (якщо ти використовуєш FontAwesome або подібний набір).
+
+---
+
+# ✅ CSS для красивого вирівнювання:
+
+```css
+#custom-ig-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  min-width: 180px;
+}
+
+/* Пункти меню */
+#custom-ig-menu li {
+  padding: 0;
+}
+
+/* Посилання */
+#custom-ig-menu .custom-menu-link {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  color: #333;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+/* Іконки */
+#custom-ig-menu .menu-icon {
+  width: 20px;
+  text-align: center;
+  margin-right: 8px;
+}
+
+/* Наведення */
+#custom-ig-menu .custom-menu-link:hover {
+  background-color: #f0f0f0;
+  color: #000;
+}
+
+/* Натискання */
+#custom-ig-menu .custom-menu-link:active {
+  background-color: #e0e0e0;
+}
+```
+
+---
+
+# 📈 Вигляд:
+
+| Елемент | Що буде |
+|---------|---------|
+| Іконка | Вирівняна ліворуч |
+| Текст | Біля іконки |
+| Hover | Плавне підсвічування |
+| Active | Легке затемнення |
+
+---
+
+# 📋 2. Додати розділювачі (лінії між пунктами)
+
+✅ Просто додай `li` з класом `menu-divider`:
+
+```html
+<li class="menu-divider"></li>
+```
+
+**CSS для розділювача:**
+
+```css
+#custom-ig-menu .menu-divider {
+  height: 1px;
+  background-color: #e0e0e0;
+  margin: 4px 0;
+}
+```
+
+---
+
+# 📋 Повний приклад з розділювачем:
+
+```html
+<ul id="custom-ig-menu" class="custom-menu">
+  <li><a href="#" class="custom-menu-link"><span class="menu-icon"><i class="fa fa-edit"></i></span>Редагувати</a></li>
+  <li><a href="#" class="custom-menu-link"><span class="menu-icon"><i class="fa fa-copy"></i></span>Дублювати</a></li>
+  <li class="menu-divider"></li>
+  <li><a href="#" class="custom-menu-link"><span class="menu-icon"><i class="fa fa-trash"></i></span>Видалити</a></li>
+</ul>
+```
+
+✅ Блок `Видалити` буде **відділений тонкою лінією**.
+
+---
+
+# 🛠 Додатково:
+
+Якщо не хочеш підключати всю FontAwesome бібліотеку, можна:
+
+- Використовувати SVG іконки
+- Використовувати Apex темні іконки (`t-Icon` класи)
+
+---
+
+# 🚀 Хочеш я ще покажу:
+Як анімувати появу іконок плавно разом із меню (наприклад, іконки "виїжджають" одночасно з відкриттям меню)?
+
+Сказати "так"? ✅  
+І я швиденько покажу код для анімованих іконок! 🔥🎨

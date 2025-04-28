@@ -1,0 +1,133 @@
+Добре, давай чітко розберемося.  
+Помилка **"unsupported RETURNING"** у PL/SQL найчастіше вказує на одну з таких проблем:
+
+---
+
+# 📋 Причини, чому може бути помилка RETURNING:
+
+| Причина | Пояснення |
+|---------|-----------|
+| ❌ 1. Ти виконуєш INSERT через SELECT без прямого VALUES | А Oracle дозволяє RETURNING тільки при `INSERT ... VALUES (...)` |
+| ❌ 2. Старий режим APEX або старий драйвер БД | Наприклад, якщо серверний скрипт працює через REST Data Source або стару версію APEX Engine |
+| ❌ 3. Платформа або налаштування забороняють RETURNING всередині анонімних блоків | Наприклад, якщо використовується Proxy-схема або тонкий клієнт Oracle |
+
+---
+
+# 🔥 Головна проблема в твоєму коді:
+
+Ти виконуєш `INSERT INTO ... SELECT ... RETURNING INTO ...`  
+
+А Oracle **не підтримує RETURNING INTO в конструкції `INSERT ... SELECT ...`!**  
+✅ `RETURNING INTO` можна використовувати тільки в `INSERT ... VALUES (...)`.
+
+> **Oracle правило:**  
+> Якщо ти робиш `INSERT INTO ... SELECT ...`, ти НЕ можеш написати `RETURNING INTO`.
+
+---
+
+# 📈 Як правильно переписати твій код:
+
+Нам потрібно спочатку вставити запис, а потім через `SELECT` дістати ID нового запису.
+
+## 1️⃣ Найпростіший робочий варіант:
+
+```plsql
+-- Отримуємо новий ID заздалегідь
+SELECT TASKS_SEQ.NEXTVAL INTO v_new_task_id FROM DUAL;
+
+-- Виконуємо INSERT, явно вказуючи новий ID
+INSERT INTO TASKS (
+    ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+    PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+    PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+)
+SELECT
+    v_new_task_id,
+    SYSDATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    SYSDATE,
+    PLANNING_DATE_END,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    IS_GENERATED,
+    GENERATED_DATE,
+    TEMPLATE_ID,
+    NOTE
+FROM TASKS
+WHERE ID = :P5_TASK_ID;
+```
+
+Тобто:
+- Перший крок: `SELECT NEXTVAL INTO змінну`
+- Другий крок: `INSERT INTO` з підстановкою цієї змінної в `ID`
+
+---
+
+# 📋 Так само потрібно виправити для шаблону:
+
+```plsql
+SELECT TASK_TEMPLATE_SEQ.NEXTVAL INTO v_new_template_id FROM DUAL;
+
+INSERT INTO TASK_TEMPLATES (
+    ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+    DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID,
+    PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+    HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+)
+SELECT
+    v_new_template_id,
+    SYSDATE,
+    TASK_CONTENT,
+    CREATOR_ID,
+    STATUS_ID,
+    DEPARTMENT_ID,
+    UNIT_ID,
+    TYPE_ID,
+    PAGE_LIST_ID,
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    HOURLY_TIMES,
+    NEXT_RUN_DATE,
+    DATE_END
+FROM TASK_TEMPLATES
+WHERE ID = :P5_TASK_ID;
+```
+
+---
+
+# 🛠 Чому так треба:
+
+- `RETURNING INTO` доступний тільки для `INSERT INTO ... VALUES (...)`
+- Якщо ми робимо `INSERT INTO ... SELECT ...`, то треба спочатку окремо отримати ID
+
+---
+
+# 📈 Тобто твій виправлений блок для TASK буде виглядати так:
+
+```plsql
+DECLARE
+  v_new_task_id TASKS.ID%TYPE;
+BEGIN
+  SELECT TASKS_SEQ.NEXTVAL INTO v_new_task_id FROM DUAL;
+
+  INSERT INTO TASKS (...)
+  SELECT
+    v_new_task_id, SYSDATE, TASK_CONTENT, ... 
+  FROM TASKS
+  WHERE ID = :P5_TASK_ID;
+
+  -- Далі логіка копіювання підзавдань і так далі...
+END;
+```
+
+Аналогічно для шаблонів.
+
+---
+
+# 🚀 Хочеш — я ще швидко сформую для тебе повністю готовий "пофікшений" об'єднаний код без RETURNING для TASK + TEMPLATE?  
+Скажи "так", і я відразу складу ✅

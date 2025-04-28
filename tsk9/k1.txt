@@ -1,0 +1,202 @@
+Чудове уточнення! 🔥  
+Ти абсолютно правильно мислиш: **одна кнопка**, **один AJAX виклик**, **один процесинг**, який усередині перевіряє `P5_SWITCH`  
+і запускає правильну логіку дублювання TASK або TEMPLATE.
+
+---
+
+# ✅ Ось об'єднаний, повністю готовий PL/SQL код:
+
+```plsql
+DECLARE
+  -- Загальні змінні
+  v_new_task_id TASKS.ID%TYPE;
+  v_new_template_id TASK_TEMPLATES.ID%TYPE;
+
+  -- Для мапи старий ID → новий ID
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY NUMBER;
+  l_id_map t_id_map;
+
+  -- Для копіювання підзавдань
+  CURSOR c_task_subtasks IS
+    SELECT ID, PARENT_ID, SUBTASK_CONTENT, STATUS_ID, PLANNING_DATE_END, SUBTASK_ORDER, TEMPLATE_SUBTASK_ID
+    FROM TASK_SUBTASKS
+    WHERE TASK_ID = :P5_TASK_ID;
+
+  -- Для копіювання підшаблонів
+  CURSOR c_template_subtasks IS
+    SELECT ID, PARENT_ID, SUBTASK_CONTENT, STATUS_ID, SUBTASK_ORDER
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE TEMPLATE_ID = :P5_TASK_ID;
+
+  v_new_subtask_id NUMBER;
+BEGIN
+  IF :P5_SWITCH = 0 THEN
+    -- ================ КОПІЮЄМО TASK ==================
+
+    INSERT INTO TASKS (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+      PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+      PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+    )
+    SELECT
+      TASKS_SEQ.NEXTVAL,
+      SYSDATE,
+      TASK_CONTENT,
+      CREATOR_ID,
+      SYSDATE,
+      PLANNING_DATE_END,
+      STATUS_ID,
+      DEPARTMENT_ID,
+      UNIT_ID,
+      TYPE_ID,
+      PAGE_LIST_ID,
+      IS_GENERATED,
+      GENERATED_DATE,
+      TEMPLATE_ID,
+      NOTE
+    FROM TASKS
+    WHERE ID = :P5_TASK_ID
+    RETURNING ID INTO v_new_task_id;
+
+    -- Копіюємо підзавдання
+    FOR r IN c_task_subtasks LOOP
+      INSERT INTO TASK_SUBTASKS (
+        ID, TASK_ID, SUBTASK_CONTENT, STATUS_ID,
+        PLANNING_DATE_END, PARENT_ID, SUBTASK_ORDER, TEMPLATE_SUBTASK_ID
+      ) VALUES (
+        TASK_SUBTASKS_SEQ.NEXTVAL,
+        v_new_task_id,
+        r.SUBTASK_CONTENT,
+        r.STATUS_ID,
+        r.PLANNING_DATE_END,
+        NULL, -- тимчасово без parent_id
+        r.SUBTASK_ORDER,
+        r.TEMPLATE_SUBTASK_ID
+      )
+      RETURNING ID INTO v_new_subtask_id;
+      
+      l_id_map(r.ID) := v_new_subtask_id;
+    END LOOP;
+
+    -- Оновлюємо PARENT_ID для нових підзавдань
+    FOR old_id IN (
+      SELECT DISTINCT ID, PARENT_ID
+      FROM TASK_SUBTASKS
+      WHERE TASK_ID = :P5_TASK_ID
+        AND PARENT_ID IS NOT NULL
+    ) LOOP
+      UPDATE TASK_SUBTASKS
+      SET PARENT_ID = l_id_map(old_id.PARENT_ID)
+      WHERE TASK_ID = v_new_task_id
+        AND ID = l_id_map(old_id.ID);
+    END LOOP;
+
+    -- Виводимо новий ID TASK
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'ok');
+    APEX_JSON.WRITE('newId', v_new_task_id);
+    APEX_JSON.CLOSE_OBJECT;
+
+  ELSE
+    -- ================ КОПІЮЄМО TEMPLATE ==================
+
+    INSERT INTO TASK_TEMPLATES (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+      DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID,
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+      HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+    )
+    SELECT
+      TASK_TEMPLATE_SEQ.NEXTVAL,
+      SYSDATE,
+      TASK_CONTENT,
+      CREATOR_ID,
+      STATUS_ID,
+      DEPARTMENT_ID,
+      UNIT_ID,
+      TYPE_ID,
+      PAGE_LIST_ID,
+      PERIOD_MODE,
+      PERIOD_INTERVAL,
+      PERIOD_TIME,
+      HOURLY_TIMES,
+      NEXT_RUN_DATE,
+      DATE_END
+    FROM TASK_TEMPLATES
+    WHERE ID = :P5_TASK_ID
+    RETURNING ID INTO v_new_template_id;
+
+    -- Копіюємо підшаблони
+    FOR r IN c_template_subtasks LOOP
+      INSERT INTO TASK_TEMPLATE_SUBTASKS (
+        ID, TEMPLATE_ID, SUBTASK_CONTENT, STATUS_ID,
+        PARENT_ID, SUBTASK_ORDER
+      ) VALUES (
+        TASK_TEMPLATE_SUBTASKS_SEQ.NEXTVAL,
+        v_new_template_id,
+        r.SUBTASK_CONTENT,
+        r.STATUS_ID,
+        NULL, -- тимчасово без parent_id
+        r.SUBTASK_ORDER
+      )
+      RETURNING ID INTO v_new_subtask_id;
+      
+      l_id_map(r.ID) := v_new_subtask_id;
+    END LOOP;
+
+    -- Оновлюємо PARENT_ID для нових підшаблонів
+    FOR old_id IN (
+      SELECT DISTINCT ID, PARENT_ID
+      FROM TASK_TEMPLATE_SUBTASKS
+      WHERE TEMPLATE_ID = :P5_TASK_ID
+        AND PARENT_ID IS NOT NULL
+    ) LOOP
+      UPDATE TASK_TEMPLATE_SUBTASKS
+      SET PARENT_ID = l_id_map(old_id.PARENT_ID)
+      WHERE TEMPLATE_ID = v_new_template_id
+        AND ID = l_id_map(old_id.ID);
+    END LOOP;
+
+    -- Виводимо новий ID TEMPLATE
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'ok');
+    APEX_JSON.WRITE('newId', v_new_template_id);
+    APEX_JSON.CLOSE_OBJECT;
+  END IF;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+# 📈 Що ми тут маємо:
+
+| P5_SWITCH | Що дублюємо | Куди записуємо |
+|-----------|-------------|----------------|
+| 0         | TASKS + TASK_SUBTASKS | Новий TASK_ID |
+| 1         | TASK_TEMPLATES + TASK_TEMPLATE_SUBTASKS | Новий TEMPLATE_ID |
+
+✅ Повністю враховане оновлення вкладених `PARENT_ID`  
+✅ Одна точка дублювання  
+✅ Повертаємо `newId` для редіректу
+
+---
+
+# 🛠 Важливо:
+
+- `TASKS_SEQ`, `TASK_SUBTASKS_SEQ`, `TASK_TEMPLATE_SEQ`, `TASK_TEMPLATE_SUBTASKS_SEQ` — мають бути правильними послідовностями в БД.
+- `P5_TASK_ID` — має передаватись в процес через `pageItems` у `apex.server.process`.
+- `P5_SWITCH` — також має передаватись.
+
+---
+
+# 🚀 Все готово для повноцінного дублювання будь-чого!
+
+Хочеш — ще допоможу написати приклад маленького повідомлення (toast) "Успішно дубльовано" замість стандартного `alert`? 🔥 Це виглядає набагато красивіше!  
+Сказати "так"? ✅

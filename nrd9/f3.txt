@@ -1,0 +1,64 @@
+Щоб реалізувати динамічний заголовок на модальній сторінці в Oracle APEX залежно від `:P_MODAL_TIMEMODE`, зробимо це так:
+
+---
+
+### ✅ **КРОК 1: Додай на модальну сторінку HTML Region**
+- Тип: **Static Content**
+- Static ID: `header-region`
+- Текст: `#HEADER_TEXT#` — (буде замінено на заголовок)
+
+---
+
+### ✅ **КРОК 2: Додай динамічний заголовок через `Execute when Page Loads` (JS)**
+
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+  var mode = $v("P_MODAL_TIMEMODE");
+  var headerText = "Звіт по підрозділам";
+
+  if (mode === "NOW") {
+    headerText += " / на зараз";
+  } else if (mode === "DAY") {
+    headerText += " / з початку доби";
+  } else if (mode === "SHIFT") {
+    var now = new Date();
+    var hours = now.getHours();
+    var startTime, endTime;
+
+    if (hours >= 6 && hours < 14) {
+      startTime = "06:00";
+      endTime = "14:00";
+    } else if (hours >= 14 && hours < 22) {
+      startTime = "14:00";
+      endTime = "22:00";
+    } else {
+      startTime = "22:00";
+      endTime = "06:00";
+    }
+
+    headerText += " / за зміну (" + startTime + " - " + endTime + ")";
+  }
+
+  // Вставка в регіон
+  var region = document.querySelector("#header-region");
+  if (region) {
+    region.innerHTML = "<h3>" + headerText + "</h3>";
+  }
+});
+```
+
+---
+
+### ✅ **Альтернатива (через PL/SQL):**
+Можна зробити `Before Header PL/SQL process`, який встановить значення у `:P_MODAL_HEADER`, і в регіоні показати `&P_MODAL_HEADER.`  
+Але варіант з JS — **гнучкіший**, якщо не потрібно зберігати це значення.
+
+---
+
+### ✨ Результат:
+- Якщо обрали `NOW`: `Звіт по підрозділам / на зараз`
+- Якщо обрали `SHIFT` в 13:00: `Звіт по підрозділам / за зміну (06:00 - 14:00)`
+
+---
+
+Хочеш, щоб це також показувалось в заголовку модального вікна (dialog title)?

@@ -1,0 +1,119 @@
+Ось повністю готовий SQL-запит з `UNION ALL`, який ви можете вставити у ваш **Interactive Report** у APEX. Він:
+
+- відображає всі дані з `V_OUTFIT_PIVOT_BASE` згідно фільтрів,
+- додає внизу один рядок з **сумарними значеннями** по людям і бригадам,
+- містить додаткове поле `row_type`, щоб легко стилізувати останній рядок.
+
+---
+
+### ✅ **SQL-запит для Interactive Report**
+
+```sql
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  u1_people,
+  u1_brigades,
+  u2_people,
+  u2_brigades,
+  u3_people,
+  u3_brigades,
+  total_people,
+  total_brigades,
+  'DATA' AS row_type
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+
+UNION ALL
+
+SELECT
+  'ЗАГАЛОМ' AS group_name,
+  NULL AS org,
+  NULL AS unit,
+  NULL AS department,
+  NULL AS data_start,
+  NULL AS status_start_date,
+  NULL AS status_end_date,
+  SUM(u1_people),
+  SUM(u1_brigades),
+  SUM(u2_people),
+  SUM(u2_brigades),
+  SUM(u3_people),
+  SUM(u3_brigades),
+  SUM(total_people),
+  SUM(total_brigades),
+  'TOTAL' AS row_type
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       )
+      )
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+```
+
+---
+
+### 🎨 **Опціонально: стилізуйте рядок Total**
+
+1. Увімкніть властивість **Static ID** у вашому Interactive Report, наприклад:  
+   ```
+   Static ID = pivotReportWithTotal
+   ```
+
+2. Додайте CSS (через сторінку → Inline CSS або шаблон):
+```css
+#pivotReportWithTotal .t-Report-report tr td:last-child {
+  font-weight: bold;
+}
+#pivotReportWithTotal .t-Report-report tr td[rowspan] {
+  background-color: #f6f6f6;
+}
+#pivotReportWithTotal .t-Report-report tr td,
+#pivotReportWithTotal .t-Report-report tr th {
+  white-space: nowrap;
+}
+#pivotReportWithTotal .t-Report-report tr td[row_type="TOTAL"] {
+  background-color: #e0f3e0;
+  font-weight: bold;
+}
+```
+
+3. Або додайте динамічний **row CSS class**:
+   - У властивостях Interactive Report → Attributes → Row CSS Classes →  
+     ```
+     CASE WHEN row_type = 'TOTAL' THEN 'highlight-total' END
+     ```
+   - І CSS:
+     ```css
+     .highlight-total td {
+       background-color: #f9f9b7 !important;
+       font-weight: bold;
+     }
+     ```
+
+---
+
+🔁 Цей підхід працює відразу для завантаження в **Excel**, і всі фільтри працюватимуть належно.
+
+Хочете також допомогу по кнопці "Завантажити Excel" або генерації автоматичного файлу через WebSocket / PL/SQL — теж підкажу. Готові продовжити?

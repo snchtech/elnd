@@ -1,0 +1,151 @@
+Чудово! Давай тоді повністю доповнимо логіку, щоб було:
+
+- кнопка "Завантажити Excel"
+- у файл додавалась інформація про вибраний період (`PXX_DATE_START` і `PXX_DATE_END`).
+
+Розпишу покроково дуже чітко:
+
+---
+
+## 🔹 1. Додай кнопку "Завантажити Excel"
+
+**Створити кнопку в APEX:**
+- **Button Name:** `BTN_DOWNLOAD_EXCEL`
+- **Label:** `Завантажити Excel`
+- **Position:** На панелі з фільтрами або над звітом.
+
+---
+
+## 🔹 2. Створи Dynamic Action на кнопку
+
+- **Event:** `Click`
+- **Selection Type:** `Button` → `BTN_DOWNLOAD_EXCEL`
+- **True Action:** `Submit Page`
+- - **Request:** `DOWNLOAD_EXCEL`
+- (тобто, в поле "Request" прямо так і пиши: `DOWNLOAD_EXCEL`)
+
+---
+
+## 🔹 3. Створи процес для генерації Excel
+
+**Process:**
+- **Name:** `PRC_GENERATE_EXCEL`
+- **Type:** `PL/SQL Code`
+- **Server-Side Condition:**
+  - When Request = `DOWNLOAD_EXCEL`
+
+**Код процесу:** 👇
+
+```plsql
+DECLARE
+    l_period_title VARCHAR2(400);
+    l_mime_type    VARCHAR2(100) := 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    l_file_name    VARCHAR2(100);
+BEGIN
+    -- Формуємо період
+    l_period_title := 'Період: ';
+    
+    IF :PXX_DATE_START IS NOT NULL THEN
+        l_period_title := l_period_title || TO_CHAR(:PXX_DATE_START, 'DD.MM.YYYY');
+    ELSE
+        l_period_title := l_period_title || 'без початку';
+    END IF;
+    
+    l_period_title := l_period_title || ' - ';
+    
+    IF :PXX_DATE_END IS NOT NULL THEN
+        l_period_title := l_period_title || TO_CHAR(:PXX_DATE_END, 'DD.MM.YYYY');
+    ELSE
+        l_period_title := l_period_title || 'поточна дата';
+    END IF;
+
+    l_file_name := 'Звіт_по_підрозділах_' || TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') || '.xls';
+
+    -- Встановлюємо заголовки для відповіді
+    owa_util.mime_header(l_mime_type, FALSE);
+    htp.p('Content-Disposition: attachment; filename="' || l_file_name || '"');
+    owa_util.http_header_close;
+
+    -- Пишемо заголовок періоду
+    htp.p('<table border="1">');
+    htp.p('<tr><th colspan="12">' || l_period_title || '</th></tr>');
+
+    -- Пишемо заголовки таблиці
+    htp.p('<tr>
+        <th>Group Name</th>
+        <th>Org</th>
+        <th>Unit</th>
+        <th>Department</th>
+        <th>Start Date</th>
+        <th>U1 People</th>
+        <th>U1 Brigades</th>
+        <th>U2 People</th>
+        <th>U2 Brigades</th>
+        <th>U3 People</th>
+        <th>U3 Brigades</th>
+        <th>Total People</th>
+        <th>Total Brigades</th>
+    </tr>');
+
+    -- Вибірка даних
+    FOR rec IN (
+        SELECT *
+        FROM V_OUTFIT_PIVOT_BASE
+        WHERE 1=1
+          AND (:PXX_UNIT IS NULL OR unit = TO_NUMBER(:PXX_UNIT))
+          AND (:PXX_DEPARTMENTS IS NULL 
+               OR department IN (
+                   SELECT column_value FROM TABLE(split_string(:PXX_DEPARTMENTS, ':'))
+               ))
+          AND (
+            (:PXX_DATE_START IS NULL OR status_start_date >= :PXX_DATE_START)
+            AND (:PXX_DATE_END IS NULL OR NVL(status_end_date, SYSDATE + 1) <= :PXX_DATE_END)
+          )
+    ) LOOP
+        htp.p('<tr>');
+        htp.p('<td>' || rec.group_name || '</td>');
+        htp.p('<td>' || rec.org || '</td>');
+        htp.p('<td>' || rec.unit || '</td>');
+        htp.p('<td>' || rec.department || '</td>');
+        htp.p('<td>' || TO_CHAR(rec.data_start, 'DD.MM.YYYY') || '</td>');
+        htp.p('<td>' || rec.u1_people || '</td>');
+        htp.p('<td>' || rec.u1_brigades || '</td>');
+        htp.p('<td>' || rec.u2_people || '</td>');
+        htp.p('<td>' || rec.u2_brigades || '</td>');
+        htp.p('<td>' || rec.u3_people || '</td>');
+        htp.p('<td>' || rec.u3_brigades || '</td>');
+        htp.p('<td>' || rec.total_people || '</td>');
+        htp.p('<td>' || rec.total_brigades || '</td>');
+        htp.p('</tr>');
+    END LOOP;
+
+    htp.p('</table>');
+
+    apex_application.stop_apex_engine; -- зупиняємо, щоб браузер правильно отримав файл
+END;
+```
+
+---
+
+## 🔥 Як це працюватиме
+
+1. Користувач обирає дату початку, кінця, unit, department.
+2. Тисне кнопку "Завантажити Excel".
+3. Формується і одразу скачується Excel-файл:
+   - Перший рядок — текст періоду.
+   - Другий рядок — заголовки колонок.
+   - Далі — дані за фільтрами.
+
+---
+
+## ❓ Відповіді на типові питання:
+
+- **Чи буде працювати в APEX 22?** – Так, цей спосіб базовий і сумісний.
+- **Чи можна використати APEX_DATA_EXPORT?** – Можна, якщо хочеш більш складне форматування. Але для простого HTML->Excel цей варіант оптимальніший за швидкістю.
+- **Формат файлу `.xls` чи `.xlsx`?** – Це буде `.xls` (просто HTML таблиця), але Excel відкриє без помилок.
+
+---
+
+Хочеш, ще покажу варіант через `APEX_DATA_EXPORT` для справжнього `.xlsx` файлу з кольорами, шрифтами і автопідбором ширини колонок? 🔥  
+(можемо зробити другу версію – трохи складніше, але красивіше)  
+Хочеш? 🚀

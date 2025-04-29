@@ -1,0 +1,106 @@
+Ось покрокова інструкція, як створити функціональну сторінку в Oracle APEX із:
+
+- фільтрами: `status_start_date`, `status_end_date`, `unit`, `department`
+- інтерактивним звітом (IR) на основі `V_OUTFIT_PIVOT_BASE`
+- підсумковим звітом з сумами колонок
+
+---
+
+## 🔧 1. Створення елементів для фільтрації
+
+На сторінці, де буде розташований звіт, додай наступні елементи (напр., в регіон "Фільтри"):
+
+| Ім'я Item | Тип | Призначення |
+|----------|-----|-------------|
+| `PXX_DATE_START` | Date Picker | `status_start_date` від |
+| `PXX_DATE_END`   | Date Picker | `status_end_date` до |
+| `PXX_UNIT`       | Select List | unit (0, 1, 2) |
+| `PXX_DEPARTMENTS` | Checkbox Group | список підрозділів |
+
+> 🔁 Замість `PXX_` використай актуальний номер сторінки, напр. `P8_DATE_START`.
+
+---
+
+## 📄 2. SQL-запит для IR-звіту
+
+Використай `V_OUTFIT_PIVOT_BASE` із фільтрами:
+
+```sql
+SELECT *
+FROM V_OUTFIT_PIVOT_BASE
+WHERE 1 = 1
+  AND (:PXX_UNIT IS NULL OR unit = TO_NUMBER(:PXX_UNIT))
+  AND (:PXX_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:PXX_DEPARTMENTS, ':'))
+       ))
+  AND (
+    (:PXX_DATE_START IS NULL OR status_start_date >= :PXX_DATE_START)
+    AND (:PXX_DATE_END IS NULL OR NVL(status_end_date, SYSDATE + 1) <= :PXX_DATE_END)
+  )
+```
+
+📌 *`NVL(status_end_date, SYSDATE + 1)` дозволяє обробити `NULL` як "триває досі".*
+
+---
+
+## 🔄 3. Додай Dynamic Action для реакції на фільтри
+
+Створи **один DA** (Dynamic Action):
+
+- **Name:** `DA_Refresh_Report`
+- **Event:** `Change`
+- **Selection Type:** `Region`
+- **Region:** вкажи весь блок фільтрів (або конкретно кожен item)
+- **True Action:**
+  - Action: `Refresh`
+  - Affected Element: твій звіт (IR)
+
+> 🔁 Можна додати кілька подій для кожного item, або одну на весь блок.
+
+---
+
+## 📊 4. Сумарний звіт
+
+Нижче основного звіту створи ще один звіт (`Classic Report` або `IR`) з таким запитом:
+
+```sql
+SELECT
+  SUM(u1_people) AS sum_u1_people,
+  SUM(u1_brigades) AS sum_u1_brigades,
+  SUM(u2_people) AS sum_u2_people,
+  SUM(u2_brigades) AS sum_u2_brigades,
+  SUM(u3_people) AS sum_u3_people,
+  SUM(u3_brigades) AS sum_u3_brigades,
+  SUM(total_people) AS sum_total_people,
+  SUM(total_brigades) AS sum_total_brigades
+FROM V_OUTFIT_PIVOT_BASE
+WHERE 1 = 1
+  AND (:PXX_UNIT IS NULL OR unit = TO_NUMBER(:PXX_UNIT))
+  AND (:PXX_DEPARTMENTS IS NULL 
+       OR department IN (
+           SELECT column_value FROM TABLE(split_string(:PXX_DEPARTMENTS, ':'))
+       ))
+  AND (
+    (:PXX_DATE_START IS NULL OR status_start_date >= :PXX_DATE_START)
+    AND (:PXX_DATE_END IS NULL OR NVL(status_end_date, SYSDATE + 1) <= :PXX_DATE_END)
+  )
+```
+
+### 📎 Порада
+- Встанови клас `t-Region--noPadding` для другого звіту — виглядатиме акуратніше.
+- Для IR можна додати "Download" кнопку → користувач зможе експортувати дані в Excel.
+
+---
+
+## 🧪 Перевірка
+
+1. Зайди на сторінку → побач фільтри та звіт.
+2. Зміни параметри → DA оновлює обидва звіти.
+3. Перевір export у IR → дані актуальні.
+
+---
+
+Хочеш, щоб при відкритті сторінки всі фільтри були встановлені автоматично (наприклад, `unit=0` і всі `departments`)? — підкажу окремо.
+
+Бажаєш додати "Очистити фільтри" або "Пошук" кнопки?

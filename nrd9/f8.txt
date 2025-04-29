@@ -1,0 +1,123 @@
+Чудово пояснили! Давайте розкладемо по пунктах, як вирішити ваш запит.
+
+---
+
+## 1. **Як отримати дані в Excel у APEX**
+
+У вас зараз є **Interactive Report** на основі `V_OUTFIT_PIVOT_BASE`. Щоб завантажити дані в Excel:
+
+✅ В APEX в IR вже є вбудована опція **"Download → Excel"**.
+
+Просто:
+- Переконайтесь, що у властивостях Interactive Report увімкнено:
+  - ✅ **Download** (Allow Download = Yes)
+  - ✅ **Excel** (Format = Excel)
+
+Тоді користувач зможе натиснути "Actions → Download → Excel" і завантажити саме ту вибірку, яка згенерована за фільтрами (`:P_MODAL_DEPARTMENTS`, `:P_MODAL_TIMEMODE` тощо).
+
+**ℹ️ Важливо:**  
+Excel-файл буде містити рівно ті дані, які видно в Interactive Report. Нічого окремо для цього писати не треба.
+
+---
+
+## 2. **Як по одному кліку отримати і дані, і сумарну інформацію**
+
+Ваш варіант **розділення** звітів (дані + окремо підсумки) правильний з точки зору оптимізації продуктивності APEX.
+
+Щоб по одному кліку отримати **в один файл** і дані, і суму, можна піти двома шляхами:
+
+---
+
+### 🔵 Варіант 1. Створити **SQL-запит UNION ALL** з додаванням загальної суми
+
+**Приклад:**
+
+```sql
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  u1_people,
+  u1_brigades,
+  u2_people,
+  u2_brigades,
+  u3_people,
+  u3_brigades,
+  total_people,
+  total_brigades,
+  'DATA' AS row_type
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_DEPARTMENTS IS NULL OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       ))
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+UNION ALL
+SELECT
+  'TOTAL' AS group_name,
+  NULL AS org,
+  NULL AS unit,
+  NULL AS department,
+  NULL AS data_start,
+  NULL AS status_start_date,
+  NULL AS status_end_date,
+  SUM(u1_people),
+  SUM(u1_brigades),
+  SUM(u2_people),
+  SUM(u2_brigades),
+  SUM(u3_people),
+  SUM(u3_brigades),
+  SUM(total_people),
+  SUM(total_brigades),
+  'TOTAL' AS row_type
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (:P_MODAL_DEPARTMENTS IS NULL OR department IN (
+           SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+       ))
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+```
+
+🧩 **Результат:**  
+- Звичайні рядки (DATA)
+- В кінці один рядок із загальною сумою (TOTAL)
+- Можна додатково зробити стиль форматування через CSS в IR (`row_type` = 'TOTAL' виділити жирним/кольором).
+
+---
+### 🔵 Варіант 2. Створити **два окремих Interactive Report на одній сторінці**
+
+- Перший IR — ваш основний список
+- Другий IR — підсумок (агрегатна вибірка `SUM()`)
+- Обидва звіти налаштувати на тих же параметрах (`:P_MODAL_DEPARTMENTS`, `:P_MODAL_TIMEMODE`)
+
+Тоді при експорті — користувач буде окремо натискати Download для кожного IR.
+
+✅ Простіше з точки зору продуктивності (особливо на великих даних)  
+✅ Легко керувати окремо виглядом
+
+---
+
+# 📋 Висновок:
+| Варіант        | Переваги                            | Недоліки                       |
+|:---------------|:-------------------------------------|:-------------------------------|
+| UNION ALL      | Один файл із даними та сумою         | Складніший SQL, можливо повільніше |
+| 2 окремих IR   | Легкий контроль і гнучкість          | Потрібно двічі натискати Download |
+
+---
+
+Хочете — я одразу допоможу вам створити готовий запит з **`UNION ALL`** і правильно оформити його для Interactive Report? 🚀  
+**Чи хочете варіант з двома окремими звітами на сторінці?**  
+
+Як обираєте? 🔥

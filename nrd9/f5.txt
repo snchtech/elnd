@@ -1,0 +1,79 @@
+Чудово, давай сплануємо акуратно.
+
+Ось як ми зробимо це для Oracle APEX:
+
+---
+
+### ✅ **1. Створення кнопок в APEX**
+
+Перейди на сторінку, де знаходиться твій регіон зі звітом і `P_DEPARTMENTS`.
+
+Створи **три нових кнопки**:
+| Назва кнопки | Button Name | Button Label       | Іконка (Icon Class) |
+|:-------------|:------------|:-------------------|:--------------------|
+| `BTN_UNCHECK_ALL` | Зняти всі | `fa-minus-square` |
+| `BTN_CHECK_ALL`   | Відмітити всі | `fa-check-square` |
+| `BTN_REFRESH`     | Оновити | `fa-sync` |
+
+**Налаштування для кожної кнопки**:
+- **Button Template**: стандартний ("Text with Icon")
+- **Icon Position**: Left
+- **Hot/Cold State**: за бажанням
+- **CSS Classes (optional)**: `t-Button--small t-Button--noLabel` якщо хочеш компактніше.
+
+---
+
+### ✅ **2. JavaScript код для функціональності**
+
+Перейди в `Page Attributes → Execute when Page Loads` і додай такий скрипт:
+
+```javascript
+// Функція: Зняти всі відмітки
+function uncheckAllDepartments() {
+  apex.item('P_DEPARTMENTS').setValue([]);
+}
+
+// Функція: Відмітити всі
+function checkAllDepartments() {
+  let checkboxes = document.querySelectorAll("#P_DEPARTMENTS input[type='checkbox']");
+  let allValues = [];
+
+  checkboxes.forEach(function(checkbox) {
+    if (checkbox.value) {
+      allValues.push(checkbox.value);
+    }
+  });
+
+  apex.item('P_DEPARTMENTS').setValue(allValues);
+}
+
+// Функція: Оновити сторінку
+function refreshPage() {
+  apex.submit('REFRESH');
+}
+```
+
+---
+
+### ✅ **3. Прив'язка кнопок до функцій**
+
+Для кожної кнопки в APEX:
+
+| Кнопка            | Dynamic Action (DA)                                      |
+|:------------------|:----------------------------------------------------------|
+| `BTN_UNCHECK_ALL`  | **When Button Clicked** → Run JavaScript Code: `uncheckAllDepartments();` |
+| `BTN_CHECK_ALL`    | **When Button Clicked** → Run JavaScript Code: `checkAllDepartments();`    |
+| `BTN_REFRESH`      | **When Button Clicked** → Run JavaScript Code: `refreshPage();`            |
+
+---
+
+### ✅ **Результат**
+
+- Натискаєш "Зняти всі" → усі чекбокси пусті
+- Натискаєш "Відмітити всі" → усі чекбокси активні
+- Натискаєш "Оновити" → сторінка перезавантажується (`apex.submit('REFRESH')`)
+
+---
+
+Хочеш, я ще покажу як трохи вдосконалити через один `Dynamic Action` для всіх трьох кнопок замість трьох окремих? 🚀
+(Тоді буде ще чистіше)

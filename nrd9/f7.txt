@@ -1,0 +1,82 @@
+Ось SQL-запит, який генерує дані, еквівалентні функції `get_unit_matrix_html`, у вигляді, придатному для APEX Interactive Report або завантаження в Excel:
+
+```sql
+WITH base_filtered AS (
+  SELECT
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    unit,
+    department,
+    team_count,
+    status_start_date,
+    status_end_date
+  FROM your_view
+  WHERE outfit_open = 6
+    AND (:P_DEPARTMENTS IS NULL OR department IN (
+      SELECT column_value FROM TABLE(split_string(:P_DEPARTMENTS, ':'))
+    ))
+),
+time_windows AS (
+  SELECT 'NOW' AS period_key, SYSDATE AS v_start, SYSDATE AS v_end FROM DUAL
+  UNION ALL
+  SELECT 'DAY', TRUNC(SYSDATE), SYSDATE FROM DUAL
+  UNION ALL
+  SELECT 'SHIFT', :P_SHIFT_START, SYSDATE FROM DUAL
+),
+expanded AS (
+  SELECT
+    tw.period_key,
+    b.org,
+    b.unit,
+    b.department,
+    b.team_count
+  FROM base_filtered b
+  CROSS JOIN time_windows tw
+  WHERE
+    b.status_start_date < tw.v_end
+    AND (b.status_end_date IS NULL OR tw.v_start < b.status_end_date)
+),
+aggregated AS (
+  SELECT
+    period_key,
+    CASE 
+      WHEN org = 0 THEN 'Бригад фірми'
+      WHEN org = 1 THEN 'Бригад підрядників'
+    END AS type_label,
+    unit,
+    COUNT(*) AS brigades,
+    SUM(team_count) AS people
+  FROM expanded
+  GROUP BY period_key, org, unit
+),
+pivoted AS (
+  SELECT
+    period_key,
+    type_label,
+    SUM(CASE WHEN unit = 0 THEN brigades END) AS unit1,
+    SUM(CASE WHEN unit = 1 THEN brigades END) AS unit2,
+    SUM(CASE WHEN unit = 2 THEN brigades END) AS unit3,
+    SUM(brigades) AS total
+  FROM aggregated
+  GROUP BY period_key, type_label
+  UNION ALL
+  SELECT
+    period_key,
+    CASE WHEN type_label = 'Бригад фірми' THEN 'Людей фірми' ELSE 'Людей підрядників' END,
+    SUM(CASE WHEN unit = 0 THEN people END),
+    SUM(CASE WHEN unit = 1 THEN people END),
+    SUM(CASE WHEN unit = 2 THEN people END),
+    SUM(people)
+  FROM aggregated
+  GROUP BY period_key, type_label
+)
+SELECT * FROM pivoted
+ORDER BY period_key, type_label;
+```
+
+📌 **Рекомендації щодо використання**:
+- В APEX можна створити окремий Interactive Report з цим SQL.
+- Для експорту в Excel — просто використовуйте стандартну кнопку завантаження.
+- Параметри `:P_DEPARTMENTS` і `:P_SHIFT_START` передаються автоматично, якщо створені відповідні APEX items.
+
+Хочеш, щоб я допоміг налаштувати цей звіт у APEX?

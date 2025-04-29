@@ -1,0 +1,80 @@
+Чудово, давай використаємо **`IntersectionObserver`** — сучасний, ефективний і менш ресурсоємний спосіб **відстеження появи або зникнення елемента** з області перегляду (viewport).
+
+---
+
+### ✅ Що ми зробимо:
+
+- будемо слідкувати, коли шапка `thead` виходить з області перегляду (`.t-Dialog-body`).
+- коли вона "зникає" — додаємо `position: fixed` (приклеюємо шапку).
+- коли знову з'являється — прибираємо фіксацію.
+
+---
+
+### 🛠 Код (підключи у "Execute when Page Loads" модальної сторінки):
+
+```javascript
+document.addEventListener('DOMContentLoaded', function () {
+  const dialogBody = document.querySelector('.t-Dialog-body');
+  const thead = document.querySelector('.t-Report--interactiveReport thead');
+
+  if (!dialogBody || !thead) return;
+
+  const cloneThead = thead.cloneNode(true);
+  cloneThead.classList.add('fixed-header');
+  cloneThead.style.position = 'fixed';
+  cloneThead.style.top = '0';
+  cloneThead.style.left = '0';
+  cloneThead.style.right = '0';
+  cloneThead.style.zIndex = '1000';
+  cloneThead.style.display = 'none';
+  cloneThead.style.backgroundColor = '#fff';
+
+  // Вставляємо копію перед original thead
+  dialogBody.appendChild(cloneThead);
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          cloneThead.style.display = '';
+        } else {
+          cloneThead.style.display = 'none';
+        }
+      });
+    },
+    {
+      root: dialogBody,
+      threshold: 1.0,
+    }
+  );
+
+  observer.observe(thead);
+});
+```
+
+---
+
+### 🔍 Як це працює:
+| Компонент | Опис |
+|----------|------|
+| `IntersectionObserver` | Слідкує за тим, чи **видимий** `thead` в межах `.t-Dialog-body` |
+| `cloneThead` | Створюємо **фіксовану копію** шапки, яка з'являється лише при скролі |
+| `display: none / ''` | Приховуємо/показуємо копію в залежності від положення `thead` |
+
+---
+
+### ✨ Переваги:
+- **Без flicker** при скролі.
+- **Плавна робота**, навіть при динамічній висоті IR.
+- **Немає прямого спостереження за scrollTop** — працює навіть якщо в APEX щось динамічно перебудовується.
+
+---
+
+### 💡 Додатково:
+- Якщо IR має sticky header стилі — переконайся, що вони не заважають (можна відключити через `CSS`).
+- Для стилів `.fixed-header` можна додати ще `box-shadow` або `border-bottom` для краси.
+
+---
+
+Хочеш — можу додати ще CSS-класи, щоб це виглядало естетично 👌  
+Чи бажаєш адаптувати це під APEX theme 42 стилі?

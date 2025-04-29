@@ -1,0 +1,105 @@
+Так, ти можеш отримати список `department` через розділювач (`:` або `,`) для кожного `org_txt` (тобто для `org != 0`), використовуючи `LISTAGG()` у підзапиті. Це дозволить уникнути дублювання `org_txt` у результаті й об’єднати пов’язані департаменти в одному рядку.
+
+### 🔧 Як переписати `group_name`:
+- Для `org = 0`: залишаємо `department` як є.
+- Для `org != 0`: отримуємо `org_txt || ' (' || департаменти через `:` || ')'`
+
+---
+
+### ✅ Оновлена `view` з `LISTAGG`:
+
+```sql
+CREATE OR REPLACE FORCE EDITIONABLE VIEW V_OUTFIT_PIVOT_BASE AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+-- зведення департаментів по org_txt (тільки для org != 0)
+org_departments AS (
+  SELECT
+    org,
+    org_txt,
+    LISTAGG(DISTINCT department, ':') WITHIN GROUP (ORDER BY department) AS dep_list
+  FROM base_data
+  WHERE org != 0
+  GROUP BY org, org_txt
+),
+agg_data AS (
+  SELECT
+    CASE 
+      WHEN b.org = 0 THEN b.department
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END AS group_name,
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date,
+    COUNT(b.id_outfit) AS brigades,
+    SUM(b.team_count) AS people
+  FROM base_data b
+  LEFT JOIN org_departments d 
+    ON b.org = d.org AND b.org_txt = d.org_txt
+  GROUP BY
+    CASE 
+      WHEN b.org = 0 THEN b.department
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END,
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date
+)
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+### 🟨 Результат:
+- `group_name` для `org = 0` = `department`
+- `group_name` для `org = 1` = `org_txt (1523:1540)` — де `1523`, `1540` це `department`'и
+
+---
+
+### ⚙ Продуктивність:
+- `LISTAGG` по `DISTINCT department` з `GROUP BY org, org_txt` — ефективний на індексованих колонках.
+- Якщо `base_data` обмежується лише `outfit_open = 6` — додаткове навантаження буде мінімальним.
+
+🔎 Хочеш додатково кешувати результат `org_departments` для ще швидшої роботи або оптимізувати окремо для Oracle 10g через `CONNECT BY` — також можемо розглянути.

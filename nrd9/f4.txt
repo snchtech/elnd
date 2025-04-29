@@ -1,0 +1,64 @@
+Чудово! Щоб динамічно оновлювати **заголовок модального вікна (`apex.navigation.dialog`)** залежно від значення `mode`, потрібно **змінити JavaScript-функцію `openUnitModal`**, щоб:
+
+1. сформувати заголовок **перед відкриттям діалогу**,  
+2. **встановити його в опції `title`**.
+
+---
+
+### ✅ **Оновлена версія `openUnitModal(mode, unit)`**:
+
+```javascript
+function openUnitModal(mode, unit) {
+  // Обчислюємо заголовок модального вікна
+  let title = "Звіт по підрозділам";
+
+  if (mode === "NOW") {
+    title += " / на зараз";
+  } else if (mode === "DAY") {
+    title += " / з початку доби";
+  } else if (mode === "SHIFT") {
+    const now = new Date();
+    const hour = now.getHours();
+    let shiftStart = "22:00";
+    let shiftEnd = "06:00";
+
+    if (hour >= 6 && hour < 14) {
+      shiftStart = "06:00";
+      shiftEnd = "14:00";
+    } else if (hour >= 14 && hour < 22) {
+      shiftStart = "14:00";
+      shiftEnd = "22:00";
+    }
+
+    title += ` / за зміну (${shiftStart} - ${shiftEnd})`;
+  }
+
+  // Надсилаємо параметри на сервер
+  apex.server.process("OPEN_MODAL", {
+    x01: mode,
+    x02: unit,
+    x03: $v("P1_DEPARTMENTS")
+  }, {
+    success: function () {
+      apex.navigation.dialog.open({
+        pageId: "P_MODAL_UNIT_STATS",
+        dialog: "modal",
+        modal: true,
+        title: title,
+        reloadOnClose: true
+      });
+    }
+  });
+}
+```
+
+---
+
+### ✅ Що ще потрібно:
+
+- Ніяких змін на сервері або в `DA` робити не потрібно — якщо ви використовуєте `apex.navigation.dialog.open`, це повністю достатньо.
+- Усе працює **без перезавантаження сторінки**, заголовок оновлюється перед відкриттям.
+
+---
+
+Хочеш ще й у тілі сторінки (наприклад, у `<h3>` регіоні) показати той самий заголовок?

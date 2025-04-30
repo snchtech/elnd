@@ -1,0 +1,71 @@
+Дякую, тепер зрозуміло. Помилка `ORA-00932: inconsistent datatypes: expected NUMBER got CHAR` **не стосується `b.unit`**, а **саме `CASE WHEN ...` у `GROUP BY`**, де:
+
+```sql
+CASE 
+  WHEN b.org = 0 THEN TO_CHAR(b.department)
+  ELSE d.org_txt || ' (' || d.dep_list || ')' 
+END
+```
+
+Тут Oracle очікує, що `GROUP BY` вирази будуть **уніфіковані за типом** — а саме:
+
+- `TO_CHAR(b.department)` — `VARCHAR2`
+- `d.org_txt || ' (' || d.dep_list || ')'` — теж `VARCHAR2`
+
+Але **Oracle іноді очікує NUMBER**, якщо в інших місцях `b.department` використовувався як `NUMBER`, або в `SELECT`-частині `group_name` вже був `NUMBER`.
+
+---
+
+## ✅ Рішення
+
+Треба **віддати Oracleу чітке розуміння**, що `group_name` **є строковим** типом. Тому потрібно **оголосити `group_name` окремо** у `SELECT`, і **у `GROUP BY` використовувати псевдонім**, або продублювати той самий вираз.
+
+**Найбезпечніше — прибрати `CASE` із `GROUP BY` і замінити його копією виразу, як у `SELECT`.**
+
+---
+
+### ✅ Оновлена частина `agg_data`:
+
+```sql
+agg_data AS (
+  SELECT
+    CASE 
+      WHEN b.org = 0 THEN TO_CHAR(b.department)
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END AS group_name,
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date,
+    COUNT(b.id_outfit) AS brigades,
+    SUM(b.team_count) AS people
+  FROM base_data b
+  LEFT JOIN org_departments d 
+    ON b.org = d.org AND b.org_txt = d.org_txt
+  GROUP BY
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date,
+    CASE 
+      WHEN b.org = 0 THEN TO_CHAR(b.department)
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END
+)
+```
+
+---
+
+Це **усуне помилку типу**, бо Oracle отримає повністю однаковий `CASE`-вираз у `SELECT` і `GROUP BY`, а `TO_CHAR()` явно визначить тип.
+
+---
+
+🔧 **Додатково**: якщо `department` завжди `NUMBER`, але ти хочеш його об'єднати з `VARCHAR2` у `group_name`, то в `CASE WHEN` **обидві гілки повинні бути `VARCHAR2`**, інакше Oracle "бачить" `group_name` як `NUMBER`.
+
+---
+
+Потрібно перегенерувати повний варіант `CREATE OR REPLACE VIEW` з цією правкою?

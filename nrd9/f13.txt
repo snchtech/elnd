@@ -1,0 +1,142 @@
+Чудово, що ти виклав повний код — це дозволяє точно виявити джерела проблем. Розглянемо:
+
+---
+
+## 🔴 **1. Помилка `ORA-30482: DISTINCT option not allowed for this function`**
+
+Це обмеження Oracle: ти **не можеш використовувати `DISTINCT` усередині `LISTAGG()`**, **якщо це не у підзапиті**. Наприклад, так:
+
+```sql
+SELECT
+  org,
+  org_txt,
+  (
+    SELECT LISTAGG(department, ':') WITHIN GROUP (ORDER BY department)
+    FROM (
+      SELECT DISTINCT department
+      FROM base_data d
+      WHERE d.org = b.org AND d.org_txt = b.org_txt
+    )
+  ) AS dep_list
+FROM base_data b
+WHERE org != 0
+GROUP BY org, org_txt
+```
+
+Отже, потрібно переписати `org_departments` саме в такому стилі (через підзапит з `DISTINCT`).
+
+---
+
+## 🟠 **2. Помилка `ORA-00932: inconsistent datatypes: expected NUMBER got CHAR`**
+
+Ця помилка, найімовірніше, виникає через те, що Oracle намагається порівняти `org` (NUMBER) з чимось, що стало `CHAR`, можливо, після `LEFT JOIN`, де `d.org` стало NULL і десь тип `VARCHAR`.
+
+Щоб уникнути:
+- **завжди роби CAST у виразах, які змішують типи**, або **переконайся, що типи збігаються в JOIN і CASE**.
+- `dep_list` — це `VARCHAR2`, і коли ти пишеш `group_name := CASE ... THEN department ELSE org_txt || ' (' || dep_list || ')'`, воно може сприйматись неоднозначно. Зроби `TO_CHAR(department)` в першій гілці або обгорни обидва `TO_CHAR(...)`.
+
+---
+
+## ✅ **Виправлена версія VIEW:**
+
+```sql
+CREATE OR REPLACE FORCE EDITIONABLE VIEW V_OUTFIT_PIVOT_BASE AS
+WITH base_data AS (
+  SELECT 
+    id_outfit,
+    org,
+    org_txt,
+    department,
+    unit,
+    team_count,
+    data_start,
+    status_start_date,
+    status_end_date
+  FROM TEST_OUTFIT_DATA
+  WHERE outfit_open = 6
+),
+org_departments AS (
+  SELECT
+    b.org,
+    b.org_txt,
+    (
+      SELECT LISTAGG(d.department, ':') WITHIN GROUP (ORDER BY d.department)
+      FROM (
+        SELECT DISTINCT department
+        FROM base_data d
+        WHERE d.org = b.org AND d.org_txt = b.org_txt
+      ) d
+    ) AS dep_list
+  FROM base_data b
+  WHERE b.org != 0
+  GROUP BY b.org, b.org_txt
+),
+agg_data AS (
+  SELECT
+    CASE 
+      WHEN b.org = 0 THEN TO_CHAR(b.department)
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END AS group_name,
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date,
+    COUNT(b.id_outfit) AS brigades,
+    SUM(b.team_count) AS people
+  FROM base_data b
+  LEFT JOIN org_departments d 
+    ON b.org = d.org AND b.org_txt = d.org_txt
+  GROUP BY
+    CASE 
+      WHEN b.org = 0 THEN TO_CHAR(b.department)
+      ELSE d.org_txt || ' (' || d.dep_list || ')' 
+    END,
+    b.org,
+    b.unit,
+    b.department,
+    b.data_start,
+    b.status_start_date,
+    b.status_end_date
+)
+SELECT
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  group_name,
+  org,
+  unit,
+  department,
+  data_start,
+  status_start_date,
+  status_end_date;
+```
+
+---
+
+## 🔍 Пояснення ключових моментів:
+
+| Блок            | Зміна                                         |
+|------------------|-----------------------------------------------|
+| `LISTAGG`        | Використано вкладений підзапит із `DISTINCT` |
+| `group_name`     | Обидві гілки `CASE` мають тип `VARCHAR2`     |
+| `JOIN`           | Вирівняно `org`, `org_txt` по типах          |
+
+---
+
+Хочеш — можу згенерувати для цього view автоматичний тест-запит, який перевірить агрегати по відомих параметрах. Хочеш?

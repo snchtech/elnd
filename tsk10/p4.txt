@@ -1,0 +1,96 @@
+Чудово, давай зберемо повноцінний `VIEW`, який відповідає всім твоїм вимогам.
+
+---
+
+# ✅ Основна логіка:
+
+- **Тип шаблону** (`TYPE_ID`) = 0 → беремо `TASK_CONTENT`
+- **Тип шаблону** = 1 → будуємо `LISTAGG` всіх `SUBTASK_CONTENT`
+- **PERIOD_EXECUTE**:
+  - Якщо `PERIOD_MODE = 1` → `PERIOD_INTERVAL || ' ' || PERIOD_TIME`
+  - Інакше якщо `HOURLY_TIMES IS NOT NULL` → `HOURLY_TIMES`
+  - Інакше → `NULL`
+
+---
+
+# 📋 Приклад VIEW
+
+```sql
+CREATE OR REPLACE VIEW V_TASK_TEMPLATE_REPORT AS
+SELECT
+  t.ID,
+  
+  -- Піктограма з лінком
+  '<a href="f?p=APP_ID:PAGE_ID:&SESSION.::NO::P5_TASK_ID:' || t.ID || 
+  '" title="Переглянути" class="fa fa-eye" aria-hidden="true"></a>' AS ICON_LINK,
+
+  -- Блок
+  t.PAGE_LIST_ID AS BLOCK,
+
+  -- Завдання або конкатенація підзавдань
+  CASE 
+    WHEN t.TYPE_ID = 0 THEN t.TASK_CONTENT
+    ELSE (
+      SELECT LISTAGG(s.SUBTASK_CONTENT, CHR(10)) WITHIN GROUP (ORDER BY s.SUBTASK_ORDER)
+      FROM TASK_TEMPLATE_SUBTASKS s
+      WHERE s.TEMPLATE_ID = t.ID
+    )
+  END AS TASK_CONTENT_EXPANDED,
+
+  -- Хто створив
+  t.CREATOR_ID,
+
+  -- Статус
+  t.STATUS_ID,
+
+  -- Підрозділ
+  t.UNIT_ID,
+
+  -- Period_mode
+  t.PERIOD_MODE,
+
+  -- Логіка формування часу виконання
+  CASE 
+    WHEN t.PERIOD_MODE = 1 AND t.PERIOD_INTERVAL IS NOT NULL THEN 
+      t.PERIOD_INTERVAL || ' ' || t.PERIOD_TIME
+    WHEN t.HOURLY_TIMES IS NOT NULL THEN 
+      t.HOURLY_TIMES
+    ELSE NULL
+  END AS PERIOD_EXECUTE,
+
+  -- Дата наступного запуску
+  t.NEXT_RUN_DATE,
+
+  -- Дата завершення
+  t.DATE_END
+
+FROM TASK_TEMPLATES t;
+```
+
+---
+
+# 🔍 Пояснення ключових моментів:
+
+| Колонка | Що відображає |
+|---------|---------------|
+| `ICON_LINK` | HTML-лінк з іконкою (eye) на сторінку перегляду |
+| `TASK_CONTENT_EXPANDED` | або `TASK_CONTENT`, або всі `SUBTASK_CONTENT` |
+| `PERIOD_EXECUTE` | залежно від режиму — або інтервал + час, або HOURLY_TIMES |
+| `LISTAGG(..., CHR(10))` | формує текст з підзавдань з переходами рядків |
+
+---
+
+# 🛠 Твої дії:
+
+1. Підстав `APP_ID` і `PAGE_ID` в `ICON_LINK`, або використай `:APP_ID` та `:APP_PAGE_ID` у SQL region.
+2. Якщо ти хочеш витягнути **імена користувачів**, статусів або назв підрозділів — додай `JOIN` до довідників.
+
+---
+
+# 🚀 Хочеш ще:
+
+- Показати, як обмежити завдання по статусу або даті?
+- Додати колонку з кількістю підзавдань?
+- Перекласти цей `VIEW` у вигляд SQL Region з іконками в APEX?
+
+Скажи — і я зроблю адаптацію! ✅

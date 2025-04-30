@@ -1,0 +1,32 @@
+// Replace 'my_ir_region' with the Static ID of your IR region
+var ir$ = apex.region("my_ir_region").widget();
+
+var exportLink = ir$.find("button.a-IRR-button--actions").get(0);
+
+if (exportLink) {
+    // Open the actions menu
+    exportLink.click();
+
+    // Wait a bit and then click on the "Download" submenu
+    setTimeout(function () {
+        var downloadMenuItem = $(".a-Menu-label").filter(function () {
+            return $(this).text().trim() === "Download";
+        }).first();
+
+        if (downloadMenuItem.length > 0) {
+            downloadMenuItem.click();
+
+            // Wait for export format options to appear
+            setTimeout(function () {
+                // Choose Excel or CSV (adjust text accordingly)
+                var excelOption = $(".a-Menu-label").filter(function () {
+                    return $(this).text().trim() === "CSV"; // or "XLSX" if available
+                }).first();
+
+                if (excelOption.length > 0) {
+                    excelOption.click();
+                }
+            }, 300);
+        }
+    }, 300);
+}

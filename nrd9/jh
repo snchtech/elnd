@@ -1,0 +1,10 @@
+DECLARE
+    l_url VARCHAR2(4000);
+BEGIN
+    l_url := APEX_UTIL.PREPARE_URL(
+        p_url => 'f?p=' || :APP_ID || ':' || :APP_PAGE_ID || ':0:' || 'my_ir_region:CSV:RP:::',
+        p_checksum_type => 'SESSION'
+    );
+
+    :P1_EXPORT_URL := l_url;
+END;

@@ -1,0 +1,39 @@
+Ось як можна **доопрацювати твій SQL-запит**, щоб враховувався глобальний фільтр `:P0_CURRENT_DEPARTMENT`:
+
+---
+
+### ✅ Оновлений `WHERE`-блок:
+```sql
+SELECT *
+FROM v_outfit_pivot_base
+WHERE 1=1
+  --AND (:P_MODAL_ORG IS NULL OR org = TO_NUMBER(:P_MODAL_ORG))
+  --AND (:P_MODAL_UNIT IS NULL OR unit = TO_NUMBER(:P_MODAL_UNIT))
+
+  AND (
+    :P0_CURRENT_DEPARTMENT IS NOT NULL AND department = :P0_CURRENT_DEPARTMENT
+    OR :P0_CURRENT_DEPARTMENT IS NULL AND (
+      :P_MODAL_DEPARTMENTS IS NULL 
+      OR department IN (
+        SELECT column_value FROM TABLE(split_string(:P_MODAL_DEPARTMENTS, ':'))
+      )
+    )
+  )
+
+  AND (
+    (:P_MODAL_TIMEMODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P_MODAL_TIMEMODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P_MODAL_TIMEMODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+  )
+```
+
+---
+
+### ✅ Як це працює:
+- Якщо `:P0_CURRENT_DEPARTMENT` має значення → фільтрація виконується лише по ньому (`department = :P0_CURRENT_DEPARTMENT`).
+- Якщо ні — виконується стара логіка з `:P_MODAL_DEPARTMENTS` (множинне значення, `checkbox group`).
+
+---
+
+Цей код працюватиме як в Interactive Report, так і в PL/SQL Dynamic Content, якщо `:P0_CURRENT_DEPARTMENT` — доступний глобальний item.  
+Хочеш, щоб я допоміг зробити таку ж логіку для ще одного SQL-запиту?

@@ -1,0 +1,55 @@
+Щоб адаптувати функцію `get_unit_matrix_html` до використання `:P0_CURRENT_DEPARTMENT` як глобального фільтра в Oracle APEX, ти можеш додати перевірку прямо в `WHERE`-умові кожного запиту:
+
+---
+
+### ✅ Що потрібно зробити:
+1. Замість:
+```sql
+AND (
+  p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+)
+```
+
+2. Використати:
+```sql
+AND (
+  :P0_CURRENT_DEPARTMENT IS NOT NULL AND department = :P0_CURRENT_DEPARTMENT
+  OR :P0_CURRENT_DEPARTMENT IS NULL AND (
+    p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+  )
+)
+```
+
+---
+
+### ✅ Як виглядатиме у прикладі (для блоку з `org = 0`):
+
+```sql
+SELECT 
+  SUM(CASE WHEN unit = 0 THEN 1 ELSE 0 END),
+  SUM(CASE WHEN unit = 1 THEN 1 ELSE 0 END),
+  SUM(CASE WHEN unit = 2 THEN 1 ELSE 0 END),
+  COUNT(*)
+INTO v_unit1, v_unit2, v_unit3, v_total
+FROM your_view
+WHERE org = 0
+  AND (
+    :P0_CURRENT_DEPARTMENT IS NOT NULL AND department = :P0_CURRENT_DEPARTMENT
+    OR :P0_CURRENT_DEPARTMENT IS NULL AND (
+      p_departments IS NULL OR department IN (SELECT column_value FROM TABLE(v_departments_tbl))
+    )
+  )
+  AND (
+    (v_start IS NOT NULL AND status_start_date < v_end AND (status_end_date IS NULL OR v_start < status_end_date))
+    OR (v_start IS NULL AND status_start_date < v_end AND status_end_date IS NULL)
+  );
+```
+
+---
+
+### ✅ Порада:
+Якщо ти викликаєш цю функцію у SQL-звіті або у PL/SQL динамічному контенті APEX, переконайся, що `:P0_CURRENT_DEPARTMENT` має встановлене значення **до моменту виконання функції**. Для цього можна:
+- викликати функцію в динамічному регіоні після встановлення значення;
+- або викликати її з `p_departments => NULL`, якщо `:P0_CURRENT_DEPARTMENT` використовується як основний фільтр.
+
+Хочеш, щоб я допоміг тобі вставити цей блок у всі 4 запити в функції одразу?

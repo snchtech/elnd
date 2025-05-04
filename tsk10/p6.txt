@@ -1,0 +1,136 @@
+Дуже добре! Твоє завдання — сформувати потужний журнал завдань з повною деталізацією. Нижче я покажу, як створити `VIEW` в Oracle, яка:
+
+* об’єднує інформацію з основних таблиць;
+* формує зміст HTML у колонках (із класами `task_creator` та `signer_info`);
+* відображає як одиничні, так і ієрархічні завдання;
+* враховує статус ознайомлення користувача.
+
+---
+
+### 🔧 Структура базової `VIEW` `V_TASKS_FULL`
+
+```sql
+CREATE OR REPLACE VIEW V_TASKS_FULL AS
+SELECT
+    t.ID AS TASK_ID,
+    
+    -- 1. Дата початку
+    t.PLANNING_DATE_START,
+    
+    -- 2. UNIT
+    u.NAME AS UNIT_NAME,
+    
+    -- 3. Зміст завдання (TEXT або HTML-список)
+    CASE 
+        WHEN t.TYPE_ID = 0 THEN t.TASK_CONTENT
+        ELSE (
+            SELECT LISTAGG('<li>' || s.SUBTASK_CONTENT || '</li>', '') 
+            WITHIN GROUP (ORDER BY s.SUBTASK_ORDER)
+            FROM TASK_SUBTASKS s
+            WHERE s.TASK_ID = t.ID
+        )
+    END AS TASK_DESCRIPTION_HTML,
+    
+    -- 4. Хто видав (stage 1)
+    (
+        SELECT 
+            '<span class="task_creator">' ||
+            NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') ||
+            '</span>' ||
+            COALESCE(
+                (
+                    SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                    FROM SIGNATUREHISTORY h
+                    JOIN USERS us ON us.ID = h.SIGNER_BY
+                    WHERE h.SIGNRIGHT_ID = sr.ID
+                    FETCH FIRST ROW ONLY
+                ),
+                ''
+            )
+        FROM SIGNATURERIGHTS sr
+        LEFT JOIN POSITION_TABLE pos ON pos.ID = sr.POSITION_ID
+        LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr.DEPARTMENT_ID
+        LEFT JOIN USER_TABLE u2 ON u2.ID = sr.USER_ID
+        WHERE sr.TASK_ID = t.ID AND sr.STAGES_ID = 1
+        FETCH FIRST ROW ONLY
+    ) AS CREATOR_INFO,
+
+    -- 5. Виконавці (може бути багато)
+    (
+        SELECT LISTAGG(
+            '<span class="task_creator">' || 
+            NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') || '</span>' ||
+            COALESCE((
+                SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                FROM SIGNATUREHISTORY h
+                JOIN USERS us ON us.ID = h.SIGNER_BY
+                WHERE h.SIGNRIGHT_ID = sr2.ID
+                FETCH FIRST ROW ONLY
+            ), ''),
+        ' <br> ') 
+        FROM SIGNATURERIGHTS sr2
+        LEFT JOIN POSITION_TABLE pos ON pos.ID = sr2.POSITION_ID
+        LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr2.DEPARTMENT_ID
+        LEFT JOIN USER_TABLE u2 ON u2.ID = sr2.USER_ID
+        WHERE sr2.TASK_ID = t.ID AND sr2.STAGES_ID = 2
+    ) AS EXECUTOR_INFO,
+
+    -- 6. Планова дата завершення
+    t.PLANNING_DATE_END,
+
+    -- 7. Фактична дата завершення (stage 3)
+    (
+        SELECT TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || ' (' || us.USERNAME || ')'
+        FROM SIGNATUREHISTORY h
+        JOIN SIGNATURERIGHTS sr3 ON sr3.ID = h.SIGNRIGHT_ID
+        JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+        WHERE sr3.TASK_ID = t.ID AND sr3.STAGES_ID = 3
+        FETCH FIRST ROW ONLY
+    ) AS ACTUAL_DATE_END_INFO,
+
+    -- 8. Статус
+    st.NAME AS STATUS_NAME,
+
+    -- 9. Відділ
+    dep.NAME AS DEPARTMENT_NAME,
+
+    -- 10. Примітка
+    t.NOTE,
+
+    -- 11. Ознайомлений
+    (
+        SELECT us.USERNAME || ' (' || TO_CHAR(tv.DATE_VIEWED, 'DD.MM.YYYY HH24:MI') || ')'
+        FROM TASK_VIEWED tv
+        JOIN USER_TABLE us ON us.ID = tv.USER_ID
+        WHERE tv.TASK_ID = t.ID 
+          AND TRUNC(tv.DATE_VIEWED) = TRUNC(SYSDATE)
+        FETCH FIRST ROW ONLY
+    ) AS VIEWED_BY
+
+FROM TASKS t
+LEFT JOIN UNIT u ON u.ID = t.UNIT_ID
+LEFT JOIN STATUS_TABLE st ON st.ID = t.STATUS_ID
+LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = t.DEPARTMENT_ID;
+```
+
+---
+
+### 📝 Пояснення:
+
+* `LISTAGG(..., '<br>')` — агрегація даних для виконавців або підзавдань у вигляді HTML-строки.
+* `FETCH FIRST ROW ONLY` — для скорочення до одного запису при `STAGES_ID = 1` або `3`.
+* `span class="task_creator"` / `signer_info` — для можливого форматування через CSS.
+* У колонці `TASK_DESCRIPTION_HTML` ми вставляємо HTML `<li>`, але у APEX треба буде **дати escape** або використовувати опцію **"Escape special characters = No"**.
+
+---
+
+### ✅ Що треба для APEX:
+
+1. Створити Interactive Report на базі цього view.
+2. Увімкнути режим HTML у колонках із HTML.
+3. Додати піктограму в колонку №1 — як link to dialog/modal (інформаційна картка).
+4. Вивести значення колонок у форматі, який узгоджується з вимогами.
+
+---
+
+Хочеш, я згенерую тобі ще й CSS для `task_creator` і `signer_info`, щоб вони мали стиль для APEX?

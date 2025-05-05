@@ -1,0 +1,80 @@
+Щоб вивести надпис типу **"Вкладене підзавдання для: ..."** або **"Вкладений підшаблон для: ..."**, тобто отримати `SUBTASK_CONTENT` за `PARENT_ID`, необхідно:
+
+---
+
+## ✅ 1. Додати `Display Only` item
+
+Наприклад:
+
+* **Name**: `P6_PARENT_NAME`
+* **Label**: *(не обов’язково показувати, можеш залишити порожнім)*
+
+---
+
+## ✅ 2. Створити Before Header Process (PL/SQL)
+
+Цей процес буде заповнювати `P6_PARENT_NAME` залежно від `P6_TASK_MODE` (0 – підзавдання, 1 – підшаблон):
+
+```plsql
+BEGIN
+  IF :P6_PARENT_ID IS NOT NULL THEN
+    IF :P6_TASK_MODE = 0 THEN
+      SELECT SUBTASK_CONTENT
+      INTO :P6_PARENT_NAME
+      FROM TASK_SUBTASKS
+      WHERE ID = :P6_PARENT_ID;
+    ELSIF :P6_TASK_MODE = 1 THEN
+      SELECT SUBTASK_CONTENT
+      INTO :P6_PARENT_NAME
+      FROM TASK_TEMPLATE_SUBTASKS
+      WHERE ID = :P6_PARENT_ID;
+    END IF;
+  ELSE
+    :P6_PARENT_NAME := NULL;
+  END IF;
+END;
+```
+
+---
+
+## ✅ 3. Змінити Label для `P6_PARENT_NAME`
+
+* **Label**:
+
+  ```plaintext
+  Вкладене &LABEL_TYPE. для: &P6_PARENT_NAME.
+  ```
+* Де `&LABEL_TYPE.` — потрібно замінити JavaScript'ом або PL/SQL (див. нижче) на:
+
+  * `"підзавдання"` — якщо `TASK_MODE = 0`
+  * `"підшаблон"` — якщо `TASK_MODE = 1`
+
+---
+
+## 🔁 Альтернатива – сформувати підпис у PL/SQL:
+
+Створи ще один Display-Only item `P6_PARENT_LABEL`, і в тому ж процесі:
+
+```plsql
+BEGIN
+  IF :P6_PARENT_ID IS NOT NULL THEN
+    IF :P6_TASK_MODE = 0 THEN
+      SELECT 'Вкладене підзавдання для: ' || SUBTASK_CONTENT
+      INTO :P6_PARENT_LABEL
+      FROM TASK_SUBTASKS
+      WHERE ID = :P6_PARENT_ID;
+    ELSIF :P6_TASK_MODE = 1 THEN
+      SELECT 'Вкладений підшаблон для: ' || SUBTASK_CONTENT
+      INTO :P6_PARENT_LABEL
+      FROM TASK_TEMPLATE_SUBTASKS
+      WHERE ID = :P6_PARENT_ID;
+    END IF;
+  ELSE
+    :P6_PARENT_LABEL := NULL;
+  END IF;
+END;
+```
+
+---
+
+Хочеш ще, щоб це поле автоматично приховувалося, якщо `P6_PARENT_ID` = NULL?

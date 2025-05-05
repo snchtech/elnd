@@ -1,0 +1,96 @@
+Ось повністю доопрацьований PL/SQL-процес для **ієрархічного видалення підшаблонів** з таблиці `TASK_TEMPLATE_SUBTASKS`, з урахуванням `PARENT_ID`.
+
+---
+
+### ✅ Процес: `DELETE_TEMPLATE_SUBTASKS` (PL/SQL)
+
+```plsql
+BEGIN
+  DELETE FROM TASK_TEMPLATE_SUBTASKS
+  WHERE ID IN (
+    SELECT ID
+    FROM TASK_TEMPLATE_SUBTASKS
+    START WITH ID = APEX_APPLICATION.G_X01
+    CONNECT BY PRIOR ID = PARENT_ID
+  );
+
+  -- JSON-відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### ✅ Опціонально: перевірка чи є дочірні підшаблони
+
+**Процес `CHECK_CHILD_TEMPLATE_SUBTASKS` (PL/SQL):**
+
+```plsql
+DECLARE
+  l_count NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO l_count
+  FROM TASK_TEMPLATE_SUBTASKS
+  WHERE PARENT_ID = APEX_APPLICATION.G_X01;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('hasChildren', CASE WHEN l_count > 0 THEN 'Y' ELSE 'N' END);
+  APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### ✅ JS: видалення з підтвердженням
+
+```javascript
+function deleteTemplateSubtaskWithCheck(id) {
+  apex.server.process("CHECK_CHILD_TEMPLATE_SUBTASKS", {
+    x01: id
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      let proceed = true;
+
+      if (pData.hasChildren === 'Y') {
+        proceed = confirm("Це підшаблон має дочірні підшаблони. Ви дійсно хочете видалити всі разом?");
+      }
+
+      if (proceed) {
+        apex.server.process("DELETE_TEMPLATE_SUBTASKS", {
+          x01: id
+        }, {
+          dataType: "json",
+          success: function(pData) {
+            if (pData.status === "ok") {
+              apex.region("TASK_TEMPLATE_SUBTASKS_IG_2").refresh();
+            } else {
+              apex.message.alert("❌ Помилка: " + (pData.message || "Невідома помилка"));
+            }
+          },
+          error: function() {
+            apex.message.alert("❌ Помилка при з’єднанні з сервером.");
+          }
+        });
+      }
+    },
+    error: function() {
+      apex.message.alert("❌ Помилка при перевірці дочірніх підшаблонів.");
+    }
+  });
+}
+```
+
+---
+
+Хочеш, я також допоможу оформити **custom-меню** з пунктом `"Видалити підшаблон"` і викликом цієї функції?

@@ -1,0 +1,85 @@
+Чудово! Ось як можна **реалізувати додавання дочірнього підшаблону** (тобто підшаблону з `PARENT_ID`) — повністю аналогічно до підзавдань, але з урахуванням структури `TASK_TEMPLATE_SUBTASKS`.
+
+---
+
+## ✅ 1. Процес APEX: `CREATE_TEMPLATE_SUBTASK`
+
+```plsql
+DECLARE
+  v_next_order NUMBER;
+BEGIN
+  -- Статус за замовчуванням
+  :P6_STATUS_ID := 1;
+
+  -- Обчислюємо SUBTASK_ORDER (у межах PARENT_ID і TEMPLATE_ID)
+  SELECT NVL(MAX(SUBTASK_ORDER), 0) + 1
+  INTO v_next_order
+  FROM TASK_TEMPLATE_SUBTASKS
+  WHERE TEMPLATE_ID = :P6_TASK_ID  -- ← тут зберігається TEMPLATE_ID
+    AND NVL(PARENT_ID, 0) = NVL(:P6_PARENT_ID, 0);
+
+  :P6_SUBTASK_ORDER := v_next_order;
+
+  -- Вставка підшаблону
+  INSERT INTO TASK_TEMPLATE_SUBTASKS (
+    TEMPLATE_ID,
+    SUBTASK_CONTENT,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID
+  ) VALUES (
+    :P6_TASK_ID,
+    :P6_SUBTASK_CONTENT,
+    :P6_PARENT_ID,
+    :P6_SUBTASK_ORDER,
+    :P6_STATUS_ID
+  );
+END;
+```
+
+---
+
+## ✅ 2. JavaScript виклик (наприклад, через `apex.server.process` або через відкриття модального вікна)
+
+### Якщо відкриваєш форму додавання через custom-меню:
+
+```javascript
+document.getElementById("menu-add-template-subtask").addEventListener("click", function () {
+  const parentId = this.dataset.id;
+  const templateId = $v("P5_TASK_ID"); // актуальний TEMPLATE_ID з головної сторінки
+
+  const url = apex.util.makeApplicationUrl({
+    pageId: 6,
+    request: "DIALOG",
+    clearCache: "6",
+    items: "P6_PARENT_ID,P6_TASK_ID",
+    values: parentId + "," + templateId
+  });
+
+  apex.navigation.redirect(url);
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+---
+
+## ✅ 3. Параметри форми (на сторінці 6):
+
+| Item                 | Значення                                         |
+| -------------------- | ------------------------------------------------ |
+| `P6_PARENT_ID`       | прихований, передається через URL                |
+| `P6_TASK_ID`         | ідентифікатор шаблону (TEMPLATE\_ID), прихований |
+| `P6_SUBTASK_CONTENT` | обов'язкове                                      |
+| `P6_STATUS_ID`       | можна встановити автоматично `1` у процесингу    |
+| `P6_SUBTASK_ORDER`   | обчислюється автоматично в процесингу            |
+
+---
+
+## ✅ 4. Після сабміту
+
+* Зроби `Dialog Close` → Refresh регіону `TASK_TEMPLATE_SUBTASKS_IG_2`
+* Після успішної вставки — сторінка закриється, підшаблон оновиться.
+
+---
+
+Хочеш, я відразу допоможу з **меню дублювання підшаблону** або **редагування** в цьому ж стилі?

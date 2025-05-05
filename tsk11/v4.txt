@@ -1,0 +1,109 @@
+Чудово, давай реалізуємо дублювання підшаблону (`TASK_TEMPLATE_SUBTASKS`) разом з його вкладеними дочірніми підшаблонами.
+
+---
+
+## 🔧 Структура задачі:
+
+1. **Користувач натискає кнопку "Дублювати підшаблон"** у custom-меню.
+2. **Викликається `Ajax Process`: `DUPLICATE_TEMPLATE_SUBTASK`**
+3. Дублюється підшаблон з новим `ID`, `PARENT_ID = NULL`
+4. Рекурсивно дублюються всі дочірні підшаблони з оновленими `PARENT_ID`
+5. Після завершення – оновлення регіону IG.
+
+---
+
+## ✅ PL/SQL Process: `DUPLICATE_TEMPLATE_SUBTASK`
+
+```plsql
+DECLARE
+  v_new_id TASK_TEMPLATE_SUBTASKS.ID%TYPE;
+
+  -- Мапа: старий ID -> новий ID
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY NUMBER;
+  l_id_map t_id_map;
+
+  -- Рекурсивна процедура дублювання
+  PROCEDURE duplicate_node(p_old_id NUMBER, p_new_parent_id NUMBER, p_template_id NUMBER) IS
+    v_new_subtask_id TASK_TEMPLATE_SUBTASKS.ID%TYPE;
+  BEGIN
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      ID, TEMPLATE_ID, SUBTASK_CONTENT, STATUS_ID, PARENT_ID, SUBTASK_ORDER
+    )
+    SELECT
+      TASK_TEMPLATE_SUBTASKS_SEQ.NEXTVAL,
+      TEMPLATE_ID,
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      p_new_parent_id,
+      SUBTASK_ORDER
+    FROM TASK_TEMPLATE_SUBTASKS
+    WHERE ID = p_old_id
+    RETURNING ID INTO v_new_subtask_id;
+
+    -- Додаємо в мапу
+    l_id_map(p_old_id) := v_new_subtask_id;
+
+    -- Рекурсія для дочірніх
+    FOR r_child IN (
+      SELECT ID FROM TASK_TEMPLATE_SUBTASKS WHERE PARENT_ID = p_old_id
+    ) LOOP
+      duplicate_node(r_child.ID, v_new_subtask_id, p_template_id);
+    END LOOP;
+  END;
+
+BEGIN
+  duplicate_node(APEX_APPLICATION.G_X01, NULL, :P5_TASK_ID);
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ JavaScript виклик (в custom-меню):
+
+```js
+document.getElementById("menu-duplicate-subtemplate").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  apex.server.process("DUPLICATE_TEMPLATE_SUBTASK", {
+    x01: id
+  }, {
+    dataType: "json",
+    success: function (pData) {
+      if (pData.status === "ok") {
+        apex.region("TASK_TEMPLATE_SUBTASKS_IG_2").refresh();
+      } else {
+        apex.message.alert("❌ Помилка: " + (pData.message || "Невідома помилка"));
+      }
+    },
+    error: function () {
+      apex.message.alert("❌ Не вдалося з’єднатись із сервером.");
+    }
+  });
+
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+---
+
+## 🔄 Що потрібно ще:
+
+* Переконайся, що `TASK_TEMPLATE_SUBTASKS_SEQ` існує.
+* AJAX-процес `DUPLICATE_TEMPLATE_SUBTASK` додано на сторінку.
+* Ідентифікатор регіону IG – `TASK_TEMPLATE_SUBTASKS_IG_2` (або твій).
+
+---
+
+Хочеш також додати підтвердження перед дублюванням або авто-фокус на новий рядок після дублювання?

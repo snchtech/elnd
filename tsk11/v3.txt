@@ -1,0 +1,135 @@
+Так, ти правильно все розумієш — тепер поясню логіку по кроках і чітко розділю, як реалізувати роботу з підзавданнями і підшаблонами в залежності від перемикача `P6_TASK_MODE`:
+
+---
+
+### 🔄 Загальна ідея
+
+На сторінці редагування підзавдання (сторінка 6):
+
+* `P6_TASK_MODE = 0` — працюємо з таблицею `TASK_SUBTASKS`
+* `P6_TASK_MODE = 1` — працюємо з таблицею `TASK_TEMPLATE_SUBTASKS`
+
+Всі інші item (`P6_SUBTASK_CONTENT`, `P6_PLANNING_DATE_END`, `P6_PARENT_ID` тощо) залишаються однаковими.
+
+---
+
+### ✅ Як реалізувати INSERT
+
+**1. Один `PROCESS` (наприклад, `SAVE_SUB_ENTRY`)**
+Він перевіряє значення `:P6_TASK_MODE`:
+
+```plsql
+BEGIN
+  IF :P6_TASK_MODE = 0 THEN
+    -- INSERT у TASK_SUBTASKS
+    INSERT INTO TASK_SUBTASKS (
+      TASK_ID,
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      STATUS_ID
+    ) VALUES (
+      :P6_TASK_ID,
+      :P6_SUBTASK_CONTENT,
+      TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+      :P6_PARENT_ID,
+      :P6_SUBTASK_ORDER,
+      1
+    );
+
+  ELSIF :P6_TASK_MODE = 1 THEN
+    -- INSERT у TASK_TEMPLATE_SUBTASKS
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      TEMPLATE_ID,
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PARENT_ID,
+      SUBTASK_ORDER
+    ) VALUES (
+      :P6_TASK_ID,
+      :P6_SUBTASK_CONTENT,
+      1,
+      :P6_PARENT_ID,
+      :P6_SUBTASK_ORDER
+    );
+  END IF;
+END;
+```
+
+---
+
+### ✏️ Як реалізувати UPDATE
+
+Аналогічно, в одному `PROCESS` (наприклад, `UPDATE_SUB_ENTRY`):
+
+```plsql
+BEGIN
+  IF :P6_TASK_MODE = 0 THEN
+    UPDATE TASK_SUBTASKS
+    SET
+      SUBTASK_CONTENT    = :P6_SUBTASK_CONTENT,
+      PLANNING_DATE_END  = TO_DATE(:P6_PLANNING_DATE_END, 'DD.MM.YYYY HH24:MI'),
+      PARENT_ID          = :P6_PARENT_ID
+    WHERE ID = :P6_ID;
+
+  ELSIF :P6_TASK_MODE = 1 THEN
+    UPDATE TASK_TEMPLATE_SUBTASKS
+    SET
+      SUBTASK_CONTENT = :P6_SUBTASK_CONTENT,
+      PARENT_ID       = :P6_PARENT_ID
+    WHERE ID = :P6_ID;
+  END IF;
+END;
+```
+
+---
+
+### 📩 Як передавати `P6_TASK_MODE`
+
+Коли відкриваєш форму для створення чи редагування:
+
+* у твоєму JavaScript при відкритті діалогу потрібно передати `P6_TASK_MODE` в параметрах `p_items / p_values` разом із `P6_ID`, якщо йде редагування.
+
+```javascript
+apex.server.process("GET_SUBTASK_EDIT_URL", {
+  x01: subtaskId,
+  x02: taskMode // 0 або 1
+}, {
+  dataType: "json",
+  success: function(pData) {
+    apex.navigation.redirect(pData.url);
+  }
+});
+```
+
+А в `PL/SQL` process для побудови URL:
+
+```plsql
+DECLARE
+  l_url VARCHAR2(4000);
+BEGIN
+  l_url := apex_page.get_url (
+    p_page        => 6,
+    p_clear_cache => '6',
+    p_items       => 'P6_ID,P6_TASK_MODE',
+    p_values      => APEX_APPLICATION.G_X01 || ',' || APEX_APPLICATION.G_X02,
+    p_request     => 'DIALOG'
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('url', l_url);
+  APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### 📌 Важливо:
+
+* Використовуй `P6_TASK_MODE` не як `Hidden`, а як `Display Only`, щоб бачити значення при дебазі
+* На `Page Load` також виставляй `P6_TASK_MODE`, якщо передаєш тільки `P5_TASK_MODE` з батьківської сторінки
+
+---
+
+Готовий допомогти з наступними кроками: реалізувати `Delete`, `Duplicate`, custom menu для шаблонів — просто скажи, що далі? ✅

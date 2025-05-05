@@ -1,0 +1,77 @@
+Так, твоя ідея **зробити один універсальний JavaScript код для дублювання** підзавдань/підшаблонів — **абсолютно правильна і практична**.
+Ти можеш:
+
+---
+
+## ✅ 1. **Передавати `TASK_MODE` у `x02`**
+
+* `TASK_MODE = 0` → підзавдання (`TASK_SUBTASKS`)
+* `TASK_MODE = 1` → підшаблони (`TASK_TEMPLATE_SUBTASKS`)
+
+```js
+apex.server.process("DUPLICATE_SUBTASK_GENERIC", {
+  x01: subtaskId,
+  x02: $v("P5_TASK_MODE")  // 0 або 1
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === 'ok') {
+      // Динамічно оновлюємо потрібний IG
+      const regionId = $v("P5_TASK_MODE") === '1'
+        ? "TASK_TEMPLATE_SUBTASKS_IG_2"
+        : "TASK_SUBTASKS_IG_1";
+
+      apex.region(regionId).refresh();
+    } else {
+      apex.message.alert("❌ Помилка: " + (pData.message || "Невідома помилка"));
+    }
+  },
+  error: function() {
+    apex.message.alert("❌ Помилка при з’єднанні з сервером.");
+  }
+});
+```
+
+---
+
+## ✅ 2. **PL/SQL Process `DUPLICATE_SUBTASK_GENERIC`** з `:x02`
+
+```plsql
+DECLARE
+  v_mode NUMBER := TO_NUMBER(APEX_APPLICATION.G_X02);
+BEGIN
+  IF v_mode = 0 THEN
+    -- дублювання TASK_SUBTASKS
+    -- весь код для TASK_SUBTASKS
+    NULL; -- заміни на робочий код
+  ELSIF v_mode = 1 THEN
+    -- дублювання TASK_TEMPLATE_SUBTASKS
+    -- весь код для TEMPLATE
+    NULL; -- заміни на робочий код
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ Переваги такого підходу:
+
+* ✅ Одна JS-функція для обох IG
+* ✅ Один Ajax Process (`DUPLICATE_SUBTASK_GENERIC`)
+* ✅ Менше дублювання і більше контролю
+* ✅ Можна розширити на будь-які типи субзавдань
+
+---
+
+Хочеш — можу об’єднати і надати **повний готовий PL/SQL код** для `DUPLICATE_SUBTASK_GENERIC`, який по `TASK_MODE` обробляє обидва варіанти.

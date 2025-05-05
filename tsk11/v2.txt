@@ -1,0 +1,117 @@
+✅ Так, для **підшаблонів** (`TASK_TEMPLATE_SUBTASKS`) найкраще реалізувати **окремий JavaScript + окремі процесинги**, аналогічно до підзавдань, але з урахуванням нової таблиці й логіки.
+
+---
+
+## 🔧 Що треба зробити:
+
+### ✅ 1. **Процесинг для генерації URL редагування підшаблону**
+
+Назва: `GET_SUBTEMPLATE_EDIT_URL`
+
+```plsql
+DECLARE
+  l_url VARCHAR2(4000);
+BEGIN
+  l_url := apex_page.get_url (
+    p_page        => 6, -- або інша сторінка редагування
+    p_clear_cache => '6',
+    p_items       => 'P6_ID,P6_IS_TEMPLATE',
+    p_values      => APEX_APPLICATION.G_X01 || ',1', -- 1 вказує, що це шаблон
+    p_request     => 'DIALOG'
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('url', l_url);
+  APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+🔹 **P6\_IS\_TEMPLATE** — допоможе у формі на сторінці 6 визначити, що йдеться про підшаблон, а не підзавдання.
+
+---
+
+### ✅ 2. **JavaScript код для відкриття меню редагування підшаблону**
+
+```javascript
+document.getElementById("menu-edit-subtemplate").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  apex.server.process("GET_SUBTEMPLATE_EDIT_URL", {
+    x01: id
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      apex.navigation.redirect(pData.url);
+    },
+    error: function() {
+      alert("❌ Помилка при генерації URL для підшаблону");
+    }
+  });
+
+  document.getElementById("custom-ig-menu-template").style.display = "none";
+});
+```
+
+---
+
+### ✅ 3. **HTML частина твого Custom Menu для підшаблонів**
+
+```html
+<ul id="custom-ig-menu-template" class="custom-ig-menu">
+  <li><a href="#" id="menu-edit-subtemplate" data-id="">✏️ Редагувати</a></li>
+  <li><a href="#" id="menu-delete-subtemplate" data-id="">🗑️ Видалити</a></li>
+  <li><a href="#" id="menu-duplicate-subtemplate" data-id="">📄 Дублювати</a></li>
+  <li><a href="#" id="menu-create-child-subtemplate" data-id="">➕ Додати підпідшаблон</a></li>
+</ul>
+```
+
+---
+
+### ✅ 4. **Форма на сторінці 6**
+
+На сторінці редагування (`P6_...`):
+
+* Додай **приховане поле** `P6_IS_TEMPLATE`
+* При `P6_IS_TEMPLATE = 1`:
+
+  * Завантажуй / зберігай у `TASK_TEMPLATE_SUBTASKS`
+* При `P6_IS_TEMPLATE = 0`:
+
+  * Працюй з `TASK_SUBTASKS`
+
+---
+
+### ✅ 5. **Умова Server-side у процесингах `UPDATE_SUBTASK / UPDATE_SUBTEMPLATE`**
+
+* Наприклад, `UPDATE_SUBTEMPLATE`:
+
+```plsql
+BEGIN
+  UPDATE TASK_TEMPLATE_SUBTASKS
+  SET
+    SUBTASK_CONTENT = :P6_SUBTASK_CONTENT,
+    PARENT_ID       = :P6_PARENT_ID
+  WHERE ID = :P6_ID;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при оновленні підшаблону: ' || SQLERRM);
+END;
+```
+
+* Умова виконання: `:P6_IS_TEMPLATE = 1`
+
+---
+
+### ⏭ Далі ти зможеш:
+
+* реалізувати **DELETE**
+* реалізувати **DUPLICATE**
+* реалізувати **CREATE\_CHILD**
+
+за тим самим підходом, як ти вже зробив для підзавдань, просто на іншу таблицю + додатковий прапорець `P6_IS_TEMPLATE`.
+
+---
+
+Хочеш — можу одразу допомогти з **дублюванням підшаблону** чи **створенням дочірнього підшаблону**?

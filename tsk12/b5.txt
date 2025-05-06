@@ -1,0 +1,123 @@
+Ось повноцінне рішення для **оновлення завдання або шаблону** в залежності від значення `P5_TASK_MODE` (0 – завдання, 1 – шаблон), включаючи:
+
+* Кнопки `TASK_EDIT` та `TEMPLATE_EDIT`
+* Один **Ajax Callback процес** `UPDATE_TASK_OR_TEMPLATE`
+* JavaScript для запуску
+* Apex Notification з таймером
+
+---
+
+## ✅ 1. Кнопки
+
+На сторінці 5 (або іншій):
+
+* Додай кнопку `TASK_EDIT`
+
+  * Server-side condition: `:P5_TASK_MODE = 0`
+
+* Додай кнопку `TEMPLATE_EDIT`
+
+  * Server-side condition: `:P5_TASK_MODE = 1`
+
+---
+
+## ✅ 2. Ajax Callback: `UPDATE_TASK_OR_TEMPLATE`
+
+**Create Process > Ajax Callback > PL/SQL Code**:
+
+```plsql
+DECLARE
+  v_mode PLS_INTEGER := TO_NUMBER(:P5_TASK_MODE);
+BEGIN
+  IF v_mode = 0 THEN
+    UPDATE TASKS
+    SET
+      TASK_CONTENT       = :P5_TASK_CONTENT,
+      PLANNING_DATE_START = TO_DATE(:P5_DATE1, 'DD.MM.YYYY HH24:MI'),
+      PLANNING_DATE_END   = TO_DATE(:P5_DATE2, 'DD.MM.YYYY HH24:MI'),
+      DEPARTMENT_ID       = :P5_DEPARTMENT_ID,
+      UNIT_ID             = :P5_UNIT_ID,
+      TYPE_ID             = :P5_SELECT_TASK_TYPE,
+      PAGE_LIST_ID        = :P5_PAGE_LIST_ID,
+      NOTE                = :P5_NOTE
+    WHERE ID = :P5_TASK_ID;
+
+  ELSIF v_mode = 1 THEN
+    UPDATE TASK_TEMPLATES
+    SET
+      TASK_CONTENT      = :P5_TASK_CONTENT,
+      DEPARTMENT_ID     = :P5_DEPARTMENT_ID,
+      UNIT_ID           = :P5_UNIT_ID,
+      TYPE_ID           = :P5_SELECT_TASK_TYPE,
+      PAGE_LIST_ID      = :P5_PAGE_LIST_ID,
+      PERIOD_MODE       = :P5_SELECT_PERIOD_MODE,
+      PERIOD_INTERVAL   = :P5_TEXT1,
+      PERIOD_TIME       = :P5_DATE3,
+      HOURLY_TIMES      = :P5_TEXT2,
+      DATE_END          = :P5_DATE_END
+    WHERE ID = :P5_TASK_ID;
+
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'success');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ 3. JavaScript код для обох кнопок
+
+**Create Dynamic Action**:
+
+* **Event**: `Click`
+* **Selection Type**: `Button`
+* **Button Names**: `TASK_EDIT`, `TEMPLATE_EDIT`
+* **True Action**: `Execute JavaScript Code`
+
+```javascript
+apex.server.process("UPDATE_TASK_OR_TEMPLATE", {
+  pageItems: "#P5_TASK_CONTENT,#P5_DATE1,#P5_DATE2,#P5_DEPARTMENT_ID,#P5_UNIT_ID,#P5_SELECT_TASK_TYPE,#P5_PAGE_LIST_ID,#P5_NOTE,#P5_DATE3,#P5_TEXT1,#P5_TEXT2,#P5_DATE_END,#P5_TASK_MODE,#P5_SELECT_PERIOD_MODE,#P5_TASK_ID"
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === 'success') {
+      apex.message.showPageSuccess("Успішно оновлено!");
+      setTimeout(function() {
+        apex.message.clearErrors(); // На всяк випадок
+        apex.message.hidePageSuccess();
+      }, 3000);
+    } else {
+      apex.message.alert("Помилка: " + (pData.message || "Невідома помилка"));
+    }
+  },
+  error: function() {
+    apex.message.alert("❌ Помилка при оновленні запису");
+  }
+});
+```
+
+---
+
+## 🔁 Додатково:
+
+* Усі `P5_*` поля повинні бути на сторінці.
+* Значення `P5_TASK_MODE` повинно бути доступним (не прихованим `Display = None`, краще `Read-only` або `Hidden`).
+
+---
+
+## ✅ Результат
+
+* Один Ajax процес обробляє і завдання, і шаблони
+* Повідомлення про успішне оновлення зникає через 3 секунди
+* У разі помилки показується діалог
+
+Хочеш також зробити **автоматичне закриття діалогу** після оновлення, якщо форма — модальна?

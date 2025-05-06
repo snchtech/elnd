@@ -1,0 +1,69 @@
+Так, перевірено — **в APEX 22 `this.data.dialogReturn` працює коректно** *у Dynamic Action з подією `Dialog Closed`*, **за умови**, що:
+
+1. **На дочірній (модальній) сторінці** ти використовуєш:
+
+   * `Dialog: Close Dialog`
+   * І вказуєш **`Return Value`**: наприклад `'created_task'` або `'updated_template'`.
+
+2. **На батьківській сторінці**, у `Dynamic Action` з подією `Dialog Closed`:
+
+   * в `Client-Side Condition` використовуєш:
+
+     ```js
+     this.data.dialogReturn === 'created_task'
+     ```
+
+---
+
+## ✅ Приклад робочої логіки
+
+### 🔹 На сторінці 5 (модальне вікно)
+
+**Процес `Dialog: Close Dialog`:**
+
+* **Condition:** When Button Pressed = `CREATE_TASK`
+* **Return Value:**
+
+  ```sql
+  CASE WHEN :P5_TASK_MODE = 0 THEN 'created_task' ELSE 'created_template' END
+  ```
+
+### 🔹 На сторінці з `mainReport`
+
+**Dynamic Action:**
+
+* **Event:** `Dialog Closed`
+* **Client-Side Condition:**
+
+  ```js
+  this.data.dialogReturn === 'created_task'
+  ```
+* **True Action:** `Refresh → Region: mainReport`
+
+---
+
+## 🔍 Як перевірити:
+
+Увімкни інструменти розробника в браузері → вкладка **Console**, і додай тимчасовий JS:
+
+```js
+console.log("Dialog return value:", this.data.dialogReturn);
+```
+
+у `Execute JavaScript Code` в True Actions → так переконаєшся, що значення приходить.
+
+---
+
+### 🔁 Якщо `this.data.dialogReturn` не працює (рідко)
+
+Альтернатива:
+
+* створити прихований item `P0_DIALOG_RETURN`
+* в `Close Dialog` встановлювати цей item значенням (через Return Item)
+* на батьківській сторінці відслідковувати значення цього item замість `this.data.dialogReturn`
+
+Але **у більшості випадків `this.data.dialogReturn` працює стабільно в APEX 21+ і APEX 22**.
+
+---
+
+🔔 Хочеш, я зроблю для тебе **повний шаблон налаштування із Return Item/Value, Dynamic Action, Notification, Refresh** у форматі інструкції або JSON експорту?

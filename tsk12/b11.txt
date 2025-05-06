@@ -1,0 +1,51 @@
+Твоя CSS-анімація виглядає майже правильно, але є **одна критична помилка**:
+`display: none` і `display: block` **не можна анімувати** в CSS, тому **анімація `transform` не працює**, бо браузер не може обчислити проміжні стани між `display: none` і `display: block`.
+
+---
+
+## ✅ Рішення: Анімуй тільки `transform` та `opacity`, **а не `display`**
+
+### 🔧 Виправлений CSS:
+
+```css
+#custom-ig-menu {
+  position: absolute;
+  visibility: hidden; /* замість display */
+  pointer-events: none; /* щоб не клікався, коли невидимий */
+  background: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  transform: scaleY(0);
+  transform-origin: top center;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  opacity: 0;
+  z-index: 9999;
+}
+
+#custom-ig-menu.active {
+  visibility: visible;
+  pointer-events: auto;
+  transform: scaleY(1);
+  opacity: 1;
+}
+```
+
+---
+
+## ✅ JavaScript не змінюється:
+
+```js
+$menu.toggleClass('active');
+```
+
+---
+
+## 📌 Переваги:
+
+* **плавна анімація відкриття/закриття**
+* **видимість контролюється через `visibility` + `opacity`**
+* **все працює плавно без `display: none`**
+
+---
+
+🔔 Хочеш, щоб меню анімувалося ще й вбік (наприклад `scaleY + scaleX`), або з відступом?

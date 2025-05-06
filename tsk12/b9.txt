@@ -1,0 +1,62 @@
+Щоб реалізувати цю логіку на сторінці створення/редагування підзавдання, виконай наступне:
+
+---
+
+## ✅ Умови:
+
+* Якщо `P6_TASK_MODE = 0` → **`P6_PLANNING_DATE_END` видимий і required**
+* Якщо `P6_TASK_MODE = 1` → **`P6_PLANNING_DATE_END` прихований і не required**
+
+---
+
+## 🔧 Налаштування в APEX:
+
+### 🔹 1. Створити Dynamic Action
+
+* **Name:** `Toggle Planning Date End`
+* **Event:** `Change`
+* **Selection Type:** `Item`
+* **Item:** `P6_TASK_MODE`
+
+---
+
+### 🔹 2. True Action: **Execute JavaScript Code**
+
+```javascript
+var mode = $v('P6_TASK_MODE');
+
+if (mode === '0') {
+  // Показуємо та робимо обов'язковим
+  $('#P6_PLANNING_DATE_END_CONTAINER').show();
+  apex.item('P6_PLANNING_DATE_END').setRequired(true);
+} else {
+  // Ховаємо та скасовуємо обов'язковість
+  $('#P6_PLANNING_DATE_END_CONTAINER').hide();
+  apex.item('P6_PLANNING_DATE_END').setRequired(false);
+}
+```
+
+> ⚠️ Переконайся, що **Static ID** для контейнера поля `P6_PLANNING_DATE_END` = `P6_PLANNING_DATE_END_CONTAINER`.
+
+---
+
+### 🔹 3. Додай також **Dynamic Action на Page Load** (щоб при відкритті відразу спрацювала логіка)
+
+* **Event:** `Page Load`
+* **True Action:** `Execute JavaScript Code`
+* **Code:**
+
+```javascript
+apex.event.trigger('#P6_TASK_MODE', 'change');
+```
+
+---
+
+Це гарантує, що поле `P6_PLANNING_DATE_END`:
+
+* буде **видиме та обов'язкове**, коли `TASK_MODE = 0`
+* буде **приховане і не required**, коли `TASK_MODE = 1`
+
+---
+
+🔔 Хочеш, щоб ще й автоматично очищалось значення при приховуванні?

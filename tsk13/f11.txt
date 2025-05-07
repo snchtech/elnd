@@ -1,0 +1,155 @@
+Це **дуже влучне і важливе питання** — ідеальне з точки зору **оптимізації використання sequence, UX і контролю вводу**. Нижче покажу **повний алгоритм**, який дозволяє:
+
+---
+
+### ✅ **1. Використовувати `SEQUENCE.NEXTVAL` тільки тоді, коли це справді потрібно**
+
+---
+
+## 🔹 Ідея
+
+**Не генеруй `TASK_ID` або `TEMPLATE_ID` в `Before Header`.**
+Замість цього:
+
+* При натисканні кнопки **"Додати підзавдання" або "Додати підшаблон"**
+* Перевіряється, чи `:P_TASK_ID` або `:P_TEMPLATE_ID` вже присвоєно
+* Якщо `NULL` → генерується `NEXTVAL` і зберігається в hidden item
+* Якщо не `NULL` → просто використовуємо існуюче значення
+
+---
+
+### ✅ Приклад JavaScript логіки на кнопці "Додати підзавдання"
+
+```javascript
+if (!$v('P_TASK_ID')) {
+  apex.server.process("GENERATE_TASK_ID", {}, {
+    dataType: "text",
+    success: function(newId) {
+      $s("P_TASK_ID", newId); // зберігаємо ID
+      openSubtaskDialog(); // твоя функція відкриття вікна
+    }
+  });
+} else {
+  openSubtaskDialog();
+}
+```
+
+---
+
+### ✅ Процес `GENERATE_TASK_ID` (Ajax Callback):
+
+```plsql
+DECLARE
+  v_id TASKS.ID%TYPE;
+BEGIN
+  SELECT TASK_SEQ.NEXTVAL INTO v_id FROM DUAL;
+  HTP.PRN(v_id); -- повертає новий ID
+END;
+```
+
+> Аналогічно для `TEMPLATE_ID`, при створенні першого підшаблону.
+
+---
+
+## 🔹 Переваги
+
+* **Жоден sequence не зникає просто так**
+* Перший запис у `TASK_SUBTASKS` → автоматично ініціалізує `P_TASK_ID`
+* Після створення шаблону/завдання ID вже є → можеш використовувати для інших вставок
+
+---
+
+---
+
+### ✅ **2. Очищення полів і блокування перемикача `P_TASK_MODE`, якщо є підзавдання/підшаблони**
+
+---
+
+## 🔹 Завдання:
+
+* Якщо на сторінці вже є хоча б одне підзавдання/підшаблон → блокувати:
+
+  * `P_TASK_MODE`
+  * `P_TASK_TYPE`
+* Якщо `P_TASK_MODE` змінюється — попереджати користувача:
+
+  * *"Усі введені дані буде втрачено, продовжити?"*
+  * Якщо погоджується → очищаємо всі поля форми + всі IG
+
+---
+
+## ✅ 1. JavaScript на зміну `P_TASK_MODE`
+
+```javascript
+apex.item('P_TASK_MODE').setChangeCallback(function() {
+  const hasSubtasks = apex.region('TASK_SUBTASKS_IG_1').widget().interactiveGrid("getViews","grid").model.length > 0;
+  const hasSubtemplates = apex.region('TASK_TEMPLATE_SUBTASKS_IG').widget().interactiveGrid("getViews","grid").model.length > 0;
+
+  if (hasSubtasks || hasSubtemplates) {
+    apex.message.alert("Перед зміною типу завдання необхідно видалити всі підзавдання або підшаблони.");
+    $s("P_TASK_MODE", $v("P_TASK_MODE")); // скасовуємо зміну
+    return false;
+  }
+
+  apex.confirm("Усі дані буде очищено. Продовжити?", {
+    title: "Підтвердження",
+    callback: function(yes) {
+      if (yes) {
+        clearTaskFormFields();
+      } else {
+        $s("P_TASK_MODE", $v("P_TASK_MODE")); // відкат
+      }
+    }
+  });
+});
+```
+
+---
+
+## ✅ 2. Функція очищення полів
+
+```javascript
+function clearTaskFormFields() {
+  const fieldsToClear = [
+    'P_TASK_CONTENT', 'P_NOTE', 'P_PLANNING_DATE_START', 'P_PLANNING_DATE_END',
+    'P_PERIOD_MODE', 'P_PERIOD_INTERVAL', 'P_PERIOD_TIME', 'P_WEEKLY_DAYS',
+    'P_WEEKLY_TIME', 'P_DATE_END', 'P_TYPE_ID', 'P_UNIT', 'P_TASK_ID', 'P_TEMPLATE_ID'
+  ];
+
+  fieldsToClear.forEach(item => $s(item, ""));
+
+  // Очистити підзавдання/підшаблони
+  apex.region('TASK_SUBTASKS_IG_1').widget().interactiveGrid("getActions").invoke("reset");
+  apex.region('TASK_TEMPLATE_SUBTASKS_IG').widget().interactiveGrid("getActions").invoke("reset");
+}
+```
+
+---
+
+## ✅ 3. Динамічне `Disable` перемикача
+
+У динамічному дії (на `Page Load` і `Refresh IG`) перевірити:
+
+```javascript
+const igTask = apex.region('TASK_SUBTASKS_IG_1').widget().interactiveGrid("getViews", "grid").model;
+const igTemplate = apex.region('TASK_TEMPLATE_SUBTASKS_IG').widget().interactiveGrid("getViews", "grid").model;
+
+const hasRecords = igTask.length > 0 || igTemplate.length > 0;
+apex.item('P_TASK_MODE').setDisabled(hasRecords);
+apex.item('P_TASK_TYPE').setDisabled(hasRecords);
+```
+
+---
+
+## 🔔 Підсумок:
+
+| Мета                                              | Реалізовано                |
+| ------------------------------------------------- | -------------------------- |
+| ❌ Уникнення зайвого `nextval`                     | ✅ Через lazy ID generation |
+| 🧹 Очищення форми при перемиканні типу            | ✅ confirm + clearFields()  |
+| 🔒 Блокування зміни типу при наявності підзавдань | ✅ Автоматичне disable      |
+| 🔃 Можливість легко оновити                       | ✅ Модульна логіка          |
+
+---
+
+🔧 Хочеш — можу допомогти зробити `apex.message.dialog` замість `confirm`, для красивішого повідомлення. Потрібно?

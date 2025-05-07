@@ -1,0 +1,61 @@
+Щоб **очищати поля при перемиканні `P_PERIOD_MODE` або `P_SELECT_TASK_TYPE`**, в Oracle APEX ти можеш зробити це через **Dynamic Action → Execute JavaScript Code**, у якому явно викликаєш `apex.item(...).setValue('')`.
+
+---
+
+## ✅ Приклад: очищення прихованих полів при зміні `P_PERIOD_MODE`
+
+### 🔹 Dynamic Action:
+
+* **Name**: `Clear Hidden Fields on PERIOD_MODE change`
+* **Event**: `Change`
+* **Selection Type**: `Item`
+* **Item**: `P_PERIOD_MODE`
+* **True Action**: `Execute JavaScript Code`
+
+### 🔹 Код:
+
+```js
+const mode = $v('P_PERIOD_MODE');
+
+if (mode === 'WEEKLY_TIME_SCHEDULE') {
+  // Очистити поля з іншого режиму
+  apex.item('P_PERIOD_INTERVAL').setValue('');
+  apex.item('P_HOURLY_TIMES').setValue('');
+} else if (mode === 'INTERVAL_DAYS_MULTITIME') {
+  apex.item('P_WEEKLY_DAYS').setValue([]);
+  apex.item('P_PERIOD_TIME').setValue('');
+}
+```
+
+> 🧠 `setValue([])` для `Checkbox Group` або `Multi-Select`
+> `setValue('')` — для text item, textarea, time item
+
+---
+
+## ✅ Приклад: очищення TEXTAREA при виборі розширеного типу завдання
+
+### 🔹 Dynamic Action:
+
+* **Name**: `Clear Textarea on Extended Task Type`
+* **Event**: `Change`
+* **Item**: `P_SELECT_TASK_TYPE`
+* **True Action**: `Execute JavaScript Code`
+
+### 🔹 Код:
+
+```js
+if ($v('P_SELECT_TASK_TYPE') === '1') {
+  apex.item('P_TASK_TEXTAREA').setValue('');
+}
+```
+
+---
+
+## 💡 Додатково: якщо поля очищуються разом із приховуванням
+
+* У `True Action → Hide` ти можеш створити **другу дію `Execute JavaScript Code`** одразу після неї, яка очищає ці поля.
+* Це гнучкіше, якщо не хочеш контролювати логіку вручну.
+
+---
+
+🔔 Хочеш, щоб я згенерував конкретно під твої поля повний код `updateVisibilityAndClear()` — універсальну JS-функцію, яку можна викликати в `Page Load` та на події `Change`?

@@ -1,0 +1,140 @@
+Ось як реалізувати твій функціонал **після створення завдання або шаблону** — автоматичне відкриття наступної модальної сторінки для заповнення виконавців:
+
+---
+
+## ✅ 1. Змінити `INSERT_TASK` або `INSERT_TEMPLATE`
+
+У процесі вставки завдання/шаблону (на сторінці 5) потрібно:
+
+1. Записати завдання/шаблон.
+2. Отримати `TASK_ID` (через `RETURNING`).
+3. Згенерувати URL на сторінку 7 з передачею `TASK_ID`.
+4. Повернути цей URL у JSON.
+
+### 🔧 Код `PL/SQL Process` (наприклад, `CREATE_TASK_AND_REDIRECT`):
+
+```plsql
+DECLARE
+  v_new_id TASKS.ID%TYPE;
+  v_url    VARCHAR2(4000);
+BEGIN
+  -- 1. Створюємо завдання
+  INSERT INTO TASKS (
+    ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+    PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+    PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+  ) VALUES (
+    TASKS_SEQ.NEXTVAL,
+    SYSDATE,
+    :P5_TASK_CONTENT,
+    :APP_USER,
+    TO_DATE(:P5_DATE1, 'DD.MM.YYYY HH24:MI'),
+    TO_DATE(:P5_DATE2, 'DD.MM.YYYY HH24:MI'),
+    1, :P5_DEPARTMENT_ID, :P5_UNIT_ID, :P5_SELECT_TASK_TYPE,
+    NULL, 0, NULL, NULL, :P5_NOTE
+  )
+  RETURNING ID INTO v_new_id;
+
+  -- 2. Формуємо URL для сторінки 7
+  v_url := apex_page.get_url (
+    p_page        => 7,
+    p_clear_cache => '7',
+    p_items       => 'P7_TASK_ID',
+    p_values      => v_new_id,
+    p_request     => 'DIALOG'
+  );
+
+  -- 3. Повертаємо як JSON
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.WRITE('url', v_url);
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ 2. Виклик Ajax з JavaScript та відкриття сторінки
+
+### 🔹 На кнопку `CREATE TASK` додай `Dynamic Action`:
+
+* Event: `Click`
+* True Action: **Execute JavaScript Code**:
+
+```js
+apex.server.process("CREATE_TASK_AND_REDIRECT", {
+  pageItems: "#P5_TASK_CONTENT, #P5_DATE1, #P5_DATE2, #P5_NOTE, #P5_UNIT_ID, #P5_DEPARTMENT_ID, #P5_SELECT_TASK_TYPE"
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === 'ok') {
+      apex.navigation.dialog(pData.url, {
+        title: "Додавання виконавців",
+        height: "auto",
+        width: "800",
+        modal: true
+      });
+    } else {
+      apex.message.alert("Помилка: " + (pData.message || "невідомо"));
+    }
+  },
+  error: function() {
+    apex.message.alert("Помилка при створенні завдання.");
+  }
+});
+```
+
+---
+
+## ✅ 3. Сторінка 7 — `Before Header Process`: вставка записів у `SIGNATURERIGHTS`
+
+```plsql
+BEGIN
+  -- Stage 1
+  INSERT INTO SIGNATURERIGHTS (
+    TASK_ID, POSITION_ID, DEPARTMENT_ID, UNIT_ID, USER_ID,
+    STAGE_ID, SORT_ORDER, SUBTASK_ID, SHIFT_GROUP_ID, SHIFT_TIME_ID
+  ) VALUES (
+    :P7_TASK_ID,
+    :P0_POSITION_ID,
+    :P0_DEPARTMENT_ID,
+    :P0_UNIT_ID,
+    :P0_USER_ID,
+    1,
+    1,
+    NULL,
+    NULL,
+    NULL
+  );
+
+  -- Stage 3
+  INSERT INTO SIGNATURERIGHTS (
+    TASK_ID, POSITION_ID, DEPARTMENT_ID, UNIT_ID, USER_ID,
+    STAGE_ID, SORT_ORDER, SUBTASK_ID, SHIFT_GROUP_ID, SHIFT_TIME_ID
+  ) VALUES (
+    :P7_TASK_ID,
+    :P0_POSITION_ID,
+    :P0_DEPARTMENT_ID,
+    :P0_UNIT_ID,
+    :P0_USER_ID,
+    3,
+    1,
+    NULL,
+    NULL,
+    NULL
+  );
+END;
+```
+
+> 🔔 Можеш поставити `Server Side Condition: P7_TASK_ID is not null`, щоб не вставлялось зайвого.
+
+---
+
+🔄 Хочеш — можу допомогти також автоматично закривати сторінку 7 після заповнення й робити `refresh` на головній. Хочеш додати?

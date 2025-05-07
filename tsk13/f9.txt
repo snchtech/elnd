@@ -1,0 +1,80 @@
+Ось як реалізувати функціонал кнопки **"В архів" (анулювати завдання/шаблон)** на сторінці перегляду картки:
+
+---
+
+## ✅ 1. Додай кнопку `ARCHIVE_TASK`
+
+* **Condition**: `P_TASK_ACTION_MODE = 0` (тобто тільки в режимі перегляду)
+* Можеш зробити її як `Button Template: Icon + Label` (наприклад, архівна коробка 🗃️)
+
+---
+
+## ✅ 2. Створи серверний `PL/SQL Process`
+
+Назва: `ARCHIVE_TASK_PROCESS`
+**Condition: When Button Pressed = ARCHIVE\_TASK**
+
+```plsql
+DECLARE
+  v_mode NUMBER := TO_NUMBER(:P_TASK_MODE);
+  v_id   NUMBER := TO_NUMBER(:P_TASK_ID);
+BEGIN
+  -- 1. Оновлюємо SIGNATUREHISTORY
+  FOR r IN (
+    SELECT h.ID
+    FROM SIGNATURERIGHTS s
+    JOIN SIGNATUREHISTORY h ON h.SIGNRIGHT_ID = s.ID
+    WHERE s.TASK_ID = v_id
+      AND (h.SIGNER_BY IS NULL OR h.SIGNER_DATE IS NULL)
+  ) LOOP
+    UPDATE SIGNATUREHISTORY
+    SET SIGNER_BY   = :P0_USER_ID,
+        SIGNER_DATE = SYSDATE,
+        NEW_STATUS_ID = 11,
+        NOTE = 'Анульовано',
+        SDATE = SYSDATE
+    WHERE ID = r.ID;
+  END LOOP;
+
+  -- 2. Оновлюємо статус завдання або шаблону
+  IF v_mode = 0 THEN
+    UPDATE TASKS SET STATUS_ID = 11 WHERE ID = v_id;
+  ELSIF v_mode = 1 THEN
+    UPDATE TASK_TEMPLATES SET STATUS_ID = 11 WHERE ID = v_id;
+  END IF;
+
+  -- ✅ Повідомлення
+  apex_message.add_message(p_message => 'Запис анульовано та переміщено в архів.', p_type => apex_message.c_success);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при архівації: ' || SQLERRM);
+END;
+```
+
+---
+
+## ✅ 3. Optional: Після анулювання закрити діалог і оновити звіт (якщо це відкривалося з модалки)
+
+* Додай ще один процес **Close Dialog** після `ARCHIVE_TASK_PROCESS`:
+
+  * **Condition**: When Button Pressed = `ARCHIVE_TASK`
+  * **Return Value**: `'archived'`
+
+* На головній сторінці зроби **Dynamic Action → Dialog Closed**
+
+  * Client-side Condition:
+
+    ```js
+    this.data.dialogReturn === 'archived'
+    ```
+  * True Action: `Refresh` → Region → `mainReport`
+  * True Action 2: `Execute JavaScript Code`:
+
+    ```js
+    apex.message.showPageSuccess("✅ Завдання/шаблон анульовано");
+    ```
+
+---
+
+Хочеш — можу допомогти оформити підтвердження перед анулюванням (через `apex.confirm(...)`) чи зробити це все з JS-викликом. Потрібно?

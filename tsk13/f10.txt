@@ -1,0 +1,139 @@
+Добре! 👇 Давай допрацюємо кнопку **"В архів"**, щоб перед анулюванням було підтвердження, і тільки після підтвердження виконувався `AJAX Callback`:
+
+---
+
+## ✅ 1. Кнопка `ARCHIVE_TASK`
+
+* **Button Name**: `ARCHIVE_TASK`
+* **Action**: `Defined by Dynamic Action`
+* **Condition**: `:P_TASK_ACTION_MODE = 0`
+
+---
+
+## ✅ 2. Додай `Dynamic Action`:
+
+**Назва:** `Archive Task Confirm`
+
+* **Event**: Click
+* **Selection Type**: Button
+* **Button**: `ARCHIVE_TASK`
+
+---
+
+### 🔹 True Action 1: `Execute JavaScript Code`
+
+```js
+apex.confirm("Ви впевнені, що хочете анулювати це завдання/шаблон?", {
+  title: "Підтвердження",
+  buttonLabels: {
+    ok: "Анулювати",
+    cancel: "Скасувати"
+  },
+  callback: function (confirmed) {
+    if (confirmed) {
+      apex.server.process("ARCHIVE_TASK_PROCESS", {
+        x01: $v('P_TASK_ID'),
+        x02: $v('P_TASK_MODE')
+      }, {
+        dataType: "json",
+        success: function(pData) {
+          if (pData.status === 'ok') {
+            apex.message.showPageSuccess(pData.message || "Успішно анульовано");
+            apex.navigation.dialogClose("archived"); // Закриває вікно
+          } else {
+            apex.message.alert(pData.message || "Помилка при анулюванні.");
+          }
+        },
+        error: function() {
+          apex.message.alert("❌ Серверна помилка при анулюванні.");
+        }
+      });
+    }
+  }
+});
+```
+
+---
+
+## ✅ 3. Серверний процес `ARCHIVE_TASK_PROCESS`
+
+**Type**: `PL/SQL anonymous block`
+**Execution Name**: `ARCHIVE_TASK_PROCESS`
+**Called via**: `Ajax Callback` (❗️не кнопкою)
+
+```plsql
+DECLARE
+  v_task_id  NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01);
+  v_mode     NUMBER := TO_NUMBER(APEX_APPLICATION.G_X02);
+BEGIN
+  -- 1. SIGNATUREHISTORY оновлення
+  FOR r IN (
+    SELECT h.ID
+    FROM SIGNATURERIGHTS s
+    JOIN SIGNATUREHISTORY h ON h.SIGNRIGHT_ID = s.ID
+    WHERE s.TASK_ID = v_task_id
+      AND (h.SIGNER_BY IS NULL OR h.SIGNER_DATE IS NULL)
+  ) LOOP
+    UPDATE SIGNATUREHISTORY
+    SET SIGNER_BY   = :P0_USER_ID,
+        SIGNER_DATE = SYSDATE,
+        NEW_STATUS_ID = 11,
+        NOTE = 'Анульовано',
+        SDATE = SYSDATE
+    WHERE ID = r.ID;
+  END LOOP;
+
+  -- 2. Оновлення статусу
+  IF v_mode = 0 THEN
+    UPDATE TASKS SET STATUS_ID = 11 WHERE ID = v_task_id;
+  ELSIF v_mode = 1 THEN
+    UPDATE TASK_TEMPLATES SET STATUS_ID = 11 WHERE ID = v_task_id;
+  END IF;
+
+  -- 3. JSON Response
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.WRITE('message', '✅ Запис анульовано та перенесено в архів');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## ✅ 4. На батьківській сторінці (де `mainReport`)
+
+Створи `Dynamic Action`:
+
+* **Event**: `Dialog Closed`
+
+* **Client-Side Condition**:
+
+  ```js
+  this.data.dialogReturn === 'archived'
+  ```
+
+* **True Action 1**: Refresh Region → `mainReport`
+
+* **True Action 2**: Execute JS
+
+```js
+apex.message.showPageSuccess("✅ Завдання/шаблон успішно анульовано");
+```
+
+---
+
+🔔 Готово! Отримали:
+
+* ✅ Кнопку з підтвердженням
+* 🛠 Обробку через `AJAX`
+* 🔄 Автоматичне закриття модального вікна
+* 🔃 Оновлення списку завдань
+
+Хочеш, щоб я показав, як **анулювати шаблон** при відкритті картки на окремій сторінці без діалогу?

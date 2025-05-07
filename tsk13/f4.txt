@@ -1,0 +1,56 @@
+Щоб змінити **порядок елементів у select list** в Oracle APEX, потрібно змінити SQL для LOV (List of Values) так, щоб враховувався **порядок сортування**.
+
+---
+
+## ✅ Приклад SQL, який виведе:
+
+```
+1 - text 1  
+2 - text 2  
+0 - text 3
+```
+
+```sql
+SELECT unit_name || ' - ' || unit_text AS display_value,
+       unit_id AS return_value
+FROM your_unit_table
+ORDER BY 
+  CASE unit_id 
+    WHEN 0 THEN 99         -- 0 відправляємо в кінець
+    ELSE unit_id
+  END
+```
+
+> 🔸 Тут `unit_id = 0` буде йти останнім, а інші — за зростанням.
+
+---
+
+## 🔁 Альтернатива без таблиці:
+
+Якщо це LOV Static або SQL-запит типу:
+
+```sql
+SELECT 'text 3', 0 FROM DUAL
+UNION ALL
+SELECT 'text 1', 1 FROM DUAL
+UNION ALL
+SELECT 'text 2', 2 FROM DUAL
+```
+
+Можна переписати з кастомною сортировкою:
+
+```sql
+SELECT label, val
+FROM (
+  SELECT 'text 1' AS label, 1 AS val, 1 AS ord FROM dual
+  UNION ALL
+  SELECT 'text 2', 2, 2 FROM dual
+  UNION ALL
+  SELECT 'text 3', 0, 3 FROM dual
+)
+ORDER BY ord
+```
+
+---
+
+Хочеш — підкажу, як застосувати це в Shared LOV або прямо в SQL-запиті для item.

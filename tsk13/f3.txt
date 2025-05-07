@@ -1,0 +1,85 @@
+Ось повна **універсальна JavaScript-функція `updateVisibilityAndClear()`**, яка:
+
+* 🔄 Перемикає видимість полів у залежності від `P_PERIOD_MODE` та `P_SELECT_TASK_TYPE`
+* ❌ Очищає значення полів, які приховуються
+* ✅ Працює і при `Page Load`, і при `Change`
+
+---
+
+## ✅ Повна функція `updateVisibilityAndClear()`
+
+```javascript
+function updateVisibilityAndClear() {
+  const periodMode = $v('P_PERIOD_MODE');            // Режим періодичності
+  const taskType = $v('P_SELECT_TASK_TYPE');         // Тип завдання: 0 — просте, 1 — розширене
+
+  // === Обробка P_PERIOD_MODE ===
+  if (periodMode === 'WEEKLY_TIME_SCHEDULE') {
+    // Показуємо поля для тижневого режиму
+    apex.item('P_WEEKLY_DAYS').show();
+    apex.item('P_PERIOD_TIME').show();
+
+    // Ховаємо і очищаємо поля іншого режиму
+    apex.item('P_PERIOD_INTERVAL').hide();
+    apex.item('P_HOURLY_TIMES').hide();
+    apex.item('P_PERIOD_INTERVAL').setValue('');
+    apex.item('P_HOURLY_TIMES').setValue([]);
+
+  } else if (periodMode === 'INTERVAL_DAYS_MULTITIME') {
+    // Показуємо поля для режиму з інтервалами
+    apex.item('P_PERIOD_INTERVAL').show();
+    apex.item('P_HOURLY_TIMES').show();
+
+    // Ховаємо і очищаємо поля WEEKLY
+    apex.item('P_WEEKLY_DAYS').hide();
+    apex.item('P_PERIOD_TIME').hide();
+    apex.item('P_WEEKLY_DAYS').setValue([]);
+    apex.item('P_PERIOD_TIME').setValue('');
+  }
+
+  // === Обробка P_SELECT_TASK_TYPE ===
+  if (taskType === '1') {
+    // Якщо розширене — ховаємо textarea і очищаємо
+    apex.item('P_TASK_TEXTAREA').hide();
+    apex.item('P_TASK_TEXTAREA').setValue('');
+  } else {
+    apex.item('P_TASK_TEXTAREA').show();
+  }
+}
+```
+
+---
+
+## ✅ Як застосувати
+
+### 🔹 1. **Page Load**
+
+* Event: `Page Load`
+* Action: `Execute JavaScript Code`
+* Code:
+
+```js
+updateVisibilityAndClear();
+```
+
+---
+
+### 🔹 2. **Change → для P\_PERIOD\_MODE**
+
+* Event: `Change`
+* Selection: Item `P_PERIOD_MODE`
+* Action: `Execute JavaScript Code` → `updateVisibilityAndClear();`
+
+---
+
+### 🔹 3. **Change → для P\_SELECT\_TASK\_TYPE**
+
+* Event: `Change`
+* Selection: Item `P_SELECT_TASK_TYPE`
+* Action: `Execute JavaScript Code` → `updateVisibilityAndClear();`
+
+---
+
+📌 За потреби, ти можеш додати до цієї функції ще й логіку `required`, якщо хочеш централізовано керувати і обов’язковістю полів.
+
+Хочеш — я можу об’єднати цю функцію з `updateRequired()` з попередніх відповідей.

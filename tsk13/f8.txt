@@ -1,0 +1,105 @@
+Щоб при відкритті сторінки (наприклад, 5 або 6) **автоматично заповнювати форму з БД** для перегляду (`P_TASK_ACTION_MODE = 0`) або редагування (`= 2`), потрібно:
+
+---
+
+## ✅ Крок 1: Створити `PL/SQL Process` у `Before Header`
+
+### 🔹 Назва: `FETCH_TASK_OR_TEMPLATE_DATA`
+
+**Умови запуску**:
+
+* `Server-side Condition`:
+  `Expression 1`: `:P_TASK_ACTION_MODE`
+  `Expression 2`: `0`
+  `Condition Type`: `IN LIST`
+  (з вказанням `0,2`) або використати `INSTR('0,2', :P_TASK_ACTION_MODE) > 0`
+
+---
+
+### 🔹 Код:
+
+```plsql
+BEGIN
+  IF :P_TASK_MODE = '0' THEN
+    -- Завдання з TASKS
+    SELECT
+      TASK_CONTENT,
+      PLANNING_DATE_START,
+      PLANNING_DATE_END,
+      TYPE_ID,
+      UNIT_ID,
+      NOTE
+    INTO
+      :P_TASK_CONTENT,
+      :P_PLANNING_DATE_START,
+      :P_PLANNING_DATE_END,
+      :P_TYPE_ID,
+      :P_UNIT,
+      :P_NOTE
+    FROM TASKS
+    WHERE ID = :P_TASK_ID;
+
+  ELSIF :P_TASK_MODE = '1' THEN
+    -- Шаблон з TASK_TEMPLATES
+    SELECT
+      TASK_CONTENT,
+      TYPE_ID,
+      UNIT_ID,
+      NOTE,
+      PERIOD_MODE,
+      PERIOD_INTERVAL,
+      PERIOD_TIME,
+      WEEKLY_DAYS,
+      WEEKLY_TIME,
+      DATE_END
+    INTO
+      :P_TASK_CONTENT,
+      :P_TYPE_ID,
+      :P_UNIT,
+      :P_NOTE,
+      :P_PERIOD_MODE,
+      :P_PERIOD_INTERVAL,
+      :P_PERIOD_TIME,
+      :P_WEEKLY_DAYS,
+      :P_WEEKLY_TIME,
+      :P_DATE_END
+    FROM TASK_TEMPLATES
+    WHERE ID = :P_TASK_ID;
+  END IF;
+END;
+```
+
+---
+
+## ✅ Крок 2: Налаштування Item'ів
+
+* Всі `P_...` item мають:
+
+  * **Value Protected** = `No` (щоб дозволити змінювати значення з PL/SQL)
+  * **Source Type** = `Always Null` або `Static Assignment` (якщо ти не хочеш, щоб воно заповнювалося автоматично через source)
+  * **Display Only** = `Yes` (в режимі перегляду `P_TASK_ACTION_MODE = 0`)
+  * **Read Only** = `No` (щоб можна було переписати значення з PL/SQL)
+
+---
+
+## ✅ Крок 3: Робота з LOV (наприклад `P_UNIT`)
+
+Ти вже зазначив, що `P_UNIT` — це select list з `return_value = UNIT_ID`, `display = UNIT_NAME`.
+Якщо `UNIT_ID` встановлено через `:P_UNIT := ...`, то APEX автоматично покаже `UNIT_NAME`.
+
+❗️ **Головне** — переконайся, що:
+
+* `Display Extra Values = Yes` у P\_UNIT
+* `LOV` містить значення, які реально існують в базі
+
+---
+
+## 📌 Результат:
+
+* Якщо відкривається сторінка в режимі `P_TASK_ACTION_MODE = 2 або 0`
+* І `P_TASK_MODE = 0 → TASK`, або `1 → TEMPLATE`
+* Тоді всі поля заповнюються з потрібної таблиці
+
+---
+
+🔔 Хочеш — я можу допомогти додати захист, щоб не відкривалася сторінка без `P_TASK_ID`, або повідомлення, якщо запис не знайдено. Потрібно?

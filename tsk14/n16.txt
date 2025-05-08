@@ -1,0 +1,144 @@
+Ось **універсальний серверний процес `SAVE_SUBITEMS_FROM_COLLECTION`**, який:
+
+* Перевіряє `:P_TASK_MODE`
+* Обробляє:
+
+  * Колекцію `TASK_SUBTASKS_COLLECTION` якщо `:P_TASK_MODE = 0`
+  * Колекцію `TASK_TEMPLATE_SUBTASKS_COLLECTION` якщо `:P_TASK_MODE = 1`
+* Працює з усіма трьома статусами: `NEW`, `EXISTING`, `DELETED`
+
+---
+
+## ✅ Код процесу `SAVE_SUBITEMS_FROM_COLLECTION`
+
+```plsql
+DECLARE
+  v_id NUMBER;
+BEGIN
+  IF :P_TASK_MODE = '0' THEN
+    -- 🔹 INSERT для TASK_SUBTASKS
+    FOR r IN (
+      SELECT c001, c003, c008, c009
+      FROM apex_collections
+      WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+        AND c010 = 'NEW'
+    ) LOOP
+      INSERT INTO TASK_SUBTASKS (
+        TASK_ID,
+        SUBTASK_CONTENT,
+        PLANNING_DATE_END,
+        PARENT_ID,
+        SUBTASK_ORDER,
+        STATUS_ID
+      ) VALUES (
+        :P_TASK_ID,
+        r.c001,
+        TO_DATE(r.c003, 'YYYY-MM-DD HH24:MI:SS'),
+        TO_NUMBER(r.c009),
+        TO_NUMBER(r.c008),
+        1
+      )
+      RETURNING ID INTO v_id;
+    END LOOP;
+
+    -- 🔹 UPDATE
+    FOR r IN (
+      SELECT c001, c002, c003, c008, c009
+      FROM apex_collections
+      WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+        AND c010 = 'EXISTING'
+        AND c002 IS NOT NULL
+    ) LOOP
+      UPDATE TASK_SUBTASKS
+      SET
+        SUBTASK_CONTENT    = r.c001,
+        PLANNING_DATE_END  = TO_DATE(r.c003, 'YYYY-MM-DD HH24:MI:SS'),
+        PARENT_ID          = TO_NUMBER(r.c009),
+        SUBTASK_ORDER      = TO_NUMBER(r.c008)
+      WHERE ID = TO_NUMBER(r.c002);
+    END LOOP;
+
+    -- 🔹 DELETE
+    FOR r IN (
+      SELECT c002
+      FROM apex_collections
+      WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+        AND c010 = 'DELETED'
+        AND c002 IS NOT NULL
+    ) LOOP
+      DELETE FROM TASK_SUBTASKS WHERE ID = TO_NUMBER(r.c002);
+    END LOOP;
+
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+  ELSIF :P_TASK_MODE = '1' THEN
+    -- 🔹 INSERT для TASK_TEMPLATE_SUBTASKS
+    FOR r IN (
+      SELECT c001, c008, c009
+      FROM apex_collections
+      WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+        AND c010 = 'NEW'
+    ) LOOP
+      INSERT INTO TASK_TEMPLATE_SUBTASKS (
+        TEMPLATE_ID,
+        SUBTASK_CONTENT,
+        STATUS_ID,
+        PARENT_ID,
+        SUBTASK_ORDER
+      ) VALUES (
+        :P_TEMPLATE_ID,
+        r.c001,
+        1,
+        TO_NUMBER(r.c009),
+        TO_NUMBER(r.c008)
+      )
+      RETURNING ID INTO v_id;
+    END LOOP;
+
+    -- 🔹 UPDATE
+    FOR r IN (
+      SELECT c001, c002, c008, c009
+      FROM apex_collections
+      WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+        AND c010 = 'EXISTING'
+        AND c002 IS NOT NULL
+    ) LOOP
+      UPDATE TASK_TEMPLATE_SUBTASKS
+      SET
+        SUBTASK_CONTENT    = r.c001,
+        PARENT_ID          = TO_NUMBER(r.c009),
+        SUBTASK_ORDER      = TO_NUMBER(r.c008)
+      WHERE ID = TO_NUMBER(r.c002);
+    END LOOP;
+
+    -- 🔹 DELETE
+    FOR r IN (
+      SELECT c002
+      FROM apex_collections
+      WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+        AND c010 = 'DELETED'
+        AND c002 IS NOT NULL
+    ) LOOP
+      DELETE FROM TASK_TEMPLATE_SUBTASKS WHERE ID = TO_NUMBER(r.c002);
+    END LOOP;
+
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_TEMPLATE_SUBTASKS_COLLECTION');
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при збереженні підзаписів: ' || SQLERRM);
+END;
+```
+
+---
+
+## 🧩 Де викликати?
+
+* **Після збереження** основного запису (завдання або шаблону)
+* Можеш вставити цей процес як `After Submit`, `Processing Point: After Submit` → після INSERT/UPDATE завдання/шаблону
+
+---
+
+## 🔄 Наступні кроки:
+
+✅ Хочеш, я підготую приклад **відкриття форми редагування підзапису з колекції**, або **відображення ієрархії з колекції в IG**?

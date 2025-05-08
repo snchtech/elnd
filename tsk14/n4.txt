@@ -1,0 +1,108 @@
+Ось **повністю готовий універсальний код**, який реалізує твою логіку для `P_TASK_MODE` (режим "Завдання" / "Шаблон"):
+
+---
+
+## ✅ 1. CSS (додай у Inline CSS або `Static Application Files`)
+
+```css
+.switch-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: not-allowed;
+  z-index: 10;
+}
+```
+
+---
+
+## ✅ 2. JavaScript (динамічна перевірка і управління)
+
+### 🔸 Додай як **Dynamic Action → Page Load → Execute JavaScript Code**:
+
+```javascript
+function clearTaskFormFields() {
+  const itemsToClear = [
+    'P_TASK_CONTENT', 'P_NOTE', 'P_PLANNING_DATE_START', 'P_PLANNING_DATE_END',
+    'P_PERIOD_MODE', 'P_PERIOD_INTERVAL', 'P_PERIOD_TIME', 'P_WEEKLY_DAYS',
+    'P_WEEKLY_TIME', 'P_DATE_END', 'P_TYPE_ID', 'P_UNIT', 'P_TASK_ID', 'P_TEMPLATE_ID'
+  ];
+  itemsToClear.forEach(id => $s(id, ""));
+
+  apex.region('TASK_SUBTASKS_IG_1')?.widget()?.interactiveGrid("getActions").invoke("reset");
+  apex.region('TASK_TEMPLATE_SUBTASKS_IG')?.widget()?.interactiveGrid("getActions").invoke("reset");
+
+  // Оновлення зовнішнього вигляду
+  apex.event.trigger(document, "task_mode_reset");
+}
+
+// Додаємо overlay
+(function addSwitchOverlay() {
+  const switchItem = document.querySelector('#P_TASK_MODE');
+  if (!switchItem) return;
+
+  const wrapper = switchItem.closest('.t-Form-fieldContainer');
+  if (!wrapper) return;
+
+  // Уникаємо дублювання
+  if (wrapper.querySelector('.switch-overlay')) return;
+
+  wrapper.style.position = 'relative';
+
+  const overlay = document.createElement('span');
+  overlay.className = 'switch-overlay';
+  overlay.title = 'Змінити режим можна лише після очищення даних';
+  wrapper.appendChild(overlay);
+
+  overlay.addEventListener('click', function () {
+    const hasSubtasks = apex.region('TASK_SUBTASKS_IG_1')?.widget()?.interactiveGrid("getViews", "grid").model.length > 0;
+    const hasSubtemplates = apex.region('TASK_TEMPLATE_SUBTASKS_IG')?.widget()?.interactiveGrid("getViews", "grid").model.length > 0;
+
+    if (hasSubtasks || hasSubtemplates) {
+      apex.message.alert("Спочатку видаліть усі підзавдання або підшаблони перед зміною типу.");
+      return;
+    }
+
+    // Перевірка, чи є заповнені поля
+    const filled = ['P_TASK_CONTENT', 'P_NOTE', 'P_UNIT', 'P_TYPE_ID'].some(id => $v(id) && $v(id).trim() !== '');
+
+    if (filled) {
+      apex.message.confirm("Усі введені дані буде очищено. Ви впевнені?", function (okPressed) {
+        if (okPressed) {
+          clearTaskFormFields();
+          overlay.remove(); // Знімаємо блок
+          const newValue = $v("P_TASK_MODE") === '0' ? '1' : '0';
+          $s("P_TASK_MODE", newValue);
+        }
+      });
+    }
+  });
+})();
+```
+
+---
+
+## 🧪 Перевірка, що отримаєш:
+
+| Ситуація       | Що побачить користувач             |
+| -------------- | ---------------------------------- |
+| Є підзавдання  | Попередження: видаліть підзавдання |
+| Заповнені поля | Confirm → Очистити → Перемикнути   |
+| Все чисто      | Нічого не блокується               |
+
+---
+
+## 🛠 Порада:
+
+Можеш також викликати `addSwitchOverlay()` вручну після `reset` форми — якщо хочеш повертати блокування після повторного редагування.
+
+---
+
+🔁 Хочеш — можу ще додати:
+
+* Обробку `readonly` стану
+* Рендер повідомлення прямо під перемикачем у стилі APEX
+
+Готовий допомогти далі!

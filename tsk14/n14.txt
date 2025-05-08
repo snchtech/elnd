@@ -1,0 +1,99 @@
+Окей! Ось **повний код процесу `SAVE_TASK_SUBTASKS_FROM_COLLECTION`**, який:
+
+* Вставляє `NEW` записи з колекції
+* Оновлює `EXISTING` записи
+* Видаляє `DELETED` записи
+* В кінці **очищає колекцію**
+
+---
+
+## ✅ PL/SQL процес: `SAVE_TASK_SUBTASKS_FROM_COLLECTION`
+
+```plsql
+DECLARE
+  v_id NUMBER;
+BEGIN
+  -- ✅ INSERT нових записів
+  FOR r IN (
+    SELECT 
+      c001 AS subtask_content,
+      c003 AS planning_date_end,
+      c008 AS subtask_order,
+      c009 AS parent_id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+      AND c010 = 'NEW'
+  ) LOOP
+    INSERT INTO TASK_SUBTASKS (
+      TASK_ID,
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      STATUS_ID
+    ) VALUES (
+      :P_TASK_ID,
+      r.subtask_content,
+      TO_DATE(r.planning_date_end, 'YYYY-MM-DD HH24:MI:SS'),
+      TO_NUMBER(r.parent_id),
+      TO_NUMBER(r.subtask_order),
+      1 -- або інший статус за замовчуванням
+    )
+    RETURNING ID INTO v_id;
+  END LOOP;
+
+  -- ✅ UPDATE існуючих записів
+  FOR r IN (
+    SELECT
+      c002 AS id,
+      c001 AS subtask_content,
+      c003 AS planning_date_end,
+      c008 AS subtask_order,
+      c009 AS parent_id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+      AND c010 = 'EXISTING'
+      AND c002 IS NOT NULL
+  ) LOOP
+    UPDATE TASK_SUBTASKS
+    SET
+      SUBTASK_CONTENT    = r.subtask_content,
+      PLANNING_DATE_END  = TO_DATE(r.planning_date_end, 'YYYY-MM-DD HH24:MI:SS'),
+      SUBTASK_ORDER      = TO_NUMBER(r.subtask_order),
+      PARENT_ID          = TO_NUMBER(r.parent_id)
+    WHERE ID = TO_NUMBER(r.id);
+  END LOOP;
+
+  -- ✅ DELETE видалених записів
+  FOR r IN (
+    SELECT c002 AS id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+      AND c010 = 'DELETED'
+      AND c002 IS NOT NULL
+  ) LOOP
+    DELETE FROM TASK_SUBTASKS
+    WHERE ID = TO_NUMBER(r.id);
+  END LOOP;
+
+  -- ✅ Очистити колекцію
+  APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при збереженні підзавдань: ' || SQLERRM);
+END;
+```
+
+---
+
+## 🧩 Як викликати цей процес?
+
+* Використовуй його:
+
+  * Після натискання на **кнопку "Зберегти завдання"**
+  * У зв'язці з перевіркою `:P_TASK_MODE = 0` (для завдань)
+
+---
+
+🔄 Готовий також показати повну версію для **шаблонів (`TASK_TEMPLATE_SUBTASKS`)** — сказати?

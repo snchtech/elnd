@@ -1,0 +1,106 @@
+Супер! Тепер реалізуємо **додавання дочірнього підзавдання в APEX\_COLLECTIONS**, з урахуванням ієрархії.
+
+---
+
+### 🔧 Загальні принципи:
+
+1. Зберігаємо всі підзавдання в `APEX_COLLECTIONS`, наприклад: `TASK_SUBTASKS_COLLECTION`
+2. Для дочірніх підзавдань зберігаємо посилання на **SEQ\_ID батьківського елемента** (наприклад, у `C009`)
+3. `SUBTASK_ORDER` визначаємо відносно батьківського, наприклад: `3`, `3.1`, `3.1.1`
+
+---
+
+## ✅ Крок 1. Створення Ajax Callback: `ADD_SUBTASK_CHILD`
+
+```plsql
+DECLARE
+  l_task_id   NUMBER := TO_NUMBER(:P5_TASK_ID);
+  l_content   VARCHAR2(4000) := APEX_APPLICATION.G_X01;
+  l_parent_id NUMBER := TO_NUMBER(APEX_APPLICATION.G_X02); -- SEQ_ID в колекції
+  l_parent_order VARCHAR2(100);
+  l_child_index NUMBER;
+  l_subtask_order VARCHAR2(100);
+BEGIN
+  -- Отримуємо SUBTASK_ORDER батьківського елемента
+  SELECT c008
+  INTO l_parent_order
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = l_parent_id;
+
+  -- Рахуємо кількість нащадків у батька
+  SELECT COUNT(*) + 1
+  INTO l_child_index
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND c009 = l_parent_id;
+
+  -- Формуємо новий порядок (SUBTASK_ORDER)
+  l_subtask_order := l_parent_order || '.' || l_child_index;
+
+  -- Додаємо новий дочірній запис
+  APEX_COLLECTION.ADD_MEMBER(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_n001            => l_task_id,
+    p_c001            => l_content,
+    p_c008            => l_subtask_order, -- SUBTASK_ORDER
+    p_c009            => TO_CHAR(l_parent_id), -- зв'язок із батьком (SEQ_ID)
+    p_c010            => 'NEW'
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## 📦 JavaScript для виклику (наприклад, в custom menu)
+
+```javascript
+document.getElementById("menu-add-child-subtask").addEventListener("click", function () {
+  const parentSeqId = this.dataset.seqid;
+  const taskId = $v('P5_TASK_ID'); // або передай окремо
+
+  const content = prompt("Введіть зміст нового підзавдання");
+  if (!content) return;
+
+  apex.server.process("ADD_SUBTASK_CHILD", {
+    x01: content,
+    x02: parentSeqId
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      if (pData.status === "ok") {
+        apex.region("TASK_SUBTASKS_IG_1").refresh();
+      } else {
+        apex.message.alert("❌ Помилка при створенні");
+      }
+    },
+    error: function() {
+      apex.message.alert("❌ Не вдалося підключитися до сервера");
+    }
+  });
+
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+---
+
+## 📊 Додаткові поради:
+
+* `C009` — зв'язок із батьком (вказує на `SEQ_ID` батька)
+* `C008` — SUBTASK\_ORDER
+* Для рендеру в IG можна використовувати рекурсивний CTE на `APEX_COLLECTIONS`, або в JS обчислювати `level`, `indent`, і виводити як `RPAD` чи HTML
+
+---
+
+Хочеш, щоб я показав, **як виводити ієрархічно відсортований список з колекції** для Interactive Grid?

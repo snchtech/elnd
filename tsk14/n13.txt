@@ -1,0 +1,67 @@
+Окей! Покажу, як **оновити записи підзавдань із `APEX_COLLECTION` у таблицю `TASK_SUBTASKS`**, якщо вони мають статус `EXISTING`.
+
+---
+
+## ✅ Частина процесингу: `UPDATE EXISTING` у таблиці
+
+Цей код додається у кінець твого процесу `SAVE_TASK_SUBTASKS_FROM_COLLECTION` після вставки `NEW` та перед очищенням колекції:
+
+```plsql
+-- Оновлюємо EXISTING записи
+FOR r IN (
+  SELECT
+    c002 AS id,
+    c001 AS subtask_content,
+    c003 AS planning_date_end,
+    c008 AS subtask_order,
+    c009 AS parent_id
+  FROM apex_collections
+  WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c010 = 'EXISTING'
+    AND c002 IS NOT NULL -- обов'язково має бути ID запису з БД
+) LOOP
+  UPDATE TASK_SUBTASKS
+  SET
+    SUBTASK_CONTENT    = r.subtask_content,
+    PLANNING_DATE_END  = TO_DATE(r.planning_date_end, 'YYYY-MM-DD HH24:MI:SS'),
+    SUBTASK_ORDER      = TO_NUMBER(r.subtask_order),
+    PARENT_ID          = TO_NUMBER(r.parent_id)
+  WHERE ID = r.id;
+END LOOP;
+```
+
+> ⚠️ `TO_DATE(...)` і `TO_NUMBER(...)` потрібні, якщо поля зберігаються у колекції як текст (що зазвичай так і є).
+
+---
+
+## 🧠 Пояснення атрибутів у `APEX_COLLECTION`
+
+* `C001` — SUBTASK\_CONTENT
+* `C002` — ID (якщо вже є в БД)
+* `C003` — PLANNING\_DATE\_END
+* `C008` — SUBTASK\_ORDER
+* `C009` — PARENT\_ID
+* `C010` — статус запису (`NEW`, `EXISTING`, `DELETED`)
+
+---
+
+## ✅ Після оновлення
+
+> У кінці **очищай колекцію**, тільки **після всіх insert / update / delete**:
+
+```plsql
+APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+```
+
+---
+
+## 🔄 Повний порядок дій у процесі збереження:
+
+1. Insert нових записів (`C010 = 'NEW'`)
+2. Update існуючих (`C010 = 'EXISTING'`)
+3. Delete видалених (`C010 = 'DELETED'`)
+4. Очистити колекцію
+
+---
+
+🔧 Готовий допомогти написати весь `SAVE_TASK_SUBTASKS_FROM_COLLECTION` як єдиний процес — сказати?

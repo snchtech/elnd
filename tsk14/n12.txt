@@ -1,0 +1,139 @@
+Чудово! Покажу, як реалізувати **повну підтримку редагування та видалення підзавдань у `APEX_COLLECTION`**, а саме:
+
+---
+
+## 🔄 1. ОНОВЛЕННЯ запису в `APEX_COLLECTION`
+
+### 📍 При натисканні "Редагувати підзавдання":
+
+* Викликається `Dialog` сторінка
+* Дані з `APEX_COLLECTION` за `SEQ_ID` (передають через `P6_SEQ_ID`)
+* Користувач редагує форму, натискає кнопку `UPDATE_SUBTASK`
+
+### ✅ **Process** `UPDATE_SUBTASK_IN_COLLECTION`:
+
+```plsql
+BEGIN
+  APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P6_SEQ_ID,
+    p_attr_number     => 1, -- C001: SUBTASK_CONTENT
+    p_attr_value      => :P6_SUBTASK_CONTENT
+  );
+
+  APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P6_SEQ_ID,
+    p_attr_number     => 8, -- C008: SUBTASK_ORDER
+    p_attr_value      => :P6_SUBTASK_ORDER
+  );
+
+  APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P6_SEQ_ID,
+    p_attr_number     => 9, -- C009: PARENT_ID (SEQ_ID)
+    p_attr_value      => :P6_PARENT_SEQ_ID
+  );
+
+  -- Позначаємо, що це EXISTING (для подальшого збереження)
+  APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P6_SEQ_ID,
+    p_attr_number     => 10, -- C010: статус запису
+    p_attr_value      => 'EXISTING'
+  );
+END;
+```
+
+---
+
+## ❌ 2. ВИДАЛЕННЯ запису з `APEX_COLLECTION`
+
+> Якщо запис ще **не збережений у БД**, ми просто видаляємо з колекції.
+> Якщо запис вже існує в БД — відмічаємо його як `"DELETED"` для подальшої обробки.
+
+### ✅ **JS-логіка** при натисканні "Видалити":
+
+```javascript
+apex.server.process("MARK_OR_REMOVE_SUBTASK", {
+  x01: subtaskSeqId
+}, {
+  dataType: "json",
+  success: function(pData) {
+    if (pData.status === "ok") {
+      apex.region("TASK_SUBTASKS_IG_1").refresh();
+    } else {
+      apex.message.alert("❌ " + (pData.message || "Помилка при видаленні"));
+    }
+  }
+});
+```
+
+### ✅ **Процесинг `MARK_OR_REMOVE_SUBTASK`**:
+
+```plsql
+DECLARE
+  l_seq_id NUMBER := APEX_APPLICATION.G_X01;
+  l_status VARCHAR2(20);
+BEGIN
+  SELECT c010
+  INTO l_status
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = l_seq_id;
+
+  IF l_status = 'NEW' THEN
+    -- Видаляємо повністю
+    APEX_COLLECTION.DELETE_MEMBER('TASK_SUBTASKS_COLLECTION', l_seq_id);
+  ELSE
+    -- Позначаємо як видалений
+    APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_seq             => l_seq_id,
+      p_attr_number     => 10,
+      p_attr_value      => 'DELETED'
+    );
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## 🔄 3. ОБРОБКА `DELETED` у збереженні в БД
+
+👉 Додай у процесі `SAVE_TASK_SUBTASKS_FROM_COLLECTION` ось цей блок:
+
+```plsql
+-- Видаляємо всі підзавдання, які мають позначку 'DELETED'
+FOR r IN (
+  SELECT c002 AS id
+  FROM apex_collections
+  WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c010 = 'DELETED'
+    AND c002 IS NOT NULL -- має бути ID з БД
+) LOOP
+  DELETE FROM TASK_SUBTASKS WHERE ID = r.id;
+END LOOP;
+```
+
+---
+
+## 🔐 УВАГА
+
+* Якщо запис `"NEW"` → вставляємо в таблицю
+* Якщо `"EXISTING"` → оновлюємо в таблиці (покажу приклад, якщо треба)
+* Якщо `"DELETED"` → видаляємо з таблиці
+
+---
+
+🔁 Хочеш приклад **`UPDATE` підзавдання з колекції → БД** для `EXISTING` записів?

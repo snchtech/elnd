@@ -1,0 +1,87 @@
+Чудово! Ось як зробити **ієрархічне сортування і відображення підзавдань з `APEX_COLLECTION`** (наприклад `TASK_SUBTASKS_COLLECTION`) для використання в **Interactive Grid**.
+
+---
+
+## ✅ КРОК 1. Підготовка SQL-запиту до `APEX_COLLECTIONS`
+
+```sql
+WITH subtask_tree (seq_id, task_id, content, subtask_order, parent_seq_id, level, display_content) AS (
+  -- 1. Кореневі записи
+  SELECT 
+    c.seq_id,
+    c.n001 AS task_id,
+    c.c001 AS content,
+    c.c008 AS subtask_order,
+    NULL AS parent_seq_id,
+    1 AS level,
+    LPAD(' ', 0) || c.c001 AS display_content
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c.c009 IS NULL
+
+  UNION ALL
+
+  -- 2. Рекурсивне підключення дочірніх підзавдань
+  SELECT 
+    child.seq_id,
+    child.n001,
+    child.c001,
+    child.c008,
+    TO_NUMBER(child.c009),
+    parent.level + 1,
+    LPAD(' ', parent.level * 4, ' ') || child.c001
+  FROM apex_collections child
+  JOIN subtask_tree parent
+    ON TO_NUMBER(child.c009) = parent.seq_id
+  WHERE child.collection_name = 'TASK_SUBTASKS_COLLECTION'
+)
+SELECT
+  seq_id,
+  task_id,
+  content,
+  subtask_order,
+  parent_seq_id,
+  level,
+  display_content
+FROM subtask_tree
+ORDER BY subtask_order
+```
+
+---
+
+## 📌 Примітки:
+
+* `C001` – SUBTASK\_CONTENT
+* `C008` – SUBTASK\_ORDER
+* `C009` – SEQ\_ID батька (тобто parent)
+* `display_content` – для виводу з відступом
+
+---
+
+## 🧩 КРОК 2. Додати колонку в IG
+
+У колонці `display_content`:
+
+* **Type**: Plain Text
+* **Escape special characters**: ❌ No (для підтримки пробілів/форматування)
+
+Або, якщо хочеш красиво:
+
+```sql
+'<span class="level-' || level || '">' || content || '</span>' AS display_content
+```
+
+---
+
+## 🎨 КРОК 3. Стилізація відступів (опціонально):
+
+```css
+span.level-1 { padding-left: 0px; }
+span.level-2 { padding-left: 20px; }
+span.level-3 { padding-left: 40px; }
+/* і т.д. */
+```
+
+---
+
+Хочеш, щоб я також показав **як зберігати всі записи з колекції в БД при натисканні "Зберегти" (Submit)?**

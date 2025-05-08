@@ -1,0 +1,107 @@
+Чудово! Ось як **зберігати всі підзавдання з `APEX_COLLECTION` у таблицю `TASK_SUBTASKS`** при натисканні кнопки `Зберегти` (наприклад, `CREATE_TASK`, `SAVE_TEMPLATE` тощо).
+
+---
+
+## ✅ КРОК 1. Процес збереження: `SAVE_TASK_SUBTASKS_FROM_COLLECTION`
+
+Це серверний `PL/SQL Process`, який:
+
+* Проходиться по `TASK_SUBTASKS_COLLECTION`
+* Вставляє дані в `TASK_SUBTASKS`
+* Правильно зберігає ієрархію через `MAP` старих → нових `SEQ_ID` ↔ `ID`
+* Не зберігає записи, які вже є в БД
+
+---
+
+### 🔧 Код процесу (приклад)
+
+```plsql
+DECLARE
+  l_task_id TASK_SUBTASKS.TASK_ID%TYPE := :P5_TASK_ID; -- або P_TASK_ID
+  l_new_id  TASK_SUBTASKS.ID%TYPE;
+
+  -- мапа: колекційний SEQ_ID → новий ID в БД
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY NUMBER;
+  l_id_map t_id_map;
+
+BEGIN
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+      AND c010 = 'NEW' -- тільки нові
+  ) LOOP
+
+    -- Вставляємо без PARENT_ID (тимчасово)
+    INSERT INTO TASK_SUBTASKS (
+      TASK_ID,
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      STATUS_ID
+    ) VALUES (
+      l_task_id,
+      r.c001,                             -- SUBTASK_CONTENT
+      NULL,                               -- PLANNING_DATE_END (за потреби)
+      NULL,                               -- PARENT_ID тимчасово NULL
+      r.c008,                             -- SUBTASK_ORDER
+      1                                   -- STATUS_ID = створено
+    )
+    RETURNING ID INTO l_new_id;
+
+    -- Запам’ятовуємо відповідність
+    l_id_map(r.seq_id) := l_new_id;
+  END LOOP;
+
+  -- Оновлюємо PARENT_ID після вставки
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+      AND c010 = 'NEW'
+      AND c009 IS NOT NULL
+  ) LOOP
+    UPDATE TASK_SUBTASKS
+    SET PARENT_ID = l_id_map(TO_NUMBER(r.c009))
+    WHERE ID = l_id_map(r.seq_id);
+  END LOOP;
+
+  -- Очищаємо колекцію
+  APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+END;
+```
+
+---
+
+## 🧩 КРОК 2. Додати цей Process до кнопки створення
+
+* Name: `SAVE_TASK_SUBTASKS_FROM_COLLECTION`
+* Type: PL/SQL
+* Condition: When Button Pressed = `CREATE_TASK`
+* Місце: **Before** `Close Dialog` або `Redirect`
+
+---
+
+## 🧽 КРОК 3. За потреби — додати схожу логіку для шаблонів
+
+Просто зроби копію коду, зміни:
+
+* Таблицю на `TASK_TEMPLATE_SUBTASKS`
+* Колекцію на `TASK_TEMPLATE_SUBTASKS_COLLECTION`
+* Ім’я поля на `TEMPLATE_ID`
+
+---
+
+## ✅ Бонус: Фільтрація `c010 = 'NEW'`
+
+* Коли ти редагуєш, можеш оновити `c010 = 'EXISTING'`
+* І тоді:
+
+  * `'NEW'` → вставляються
+  * `'EXISTING'` → оновлюються
+  * `'DELETED'` → видаляються
+
+---
+
+Хочеш, щоб я **показав, як оновлювати або видаляти записи з колекції під час редагування?**

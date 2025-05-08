@@ -1,0 +1,126 @@
+Чудово, тепер переходимо до **збереження даних із `APEX_COLLECTION` у БД** — коли створюється **завдання** або **шаблон**, всі відповідні підзавдання / підшаблони, які були збережені в колекції, мають бути записані в таблиці `TASK_SUBTASKS` або `TASK_TEMPLATE_SUBTASKS`.
+
+---
+
+## ✅ Сценарій
+
+1. Користувач створює завдання або шаблон.
+2. В колекції зберігаються підзаписи (`TASK_SUBTASKS_COLLECTION` або `TASK_TEMPLATE_SUBTASKS_COLLECTION`)
+3. Після вставки основного запису, наприклад в `TASKS`, ми отримуємо `v_task_id`
+4. Потім усі підзаписи з колекції копіюються в БД з цим `TASK_ID`
+
+---
+
+## 🔧 Структура колекції (нагадування):
+
+| C001             | C002 | C003                | C008  | C009       | C010   |
+| ---------------- | ---- | ------------------- | ----- | ---------- | ------ |
+| SUBTASK\_CONTENT | ID   | PLANNING\_DATE\_END | ORDER | PARENT\_ID | STATUS |
+
+---
+
+## 🧩 Код вставки підзаписів після `INSERT TASK` чи `INSERT TEMPLATE`
+
+```plsql
+-- Вставка після створення TASK або TEMPLATE
+DECLARE
+  l_coll_name VARCHAR2(50);
+  l_id_column VARCHAR2(50);
+  l_main_id   NUMBER := :P_TASK_ID; -- або :P_TEMPLATE_ID в залежності від task_mode
+
+  -- Мапа: тимчасовий ID з колекції → новий ID в таблиці
+  TYPE t_id_map IS TABLE OF NUMBER INDEX BY VARCHAR2(255);
+  l_id_map t_id_map;
+
+  v_new_id TASK_SUBTASKS.ID%TYPE;
+
+BEGIN
+  l_coll_name := CASE :P_TASK_MODE
+                   WHEN '0' THEN 'TASK_SUBTASKS_COLLECTION'
+                   WHEN '1' THEN 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+                 END;
+
+  -- Перша фаза: вставляємо всі записи, без PARENT_ID
+  FOR rec IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = l_coll_name
+  ) LOOP
+    IF :P_TASK_MODE = '0' THEN
+      INSERT INTO TASK_SUBTASKS (
+        ID, TASK_ID, SUBTASK_CONTENT, PLANNING_DATE_END,
+        PARENT_ID, SUBTASK_ORDER, STATUS_ID
+      ) VALUES (
+        TASK_SUBTASKS_SEQ.NEXTVAL,
+        l_main_id,
+        rec.C001,
+        TO_DATE(rec.C003, 'YYYY-MM-DD HH24:MI:SS'),
+        NULL,
+        TO_NUMBER(NVL(rec.C008, '1')),
+        1
+      )
+      RETURNING ID INTO v_new_id;
+    ELSE
+      INSERT INTO TASK_TEMPLATE_SUBTASKS (
+        ID, TEMPLATE_ID, SUBTASK_CONTENT,
+        PARENT_ID, SUBTASK_ORDER, STATUS_ID
+      ) VALUES (
+        TASK_TEMPLATE_SUBTASKS_SEQ.NEXTVAL,
+        l_main_id,
+        rec.C001,
+        NULL,
+        TO_NUMBER(NVL(rec.C008, '1')),
+        1
+      )
+      RETURNING ID INTO v_new_id;
+    END IF;
+
+    -- Запам’ятовуємо новий ID
+    l_id_map[rec.C002] := v_new_id;
+  END LOOP;
+
+  -- Друга фаза: оновлюємо PARENT_ID, якщо потрібно
+  FOR rec IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = l_coll_name
+      AND C009 IS NOT NULL
+  ) LOOP
+    IF :P_TASK_MODE = '0' THEN
+      UPDATE TASK_SUBTASKS
+      SET PARENT_ID = l_id_map[rec.C009]
+      WHERE TASK_ID = l_main_id AND ID = l_id_map[rec.C002];
+    ELSE
+      UPDATE TASK_TEMPLATE_SUBTASKS
+      SET PARENT_ID = l_id_map[rec.C009]
+      WHERE TEMPLATE_ID = l_main_id AND ID = l_id_map[rec.C002];
+    END IF;
+  END LOOP;
+
+  -- ✅ Очистити колекцію
+  APEX_COLLECTION.DELETE_COLLECTION(l_coll_name);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при вставці підзавдань: ' || SQLERRM);
+END;
+```
+
+---
+
+## 📌 Де це використовувати?
+
+* Після `INSERT_TASK` або `INSERT_TEMPLATE` у тому ж `After Submit` процесі.
+* Або окремим серверним процесом **"Insert Subtasks from Collection"**, після створення основного запису.
+
+---
+
+## 📌 Переваги:
+
+* Ви уникнете **сміттєвих записів** у БД.
+* Поки користувач не натисне **створити** — всі дані лише в сесії (в колекції).
+* Підтримується **ієрархія** через два проходи: спочатку вставка, потім оновлення `PARENT_ID`.
+
+---
+
+✅ Хочеш — можемо зробити аналогічний процес для **оновлення** (update) існуючого шаблону/завдання (тобто колекція містить і NEW, і UPDATED записи).

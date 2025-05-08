@@ -1,0 +1,142 @@
+Чудово! Почнемо з реалізації **редагування запису з APEX\_COLLECTIONS**, яке ти викликаєш з custom menu (наприклад, пункт **"Редагувати підзавдання"**).
+
+---
+
+# ✅ 1. 🔁 **Сценарій:**
+
+* У тебе вже є `APEX_COLLECTION` (наприклад, `TASK_SUBTASKS_COLLECTION`)
+* Користувач натискає **"Редагувати"** на рядку IG
+* Відкривається форма (модальна сторінка), наприклад, сторінка 6
+* Після натискання "Оновити" вносяться зміни в колекцію, а не в таблицю
+
+---
+
+# ✅ 2. Що зберігаємо в колекції?
+
+\| `SEQ_ID` | `C001` – SUBTASK\_CONTENT | `C002` – PLANNING\_DATE\_END | `C003` – PARENT\_ID | `C004` – SUBTASK\_ORDER | `C005` – STATUS\_ID | `N001` – TASK\_MODE |
+
+---
+
+# ✅ 3. 🔄 Порядок реалізації
+
+---
+
+## 🔸 A. Відкриття модального вікна
+
+### 📍 Виклик JavaScript (з custom menu):
+
+```javascript
+document.getElementById("menu-edit-subtask").addEventListener("click", function () {
+  const seqId = this.dataset.seqid;
+
+  apex.server.process("GET_SUBTASK_COLLECTION_EDIT_URL", {
+    x01: seqId
+  }, {
+    dataType: "json",
+    success: function (pData) {
+      apex.navigation.dialog(pData.url, {
+        title: "Редагування підзавдання",
+        height: "auto",
+        width: "600",
+        modal: true
+      });
+    },
+    error: function () {
+      alert("❌ Помилка при відкритті редагування.");
+    }
+  });
+});
+```
+
+---
+
+## 🔸 B. Серверний Ajax Callback: `GET_SUBTASK_COLLECTION_EDIT_URL`
+
+```plsql
+DECLARE
+  l_url VARCHAR2(4000);
+BEGIN
+  l_url := APEX_PAGE.GET_URL (
+    p_page        => 6,
+    p_clear_cache => '6',
+    p_items       => 'P6_SEQ_ID',
+    p_values      => APEX_APPLICATION.G_X01,
+    p_request     => 'DIALOG'
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('url', l_url);
+  APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## 🔸 C. Before Header Process на сторінці редагування (наприклад, сторінка 6)
+
+```plsql
+DECLARE
+  r APEX_COLLECTIONS%ROWTYPE;
+BEGIN
+  SELECT *
+  INTO r
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = :P6_SEQ_ID;
+
+  :P6_SUBTASK_CONTENT   := r.c001;
+  :P6_PLANNING_DATE_END := r.c002;
+  :P6_PARENT_ID         := r.c003;
+  :P6_SUBTASK_ORDER     := r.c004;
+  :P6_STATUS_ID         := r.c005;
+END;
+```
+
+---
+
+## 🔸 D. Processing після Submit (Process Type: PL/SQL)
+
+Назва процесу: `UPDATE_SUBTASK_IN_COLLECTION`
+
+```plsql
+BEGIN
+  APEX_COLLECTION.UPDATE_MEMBER (
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P6_SEQ_ID,
+    p_c001            => :P6_SUBTASK_CONTENT,
+    p_c002            => :P6_PLANNING_DATE_END,
+    p_c003            => :P6_PARENT_ID,
+    p_c004            => :P6_SUBTASK_ORDER,
+    p_c005            => :P6_STATUS_ID
+  );
+END;
+```
+
+---
+
+## ✅ E. Після Submit → Додай Process `Close Dialog`
+
+* Тип: `Close Dialog`
+* Return value: `'updated'`
+
+---
+
+## ✅ F. На сторінці з IG (`TASK_SUBTASKS_IG_1`)
+
+* **Dynamic Action**:
+
+  * **Event**: Dialog Closed
+  * **Condition**: `Dialog Return = updated`
+  * **True Action**: `Refresh` → Region `TASK_SUBTASKS_IG_1`
+
+---
+
+# 🟢 Результат:
+
+* Дані змінюються лише в `APEX_COLLECTIONS`
+* Немає жодного запису в БД до моменту натискання “Створити завдання”
+* Ієрархія та підпорядкованість зберігаються
+
+---
+
+Хочеш продовжити з **DELETE** або **додаванням дочірнього** підзавдання в колекцію?

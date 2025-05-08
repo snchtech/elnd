@@ -1,0 +1,133 @@
+Чудово! Ось як реалізувати **дублювання одного підзапису** з `APEX_COLLECTION` (наприклад, підзавдання або підшаблону), включно з підтримкою вкладеності (дочірніх записів):
+
+---
+
+## ✅ Сценарій
+
+При натисканні в кастомному меню пункту **"Дублювати"**, ви передаєте `ID` (`C002`) запису, який хочете дублювати. Процесинг:
+
+1. Знаходить запис у колекції.
+2. Копіює його з новим ID (NULL), статусом `NEW`.
+3. Якщо запис має дочірні елементи — дублює їх також рекурсивно (зі збереженням структури).
+
+---
+
+## 🧩 Серверний процес `DUPLICATE_ONE_SUBITEM_FROM_COLLECTION`
+
+```plsql
+DECLARE
+  l_coll_name   VARCHAR2(100);
+  l_target_id   VARCHAR2(100) := APEX_APPLICATION.G_X01;
+  l_seq_suffix  VARCHAR2(10) := TO_CHAR(SYSTIMESTAMP, 'HH24MISSFF3');
+  l_map_old_new DBMS_SQL.VARCHAR2_TABLE;
+
+  -- 🧠 Рекурсивна процедура
+  PROCEDURE duplicate_recursive(p_parent_id VARCHAR2, p_new_parent_id VARCHAR2) IS
+    v_index       NUMBER;
+    v_content     VARCHAR2(4000);
+    v_date        DATE;
+    v_order       NUMBER;
+    v_new_index   NUMBER;
+  BEGIN
+    FOR rec IN (
+      SELECT *
+      FROM APEX_COLLECTIONS
+      WHERE COLLECTION_NAME = l_coll_name
+        AND C002 = p_parent_id
+    ) LOOP
+      -- Основний запис
+      v_content := rec.C001;
+      v_date    := TO_DATE(rec.C003, 'YYYY-MM-DD HH24:MI:SS');
+      v_order   := TO_NUMBER(NVL(rec.C008, '1'));
+
+      -- Додаємо новий запис
+      APEX_COLLECTION.ADD_MEMBER(
+        p_collection_name => l_coll_name,
+        p_c001            => v_content,
+        p_c002            => NULL, -- новий ID
+        p_c003            => TO_CHAR(v_date, 'YYYY-MM-DD HH24:MI:SS'),
+        p_c008            => v_order,
+        p_c009            => p_new_parent_id,
+        p_c010            => 'NEW'
+      );
+
+      v_new_index := APEX_COLLECTION.LAST(p_collection_name => l_coll_name).seq_id;
+      l_map_old_new(p_parent_id) := TO_CHAR(v_new_index);
+
+      -- Дочірні — рекурсивно
+      FOR child IN (
+        SELECT *
+        FROM APEX_COLLECTIONS
+        WHERE COLLECTION_NAME = l_coll_name
+          AND C009 = p_parent_id
+      ) LOOP
+        duplicate_recursive(child.C002, TO_CHAR(v_new_index));
+      END LOOP;
+    END LOOP;
+  END;
+
+BEGIN
+  -- 1. Назва колекції
+  l_coll_name := CASE :P_TASK_MODE
+                   WHEN '0' THEN 'TASK_SUBTASKS_COLLECTION'
+                   WHEN '1' THEN 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+                 END;
+
+  -- 2. Запускаємо рекурсивне дублювання
+  duplicate_recursive(l_target_id, NULL);
+
+  -- 3. OK response
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+## 🧩 JS-код для виклику
+
+```javascript
+document.getElementById("menu-duplicate-subtask").addEventListener("click", function () {
+  const id = this.dataset.id;
+  if (!id) return;
+
+  apex.server.process("DUPLICATE_ONE_SUBITEM_FROM_COLLECTION", {
+    x01: id
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      if (pData.status === 'ok') {
+        apex.region("TASK_SUBTASKS_IG_1").refresh();
+      } else {
+        apex.message.alert("❌ Помилка: " + (pData.message || 'Невідомо'));
+      }
+    },
+    error: function() {
+      apex.message.alert("❌ Помилка при з’єднанні з сервером");
+    }
+  });
+
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+> 🔁 Підстав `TASK_TEMPLATE_SUBTASKS_IG`, якщо працюєш із шаблонами
+
+---
+
+## 💡 Примітка:
+
+* Ми дублюємо **разом із усіма нащадками** (якщо вони є).
+* Нова копія з'явиться в Interactive Grid, бо він будується на колекції.
+
+---
+
+Готовий перейти до наступної дії з custom menu (наприклад, **редагування**, **додавання дочірнього**)?

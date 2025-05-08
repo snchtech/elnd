@@ -1,0 +1,127 @@
+Супер! Тепер реалізуємо **видалення підзавдання**, враховуючи дві ситуації:
+
+---
+
+## ✅ Сценарії:
+
+1. 🔹 **Запис ще не збережений у БД** (існує тільки в `APEX_COLLECTIONS`)
+2. 🔸 **Запис вже існує в БД** (`TASK_SUBTASKS.TASK_ID = :P5_TASK_ID`), потрібно позначити його для видалення (не видаляти одразу)
+
+---
+
+## 🧩 Архітектура рішення
+
+* В `APEX_COLLECTIONS` використовуємо **`C010 = 'DELETE'`** як позначку для записів, які треба видалити при остаточному збереженні
+* Видалення з IG — лише **візуальне** (при оновленні сторінки не показується)
+
+---
+
+# 🔁 1. Видалення в JavaScript (custom menu):
+
+```javascript
+document.getElementById("menu-delete-subtask").addEventListener("click", function () {
+  const seqId = this.dataset.seqid;
+  if (!seqId) return;
+
+  apex.message.confirm("Ви дійсно хочете видалити це підзавдання?", function (okPressed) {
+    if (okPressed) {
+      apex.server.process("DELETE_SUBTASK_COLLECTION", {
+        x01: seqId
+      }, {
+        dataType: "json",
+        success: function (pData) {
+          if (pData.status === "ok") {
+            apex.region("TASK_SUBTASKS_IG_1").refresh();
+          } else {
+            apex.message.alert("Помилка при видаленні.");
+          }
+        },
+        error: function () {
+          apex.message.alert("Помилка при з’єднанні з сервером.");
+        }
+      });
+    }
+  });
+
+  // Ховаємо меню
+  document.getElementById("custom-ig-menu").style.display = "none";
+});
+```
+
+---
+
+# 🔧 2. Ajax Callback: `DELETE_SUBTASK_COLLECTION`
+
+```plsql
+DECLARE
+  l_seq_id NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01);
+  l_task_id NUMBER;
+BEGIN
+  -- Отримаємо TASK_ID або NULL
+  SELECT n001
+  INTO l_task_id
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = l_seq_id;
+
+  -- Якщо TASK_ID існує → запис вже в БД → позначаємо для видалення
+  IF l_task_id IS NOT NULL THEN
+    APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_seq             => l_seq_id,
+      p_attr_number     => 10, -- C010
+      p_attr_value      => 'DELETE'
+    );
+  ELSE
+    -- Якщо ще не збережений → просто видаляємо з колекції
+    APEX_COLLECTION.DELETE_MEMBER(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_seq             => l_seq_id
+    );
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+# 🧼 3. Видалення у фінальному INSERT / UPDATE (наприклад, після CREATE TASK)
+
+```plsql
+FOR r IN (
+  SELECT *
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+)
+LOOP
+  IF r.c010 = 'DELETE' THEN
+    -- Видаляємо з БД
+    DELETE FROM TASK_SUBTASKS WHERE ID = r.n002;
+  ELSE
+    -- Інші: INSERT / UPDATE
+    NULL;
+  END IF;
+END LOOP;
+```
+
+> `r.n002` — це `ID` з таблиці (ти можеш додати його при створенні колекції через `N002 := EXISTING_ID`)
+
+---
+
+# 📌 Порада:
+
+* Якщо запис ще не існує в таблиці → його не буде в `N002`, можна не чіпати
+* Якщо ти хочеш бути 100% точним — створюй колекцію з полем `N002` для збереження `TASK_SUBTASKS.ID` (або `TEMPLATE_SUBTASKS.ID`)
+
+---
+
+Хочеш тепер реалізувати **додавання дочірнього підзавдання** з урахуванням ієрархії в `APEX_COLLECTIONS`?

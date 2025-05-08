@@ -1,0 +1,97 @@
+Ось повний аналогічний процес `SAVE_TEMPLATE_SUBTASKS_FROM_COLLECTION`, який:
+
+* Вставляє нові записи до `TASK_TEMPLATE_SUBTASKS`
+* Оновлює наявні
+* Видаляє позначені як `DELETED`
+* Очищає колекцію `TASK_TEMPLATE_SUBTASKS_COLLECTION`
+
+---
+
+## ✅ PL/SQL процес: `SAVE_TEMPLATE_SUBTASKS_FROM_COLLECTION`
+
+```plsql
+DECLARE
+  v_id NUMBER;
+BEGIN
+  -- ✅ INSERT нових записів
+  FOR r IN (
+    SELECT 
+      c001 AS subtask_content,
+      c008 AS subtask_order,
+      c009 AS parent_id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+      AND c010 = 'NEW'
+  ) LOOP
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      TEMPLATE_ID,
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PARENT_ID,
+      SUBTASK_ORDER
+    ) VALUES (
+      :P_TEMPLATE_ID,
+      r.subtask_content,
+      1, -- або інший статус за замовчуванням
+      TO_NUMBER(r.parent_id),
+      TO_NUMBER(r.subtask_order)
+    )
+    RETURNING ID INTO v_id;
+  END LOOP;
+
+  -- ✅ UPDATE існуючих записів
+  FOR r IN (
+    SELECT
+      c002 AS id,
+      c001 AS subtask_content,
+      c008 AS subtask_order,
+      c009 AS parent_id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+      AND c010 = 'EXISTING'
+      AND c002 IS NOT NULL
+  ) LOOP
+    UPDATE TASK_TEMPLATE_SUBTASKS
+    SET
+      SUBTASK_CONTENT    = r.subtask_content,
+      SUBTASK_ORDER      = TO_NUMBER(r.subtask_order),
+      PARENT_ID          = TO_NUMBER(r.parent_id)
+    WHERE ID = TO_NUMBER(r.id);
+  END LOOP;
+
+  -- ✅ DELETE позначених як DELETED
+  FOR r IN (
+    SELECT c002 AS id
+    FROM apex_collections
+    WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+      AND c010 = 'DELETED'
+      AND c002 IS NOT NULL
+  ) LOOP
+    DELETE FROM TASK_TEMPLATE_SUBTASKS
+    WHERE ID = TO_NUMBER(r.id);
+  END LOOP;
+
+  -- ✅ Очистити колекцію
+  APEX_COLLECTION.DELETE_COLLECTION('TASK_TEMPLATE_SUBTASKS_COLLECTION');
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, 'Помилка при збереженні підшаблонів: ' || SQLERRM);
+END;
+```
+
+---
+
+## 🔄 Коли викликати?
+
+* Цей процес виконується після збереження **шаблону**, коли `:P_TASK_MODE = 1`
+* Використовується замість процесу з `TASK_SUBTASKS`
+
+---
+
+✅ Якщо потрібно, можу також дати спільну логіку:
+
+* один серверний процес, який перевіряє `:P_TASK_MODE`
+* і сам вирішує, яку колекцію обробити (для завдань чи шаблонів)
+
+Показати спільний варіант?

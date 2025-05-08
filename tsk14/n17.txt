@@ -1,0 +1,109 @@
+Ось як зробити **дублювання підзаписів із `APEX_COLLECTION`** для підзавдань (task\_mode = 0) або підшаблонів (task\_mode = 1).
+
+---
+
+## ✅ Ціль
+
+1. Взяти всі записи з колекції.
+2. Створити копії:
+
+   * з новим `PARENT_ID`, якщо були ієрархії.
+   * із новими ID.
+3. Вставити їх **у ту ж саму колекцію**, але зі статусом `NEW`.
+
+---
+
+## ⚙️ Структура колекцій:
+
+* `C001` – SUBTASK\_CONTENT
+* `C002` – ID (NULL для нових)
+* `C003` – PLANNING\_DATE\_END
+* `C008` – SUBTASK\_ORDER
+* `C009` – PARENT\_ID
+* `C010` – статус (`NEW`, `EXISTING`, `DELETED`)
+
+---
+
+## 🧠 Ідея: зробити дві фази
+
+1. **Перша фаза** — створити копії всіх записів, запам’ятати старий → новий індекс.
+2. **Друга фаза** — оновити `PARENT_ID` в копіях відповідно до нових ID.
+
+---
+
+## ✅ PL/SQL PROCESS: `DUPLICATE_SUBITEMS_FROM_COLLECTION`
+
+```plsql
+DECLARE
+  l_coll_name      VARCHAR2(100);
+  l_idx            PLS_INTEGER := 1;
+  l_count          PLS_INTEGER;
+  l_map_old_to_new DBMS_SQL.VARCHAR2_TABLE;
+  l_seq_suffix     VARCHAR2(10);
+BEGIN
+  IF :P_TASK_MODE = '0' THEN
+    l_coll_name := 'TASK_SUBTASKS_COLLECTION';
+  ELSE
+    l_coll_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  l_count := APEX_COLLECTION.COLLECTION_MEMBER_COUNT(p_collection_name => l_coll_name);
+  l_seq_suffix := TO_CHAR(SYSDATE, 'HH24MISS'); -- Унікальний суфікс для SUBTASK_ORDER
+
+  -- 🔁 Проходимо всі записи, дублюємо
+  FOR i IN 1 .. l_count LOOP
+    DECLARE
+      v_new_seq VARCHAR2(30) := l_seq_suffix || '_' || TO_CHAR(i);
+      v_new_index NUMBER;
+    BEGIN
+      APEX_COLLECTION.ADD_MEMBER(
+        p_collection_name => l_coll_name,
+        p_c001            => APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C001'), -- CONTENT
+        p_c002            => NULL, -- новий, без ID
+        p_c003            => APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C003'), -- DATE
+        p_c008            => APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C008'), -- ORDER
+        p_c009            => APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C009'), -- PARENT_ID (тимчасово старий)
+        p_c010            => 'NEW'
+      );
+
+      v_new_index := APEX_COLLECTION.LAST(p_collection_name => l_coll_name).seq_id;
+
+      -- Запам’ятовуємо відповідність старого → нового
+      l_map_old_to_new(TO_CHAR(APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C002'))) := TO_CHAR(v_new_index);
+    END;
+  END LOOP;
+
+  -- 🔁 Друга фаза — оновити PARENT_ID в копіях
+  FOR i IN 1 .. APEX_COLLECTION.COLLECTION_MEMBER_COUNT(p_collection_name => l_coll_name) LOOP
+    IF APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C010') = 'NEW' THEN
+      DECLARE
+        v_old_parent VARCHAR2(100) := APEX_COLLECTION.GET_MEMBER_ATTRIBUTE(l_coll_name, i, 'C009');
+        v_new_parent VARCHAR2(100);
+      BEGIN
+        IF v_old_parent IS NOT NULL THEN
+          v_new_parent := l_map_old_to_new(v_old_parent);
+          IF v_new_parent IS NOT NULL THEN
+            APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(l_coll_name, i, 9, v_new_parent);
+          END IF;
+        END IF;
+      END;
+    END IF;
+  END LOOP;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, '❌ Помилка при дублюванні підзаписів: ' || SQLERRM);
+END;
+```
+
+---
+
+## 📌 Після дублювання
+
+* IG оновлюється автоматично (бо source — колекція)
+* Порядок, структура, ієрархія збережена
+* Немає мусорних записів у БД
+
+---
+
+## 🧪 Хочеш, я покажу приклад **дублювання лише одного запису**, наприклад при натисканні кнопки "дублювати" в кастомному меню?

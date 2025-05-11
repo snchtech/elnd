@@ -1,0 +1,78 @@
+Щоб уникнути дублювання записів у таблиці `SIGNATURERIGHTS` при повторному відкритті сторінки, потрібно **перевіряти наявність записів** з `TASK_ID` та відповідним `STAGE_ID` перед вставкою.
+
+---
+
+### ✅ Оновлений `Before Header Process`:
+
+```plsql
+BEGIN
+  -- 🔍 Якщо для STAGE_ID = 1 не існує запису — вставляємо
+  IF NOT EXISTS (
+    SELECT 1
+    FROM SIGNATURERIGHTS
+    WHERE TASK_ID = :P7_TASK_ID
+      AND STAGE_ID = 1
+  ) THEN
+    INSERT INTO SIGNATURERIGHTS (
+      TASK_ID, POSITION_ID, DEPARTMENT_ID, UNIT_ID, USER_ID,
+      STAGE_ID, SORT_ORDER, SUBTASK_ID, SHIFT_GROUP_ID, SHIFT_TIME_ID
+    ) VALUES (
+      :P7_TASK_ID,
+      :P0_POSITION_ID,
+      :P0_DEPARTMENT_ID,
+      :P0_UNIT_ID,
+      :P0_USER_ID,
+      1,
+      1,
+      NULL,
+      NULL,
+      NULL
+    );
+  END IF;
+
+  -- 🔍 Якщо для STAGE_ID = 3 не існує запису — вставляємо
+  IF NOT EXISTS (
+    SELECT 1
+    FROM SIGNATURERIGHTS
+    WHERE TASK_ID = :P7_TASK_ID
+      AND STAGE_ID = 3
+  ) THEN
+    INSERT INTO SIGNATURERIGHTS (
+      TASK_ID, POSITION_ID, DEPARTMENT_ID, UNIT_ID, USER_ID,
+      STAGE_ID, SORT_ORDER, SUBTASK_ID, SHIFT_GROUP_ID, SHIFT_TIME_ID
+    ) VALUES (
+      :P7_TASK_ID,
+      :P0_POSITION_ID,
+      :P0_DEPARTMENT_ID,
+      :P0_UNIT_ID,
+      :P0_USER_ID,
+      3,
+      1,
+      NULL,
+      NULL,
+      NULL
+    );
+  END IF;
+END;
+```
+
+---
+
+### 🔍 Пояснення:
+
+* `IF NOT EXISTS (...) THEN INSERT ...`: дозволяє виконати вставку **лише якщо запису ще немає**.
+* Перевіряємо по **TASK\_ID + STAGE\_ID** — основний критерій дубля.
+
+---
+
+### 🧠 Додатково:
+
+* Якщо для унікальності важлива вся комбінація (`TASK_ID`, `STAGE_ID`, `USER_ID`, тощо), розшир перевірку:
+
+  ```sql
+  WHERE TASK_ID = :P7_TASK_ID
+    AND STAGE_ID = 1
+    AND USER_ID = :P0_USER_ID
+  ```
+
+Хочеш — можу допомогти реалізувати `MERGE` або зробити лог для аудиту дублювань.

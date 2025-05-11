@@ -1,0 +1,123 @@
+Ось як переписати **процес створення завдання або шаблону з використанням `SEQUENCE.NEXTVAL` на початку**, а не `RETURNING INTO`:
+
+---
+
+## ✅ 1. **INSERT завдання або шаблону (через NEXTVAL)**
+
+```plsql
+DECLARE
+  v_new_id NUMBER;
+BEGIN
+  IF :P8_TASK_MODE = 0 THEN
+    -- Завдання
+    v_new_id := TASKS_SEQ.NEXTVAL;
+
+    INSERT INTO TASKS (
+      ID, TASK_CONTENT, PLANNING_DATE_START, PLANNING_DATE_END,
+      NOTE, TYPE_ID, UNIT_ID, DATE_CREATE
+    ) VALUES (
+      v_new_id,
+      :P8_TASK_CONTENT,
+      :P8_PLANNING_DATE_START,
+      :P8_PLANNING_DATE_END,
+      :P8_NOTE,
+      :P8_TYPE_ID,
+      :P8_UNIT,
+      SYSDATE
+    );
+
+  ELSIF :P8_TASK_MODE = 1 THEN
+    -- Шаблон
+    v_new_id := TASK_TEMPLATE_SEQ.NEXTVAL;
+
+    INSERT INTO TASK_TEMPLATES (
+      ID, TASK_CONTENT, NOTE, TYPE_ID, UNIT_ID, DATE_CREATE,
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME, WEEKLY_DAYS, WEEKLY_TIME, DATE_END
+    ) VALUES (
+      v_new_id,
+      :P8_TASK_CONTENT,
+      :P8_NOTE,
+      :P8_TYPE_ID,
+      :P8_UNIT,
+      SYSDATE,
+      :P8_PERIOD_MODE,
+      :P8_PERIOD_INTERVAL,
+      :P8_PERIOD_TIME,
+      :P8_WEEKLY_DAYS,
+      :P8_WEEKLY_TIME,
+      :P8_DATE_END
+    );
+  END IF;
+
+  -- Зберігаємо ID у P8_TASK_ID для подальших дій
+  :P8_TASK_ID := v_new_id;
+END;
+```
+
+---
+
+## ✅ 2. **Додати підзавдання або підшаблони з колекції**
+
+```plsql
+DECLARE
+  v_new_id NUMBER := :P8_TASK_ID;
+BEGIN
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+      AND NVL(c010, 'ACTIVE') != 'DELETE'
+      AND TO_NUMBER(n001) = :P8_TASK_MODE
+  ) LOOP
+
+    IF :P8_TASK_MODE = 0 THEN
+      -- Завдання
+      INSERT INTO TASK_SUBTASKS (
+        TASK_ID,
+        SUBTASK_CONTENT,
+        STATUS_ID,
+        PLANNING_DATE_END,
+        PARENT_ID,
+        SUBTASK_ORDER
+      ) VALUES (
+        v_new_id,
+        r.c002,
+        TO_NUMBER(r.c003),
+        TO_DATE(r.c004, 'YYYY-MM-DD HH24:MI:SS'),
+        TO_NUMBER(r.c005),
+        TO_NUMBER(r.c006)
+      );
+
+    ELSIF :P8_TASK_MODE = 1 THEN
+      -- Шаблони
+      INSERT INTO TASK_TEMPLATE_SUBTASKS (
+        TEMPLATE_ID,
+        SUBTASK_CONTENT,
+        STATUS_ID,
+        PARENT_ID,
+        SUBTASK_ORDER
+      ) VALUES (
+        v_new_id,
+        r.c002,
+        TO_NUMBER(r.c003),
+        TO_NUMBER(r.c005),
+        TO_NUMBER(r.c006)
+      );
+    END IF;
+
+  END LOOP;
+
+  -- Очищаємо колекцію
+  APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+END;
+```
+
+---
+
+Цей варіант краще контролює ID, зокрема:
+
+* дозволяє використовувати `v_new_id` у багатьох місцях;
+* уникнення `RETURNING INTO` — якщо воно не підтримується або обмежено в середовищі;
+* дає гнучкість — ID можна також одразу показати або використати в наступній модальній сторінці.
+
+Хочеш — можу також показати, як після цього одразу відкривати сторінку 7 з параметром `TASK_ID` у модальному вікні.

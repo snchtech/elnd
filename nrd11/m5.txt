@@ -1,0 +1,93 @@
+Дякую за уточнення! Якщо ти хочеш **розділити звіти на два незалежні**, але логічно пов’язані **окремі звіти** на сторінці (без використання master-detail механізму APEX), ось як це зробити:
+
+---
+
+## 🧩 Ціль
+
+1. **Перший звіт** — основна агрегована інформація по `department` (без деталей).
+2. **Другий звіт** — список по `performer_department_id`, де `performer_id` присутній.
+3. Обидва звіти оновлюються **одночасно**, наприклад, після вибору чекбоксів `P_DEPARTMENTS`, або за часовим діапазоном тощо.
+4. Немає залежностей по кліках.
+
+---
+
+## 🛠 Приклад реалізації
+
+### 🔹 APEX Page Items:
+
+| Item            | Призначення                     |
+| --------------- | ------------------------------- |
+| `P_DEPARTMENTS` | Checkbox Group з департаментами |
+| `P_DATE_START`  | Дата початку                    |
+| `P_DATE_END`    | Дата завершення                 |
+
+---
+
+### 🔹 Звіт 1: Загальний (department-level)
+
+```sql
+SELECT
+  department,
+  SUM(total_people) AS total_people,
+  SUM(total_brigades) AS total_brigades
+FROM v_outfit_pivot_base
+WHERE 1=1
+  AND (
+    :P_DEPARTMENTS IS NULL 
+    OR department IN (SELECT column_value FROM TABLE(split_string(:P_DEPARTMENTS, ':')))
+  )
+  AND (
+    (:P_DATE_START IS NULL OR status_start_date >= :P_DATE_START) AND
+    (:P_DATE_END IS NULL OR status_start_date <= :P_DATE_END)
+  )
+GROUP BY department
+ORDER BY department
+```
+
+---
+
+### 🔹 Звіт 2: Детальний (performer\_department\_id-level)
+
+```sql
+SELECT
+  d.depart_short_name AS performer_department_name,
+  v.department AS source_department,
+  v.unit,
+  SUM(v.total_people) AS total_people,
+  SUM(v.total_brigades) AS total_brigades
+FROM v_outfit_pivot_base v
+JOIN users u ON u.id = v.performer_id
+JOIN departments d ON d.id = u.performer_department_id
+WHERE 1=1
+  AND (
+    :P_DEPARTMENTS IS NULL 
+    OR v.department IN (SELECT column_value FROM TABLE(split_string(:P_DEPARTMENTS, ':')))
+  )
+  AND (
+    (:P_DATE_START IS NULL OR v.status_start_date >= :P_DATE_START) AND
+    (:P_DATE_END IS NULL OR v.status_start_date <= :P_DATE_END)
+  )
+GROUP BY d.depart_short_name, v.department, v.unit
+ORDER BY d.depart_short_name, v.unit
+```
+
+---
+
+## 🔁 Dynamic Action: «Змінено значення»
+
+1. Подія: `Change`
+2. Items: `P_DEPARTMENTS`, `P_DATE_START`, `P_DATE_END`
+3. True Actions:
+
+   * **Refresh** → `Report 1`
+   * **Refresh** → `Report 2`
+
+---
+
+## 🧾 Альтернатива
+
+Якщо ти хочеш в одному SQL зібрати все разом (з прапорцем `IS_PERFORMER = 1`), можу показати `UNION ALL` підхід. Але в твоєму випадку **розбиття на два окремі звіти — ефективніше для продуктивності**.
+
+---
+
+Бажаєш, щоб я сформував повну APEX-сторінку з цими двома звітами для імпорту?

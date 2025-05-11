@@ -1,0 +1,102 @@
+Щоб отримати `SEQ_ID` запису з `APEX_COLLECTION` при кліку на рядок **Interactive Grid (IG)**, скористайся такою інструкцією:
+
+---
+
+## ✅ Кроки:
+
+### 1. Додай колонку `SEQ_ID` до запиту IG
+
+У SQL-запиті, який формує IG, обов’язково повинна бути колонка `SEQ_ID`, наприклад:
+
+```sql
+SELECT
+  seq_id,
+  c001 AS task_id,
+  c002 AS subtask_content,
+  ...
+FROM apex_collections
+WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+```
+
+> 🔹 **Важливо:** В колонці `SEQ_ID` бажано вказати **Static ID** (наприклад `SEQ_ID`) — це дозволить зручно зчитувати значення.
+
+---
+
+### 2. Додай атрибут `data-seq-id` до кожного рядка
+
+Це робиться через **JavaScript Initialization Code** у властивостях IG:
+
+1. Відкрий IG ➝ Attributes ➝ Advanced ➝ **JavaScript Initialization Code**
+2. Встав:
+
+```javascript
+function(config) {
+  config.initActions = function() {
+    // нічого не змінюємо тут
+  };
+
+  config.rowAttributes = function(record) {
+    return {
+      'data-seq-id': record.SEQ_ID // ← назва колонки з SQL
+    };
+  };
+
+  return config;
+}
+```
+
+---
+
+### 3. Оброби клік по рядку або кнопці (JS)
+
+```javascript
+apex.jQuery(document).on('click', '.a-IG-row', function () {
+  const seqId = this.dataset.seqId;
+  console.log("SEQ_ID:", seqId);
+
+  // Тепер можеш передати seqId в AJAX або інші обробки
+});
+```
+
+Або, якщо у тебе є власна кнопка (наприклад, у custom menu):
+
+```javascript
+document.getElementById("my-custom-action").addEventListener("click", function () {
+  const activeRow = apex.jQuery(".a-IG-row.is-selected")[0];
+  if (!activeRow) {
+    apex.message.alert("Оберіть рядок!");
+    return;
+  }
+  const seqId = activeRow.dataset.seqId;
+  console.log("SEQ_ID обраного рядка:", seqId);
+});
+```
+
+---
+
+## ✅ Приклад використання в AJAX:
+
+```javascript
+apex.server.process("MY_PROCESS", {
+  x01: seqId
+}, {
+  dataType: "json",
+  success: function(data) {
+    // обробка відповіді
+  }
+});
+```
+
+---
+
+## 🔄 Підсумок
+
+| Що                 | Як                                      |
+| ------------------ | --------------------------------------- |
+| Дістати `SEQ_ID`   | Через `record.SEQ_ID` в `rowAttributes` |
+| Передати у JS      | `this.dataset.seqId`                    |
+| Використати в AJAX | `x01: seqId`                            |
+
+---
+
+Хочеш — можу одразу показати, як зробити **custom menu** з опціями редагувати / дублювати / видалити для запису з `SEQ_ID`.

@@ -1,0 +1,66 @@
+Чудово! Ось як реалізувати **ініціалізацію колекції для підшаблонів (`TASK_TEMPLATE_SUBTASKS`)** у `BEFORE HEADER PROCESS`.
+
+---
+
+## ✅ PL/SQL: Ініціалізація `TASK_SUBTASKS_COLLECTION` для шаблонів (TASK\_MODE = 1)
+
+```plsql
+BEGIN
+  -- Створюємо колекцію, якщо її ще немає
+  IF NOT APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.CREATE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+    -- Якщо ми редагуємо шаблон, заповнюємо даними з TASK_TEMPLATE_SUBTASKS
+    IF :P8_TASK_MODE = 1 AND :P8_TASK_ID IS NOT NULL THEN
+      FOR r IN (
+        SELECT 
+          ID,
+          TEMPLATE_ID,
+          SUBTASK_CONTENT,
+          STATUS_ID,
+          PARENT_ID,
+          SUBTASK_ORDER
+        FROM TASK_TEMPLATE_SUBTASKS
+        WHERE TEMPLATE_ID = :P8_TASK_ID
+      ) LOOP
+        APEX_COLLECTION.ADD_MEMBER(
+          p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+          -- Значення:
+          p_c001 => r.TEMPLATE_ID,            -- Замість TASK_ID → TEMPLATE_ID
+          p_c002 => r.SUBTASK_CONTENT,
+          p_c003 => r.STATUS_ID,
+          p_c004 => NULL,                     -- PLANNING_DATE_END — не використовується для шаблонів
+          p_c005 => TO_CHAR(r.PARENT_ID),
+          p_c006 => TO_CHAR(r.SUBTASK_ORDER),
+          p_n001 => :P8_TASK_MODE             -- TASK_MODE = 1
+        );
+      END LOOP;
+    END IF;
+
+  END IF;
+END;
+```
+
+---
+
+## 🧩 Структура значень у колекції `TASK_SUBTASKS_COLLECTION`
+
+| Колекція | Значення (для шаблонів) | Коментар                              |
+| -------- | ----------------------- | ------------------------------------- |
+| `p_c001` | `TEMPLATE_ID`           | Ідентифікатор шаблону                 |
+| `p_c002` | `SUBTASK_CONTENT`       | Назва підшаблону                      |
+| `p_c003` | `STATUS_ID`             | Статус                                |
+| `p_c004` | `NULL`                  | Дата не використовується для шаблонів |
+| `p_c005` | `PARENT_ID`             | Ієрархія                              |
+| `p_c006` | `SUBTASK_ORDER`         | Порядок                               |
+| `p_n001` | `1`                     | TASK\_MODE = 1 для шаблонів           |
+
+---
+
+## 💡 Порада:
+
+Якщо ти хочеш **відображати різні IG для шаблонів і завдань**, можна фільтрувати за `p_n001 = 0` або `p_n001 = 1` у SQL запиті до IG або показувати різні регіони через `Server-Side Condition`.
+
+---
+
+Готовий показати, як при збереженні завдання або шаблону оновлювати таблиці `TASK_SUBTASKS` або `TASK_TEMPLATE_SUBTASKS` з колекції?

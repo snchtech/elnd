@@ -1,0 +1,105 @@
+Ось як **розбити master–detail логіку на два окремі звіти** в Oracle APEX:
+
+---
+
+## ✅ **Сценарій**
+
+* ✅ Перший звіт ("**Master**") показує список підрозділів `department` з сумарними даними.
+* ✅ Другий звіт ("**Detail**") показує `performer_department_id` тільки для вибраного `department`.
+* ✅ Взаємодія через динамічний `item`, наприклад `P_DEPARTMENT_SELECTED`.
+
+---
+
+## 🔧 **1. Структура на сторінці**
+
+| Компонент | Тип                 | Ім'я / ID               |
+| --------- | ------------------- | ----------------------- |
+| Звіт 1    | IR / Classic Report | `Master_Report`         |
+| Звіт 2    | IR / Classic Report | `Detail_Report`         |
+| Item      | Hidden              | `P_DEPARTMENT_SELECTED` |
+
+---
+
+## 📄 **SQL для Master Report** (наприклад, Classic Report)
+
+```sql
+SELECT
+  department,
+  SUM(total_people) AS total_people,
+  SUM(total_brigades) AS total_brigades
+FROM v_outfit_pivot_base
+GROUP BY department
+ORDER BY department
+```
+
+> Можна зробити колонку `department` клікабельною посиланням.
+
+---
+
+## 📄 **SQL для Detail Report**
+
+```sql
+SELECT
+  d.depart_short_name AS performer_department_name,
+  v.unit,
+  SUM(v.total_people) AS total_people,
+  SUM(v.total_brigades) AS total_brigades
+FROM v_outfit_pivot_base v
+JOIN users u ON u.id = v.performer_id
+JOIN departments d ON d.id = u.performer_department_id
+WHERE v.department = :P_DEPARTMENT_SELECTED
+GROUP BY d.depart_short_name, v.unit
+ORDER BY d.depart_short_name, v.unit
+```
+
+---
+
+## ⚙️ **Dynamic Action для взаємодії**
+
+1. **Подія**: `Click` або `Link Clicked` у Master-звіті.
+
+2. **True Action #1**:
+   **Set Value → JavaScript Expression**
+
+   ```js
+   this.triggeringElement.innerText
+   ```
+
+   або з потрібної `td`, наприклад:
+
+   ```js
+   $(this.triggeringElement).closest('tr').find('td:eq(0)').text()
+   ```
+
+   → Set Item = `P_DEPARTMENT_SELECTED`.
+
+3. **True Action #2**:
+   **Refresh → Detail\_Report**
+
+---
+
+## 💡 **Як зробити колонку клікабельною (опціонально)**
+
+Якщо це Classic Report → використай HTML Expression у колонці `department`:
+
+```sql
+SELECT
+  '<a href="javascript:void(0);" class="dep-link">' || department || '</a>' AS department,
+  SUM(total_people) AS total_people,
+  SUM(total_brigades) AS total_brigades
+FROM ...
+```
+
+Тоді в DA подія: `Click` → jQuery Selector: `.dep-link`
+
+---
+
+## ✅ **Результат**
+
+* Користувач клікає на запис у Master-звіті.
+* У hidden item записується вибране значення.
+* Детальний звіт автоматично оновлюється.
+
+---
+
+Хочеш, щоб я показав це з використанням інтерактивних карток (APEX Cards) або розгортанням нижче обраного рядка?

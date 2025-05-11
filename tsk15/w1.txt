@@ -1,0 +1,302 @@
+PAGE 8
+
+before header
+CREATE_COLLECTION
+BEGIN
+  -- Тільки якщо ще не створено
+  IF NOT APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.CREATE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+    -- Якщо є існуюче завдання — наповнюємо з БД
+    IF :P8_TASK_ID IS NOT NULL THEN
+      FOR r IN (
+        SELECT 
+          TASK_ID,
+          SUBTASK_CONTENT,
+          STATUS_ID,
+          PLANNING_DATE_END,
+          PARENT_ID,
+          SUBTASK_ORDER
+        FROM TASK_SUBTASKS
+        WHERE TASK_ID = :P8_TASK_ID
+      ) LOOP
+        APEX_COLLECTION.ADD_MEMBER(
+          p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+          p_c001 => r.TASK_ID,
+          p_c002 => r.SUBTASK_CONTENT,
+          p_c003 => r.STATUS_ID,
+          p_c004 => r.PLANNING_DATE_END,
+          p_c005 => r.PARENT_ID,
+          p_c006 => r.SUBTASK_ORDER,
+          p_n001 => :P8_TASK_MODE
+        );
+      END LOOP;
+    END IF;
+  END IF;
+END;
+
+--------------------------------------------------
+
+IG_SUBTASKS
+
+RETURN q'[
+WITH subtask_tree (
+  seq_id, task_id, parent_seq_id, subtask_content, subtask_order,
+  level_b, path_b, full_number, drag_handle, TASK_MODE
+) AS (
+  -- Кореневі записи
+  SELECT
+    c.seq_id,
+    c.c001 AS task_id,
+    NULL AS parent_seq_id,
+    c.c002 AS subtask_content,
+    TO_NUMBER(c.c006) AS subtask_order,
+    1 AS level_b,
+    --LPAD(TO_NUMBER(c.c006), 5, '0') AS path_b,
+    LPAD(ROWNUM, 5, '0') AS path_b,
+    TO_CHAR(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c006))) AS full_number,
+    CASE 
+      WHEN c.c005 IS NULL THEN '<span class="drag-handle">☰</span>'
+      ELSE NULL
+    END AS drag_handle,
+    c.n001 as TASK_MODE
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c.c005 IS NULL
+    AND NVL(c.c010, 'ACTIVE') != 'DELETE'
+
+  UNION ALL
+
+  -- Дочірні записи
+  SELECT
+    child.seq_id,
+    child.c001,
+    TO_NUMBER(child.c005),
+    child.c002,
+    TO_NUMBER(child.c006),
+    parent.level_b + 1,
+    --parent.path_b || '.' || LPAD(TO_NUMBER(child.c006), 5, '0'),
+    parent.path_b || '.' || LPAD(TO_NUMBER(ROWNUM), 5, '0'),
+    parent.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (
+        PARTITION BY child.c005 ORDER BY TO_NUMBER(child.c006)
+      )
+    ),
+    CASE 
+      WHEN child.c005 IS NULL THEN '<span class="drag-handle">☰</span>'
+      ELSE NULL
+    END,
+     TO_NUMBER(child.n001)
+  FROM apex_collections child
+  JOIN subtask_tree parent
+    ON TO_NUMBER(child.c005) = parent.seq_id
+  WHERE child.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND NVL(child.c010, 'ACTIVE') != 'DELETE'
+)
+SELECT
+  seq_id AS id,
+  task_id,
+  parent_seq_id AS parent_id,
+  subtask_content,
+  subtask_order,
+  level_b,
+  full_number,
+  path_b,
+  LPAD(' ', (level_b - 1) * 4, ' ') || full_number || ' ' || subtask_content AS display_content,
+  drag_handle,
+  TASK_MODE
+FROM subtask_tree
+WHERE TASK_MODE = 0
+ORDER BY path_b;
+]';
+
+-----------------------
+
+additional_items - hidden
+
+P8_TASK_MODE
+P8_TASK_ID
+P8_SUBTASK_CONTENT
+P8_PLANNING_DATE_END
+P8_PARENT_ID
+P8_SUBTASK_ORDER
+
+----------------------
+
+buttons
+
+CREATE_SUBTASK
+redirecttopageinthisapp
+9
+9
+P9_TASK_MODE = 0
+
+UPDATE_SUBTASK
+redirecttopageinthisapp
+9
+9
+P9_TASK_MODE = 0
+P9_SEQ_ID = 1
+
+CLEAR_COLLECT
+DA - click
+serverside
+BEGIN
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+  END IF;
+END;
+
+DELETE_SUBTASK
+DA - click
+js code
+apex.message.confirm("Ви дійсно хочете видалити це підзавдання?", function (okPressed) {
+    if (okPressed) {
+      apex.server.process("DELETE_SUBTASK_COLLECTION", {
+        x01: 5
+      }, {
+        dataType: "json",
+        success: function (pData) {
+          if (pData.status === "ok") {
+              apex.message.alert("Завдання видалено.");
+            //apex.region("TASK_SUBTASKS_IG_1").refresh();
+          } else {
+            apex.message.alert("Помилка при видаленні.");
+          }
+        },
+        error: function () {
+          apex.message.alert("Помилка при з’єднанні з сервером.");
+        }
+      });
+    }
+  });
+
+
+ADD_CHILD_SUBTASK
+DA - click DISABLE
+js code
+  //const parentSeqId = this.dataset.seqid;
+  //const taskId = $v('P5_TASK_ID'); // або передай окремо
+
+  const parentSeqId = 8;
+  const taskMode = apex.item('P8_TASK_MODE').getValue();
+
+//   const content = prompt("Введіть зміст нового підзавдання");
+//   if (!content) return;
+
+  apex.server.process("ADD_SUBTASK_CHILD", {
+    x01: parentSeqId,
+    x02: taskMode
+    // x02: parentSeqId
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      if (pData.status === "ok") {
+          apex.message.alert("Підзавдання створено");
+        //apex.region("TASK_SUBTASKS_IG_1").refresh();
+      } else {
+        apex.message.alert("❌ Помилка при створенні");
+      }
+    },
+    error: function() {
+      apex.message.alert("❌ Не вдалося підключитися до сервера");
+    }
+  });
+
+-----------------------------------
+
+processing
+
+DELETE_SUBTASK_COLLECTION
+
+DECLARE
+  l_seq_id NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01);
+  l_task_id NUMBER;
+BEGIN
+  -- Отримаємо TASK_ID або NULL
+  SELECT c001
+  INTO l_task_id
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = l_seq_id;
+
+  -- Якщо TASK_ID існує → запис вже в БД → позначаємо для видалення
+  IF l_task_id IS NOT NULL THEN
+    APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_seq             => l_seq_id,
+      p_attr_number     => 10, -- C010
+      p_attr_value      => 'DELETE'
+    );
+  ELSE
+    -- Якщо ще не збережений → просто видаляємо з колекції
+    APEX_COLLECTION.DELETE_MEMBER(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_seq             => l_seq_id
+    );
+  END IF;
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+
+----------------------
+
+ADD_SUBTASK_CHILD (doesnt use)
+
+DECLARE
+  l_task_id   NUMBER;
+  l_content   VARCHAR2(4000);
+  l_parent_id NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01); -- SEQ_ID в колекції
+  l_parent_order VARCHAR2(100);
+  l_child_index NUMBER;
+  l_subtask_order VARCHAR2(100);
+  l_task_mode NUMBER := TO_NUMBER(APEX_APPLICATION.G_X02);
+BEGIN
+  -- Отримуємо SUBTASK_ORDER батьківського елемента
+  SELECT c006
+  INTO l_parent_order
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND SEQ_ID = l_parent_id;
+
+  -- Рахуємо кількість нащадків у батька
+  SELECT COUNT(*) + 1
+  INTO l_child_index
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+    AND c005 = l_parent_id;
+
+  -- Формуємо новий порядок (SUBTASK_ORDER)
+  l_subtask_order := l_parent_order || '.' || l_child_index;
+
+  -- Додаємо новий дочірній запис
+  APEX_COLLECTION.ADD_MEMBER(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_n001            => l_task_mode,
+    p_c001            => l_task_id,
+    p_c002            => l_content,
+    p_c006            => l_subtask_order, -- SUBTASK_ORDER
+    p_c005            => TO_CHAR(l_parent_id), -- зв'язок із батьком (SEQ_ID)
+    p_c010            => 'NEW'
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+
+-----------------------------------------------------

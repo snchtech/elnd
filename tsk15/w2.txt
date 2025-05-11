@@ -1,0 +1,138 @@
+PAGE 9
+
+ITMS
+P9_STATUS_ID
+P9_SUBTASK_ORDER
+P9_ID
+P9_TASK_ID
+P9_TASK_MODE
+P9_SEQ_ID
+
+main
+
+P9_SUBTASK_CONTENT
+P9_PLANNING_DATE_END
+P9_PARENT_ID
+P9_PARENT_NAME
+
+buttons
+ADD_SUBTASK
+item is null
+P9_SEQ_ID
+
+DA - click
+js code
+apex.server.process("ADD_SUBTASK_COLLECTION", {
+    x01: $v("P9_TASK_ID"),
+    x02: $v("P9_SUBTASK_CONTENT"),
+    x03: $v("P9_PLANNING_DATE_END"),
+    x04: $v("P9_PARENT_ID"),
+    x05: $v("P9_SUBTASK_ORDER"),
+    x06: $v("P9_TASK_MODE")
+  }, {
+    pageItems: "#P9_SUBTASK_CONTENT,#P9_PLANNING_DATE_END,#P9_PARENT_ID,#P9_SUBTASK_ORDER,#P9_TASK_MODE",
+    dataType: "json",
+    success: function(pData) {
+      if (pData.status === 'ok') {
+        //apex.region("TASK_SUBTASKS_IG_1").refresh();
+        alert('Завдання додано');
+      } else {
+        apex.message.alert("Помилка: " + (pData.message || 'Невідомо'));
+      }
+    },
+    error: function() {
+      apex.message.alert("Помилка при з’єднанні з сервером");
+    }
+  });
+
+
+
+UPDATE_SUBTASK
+item is not null
+P9_SEQ_ID
+DA - click
+js code
+apex.server.process("UPDATE_SUBTASK_IN_COLLECTION", {
+    x01: $v("P9_TASK_ID"),
+    x02: $v("P9_SUBTASK_CONTENT"),
+    x03: $v("P9_PLANNING_DATE_END"),
+    x04: $v("P9_PARENT_ID"),
+    x05: $v("P9_SUBTASK_ORDER"),
+    x06: $v("P9_TASK_MODE")
+  }, {
+    dataType: "json",
+    success: function(pData) {
+      if (pData.status === 'ok') {
+        //apex.region("TASK_SUBTASKS_IG_1").refresh();
+        alert('Завдання оновлено');
+      } else {
+        apex.message.alert("Помилка: " + (pData.message || 'Невідомо'));
+      }
+    },
+    error: function() {
+      apex.message.alert("Помилка при з’єднанні з сервером");
+    }
+  });
+
+----------------------------------------
+processing
+ADD_SUBTASK_COLLECTION
+declare
+v_task_id NUMBER;
+BEGIN
+
+--v_task_id := APEX_APPLICATION.G_X01;
+
+  APEX_COLLECTION.ADD_MEMBER(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_c001 => APEX_APPLICATION.G_X01,
+    p_c002 => APEX_APPLICATION.G_X02,
+    p_c003 => '1', -- STATUS_ID
+    p_c004 => APEX_APPLICATION.G_X03,
+    p_c005 => APEX_APPLICATION.G_X04,
+    p_c006 => APEX_APPLICATION.G_X05,
+    p_n001 => APEX_APPLICATION.G_X06
+  );
+
+  -- Повертаємо відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+
+END;
+
+--------------
+
+UPDATE_SUBTASK_IN_COLLECTION
+
+BEGIN
+  APEX_COLLECTION.UPDATE_MEMBER (
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_seq             => :P9_SEQ_ID,
+    p_c001 => APEX_APPLICATION.G_X01,
+    p_c002 => APEX_APPLICATION.G_X02,
+    p_c003 => '1', -- STATUS_ID
+    p_c004 => APEX_APPLICATION.G_X03,
+    p_c005 => APEX_APPLICATION.G_X04,
+    p_c006 => APEX_APPLICATION.G_X05,
+    p_n001 => APEX_APPLICATION.G_X06
+  );
+
+
+  -- Повертаємо відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;

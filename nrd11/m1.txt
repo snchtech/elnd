@@ -1,0 +1,191 @@
+Так, реалізувати **вивід загального звіту з групуванням по `department` і вкладеними рядками по `performer_department_id`** в Oracle APEX цілком **можливо**, і ось як це можна реалізувати поетапно:
+
+---
+
+### ✅ **Ціль**
+
+Отримати:
+
+```
+department: Відділ 1
+  ↳ performer_department_id: Відділ 3 — підпорядковані записи
+department: Відділ 2
+  ↳ performer_department_id: Відділ 4
+```
+
+---
+
+## 🔧 КРОК 1: Розширення `base_data` в `view`
+
+Додай до `base_data` наступні `LEFT JOIN`:
+
+```sql
+-- JOIN з USERS
+LEFT JOIN USERS u ON u.id = t.performer_id
+-- JOIN з DEPARTMENTS
+LEFT JOIN DEPARTMENTS d ON d.id = u.performer_department_id
+```
+
+Після чого додаєш до `SELECT`:
+
+```sql
+u.performer_department_id,
+d.depart_short_name AS performer_department_name
+```
+
+Отже, `base_data` буде виглядати приблизно так:
+
+```sql
+WITH base_data AS (
+  SELECT 
+    t.id_outfit,
+    t.org,
+    t.org_txt,
+    t.department,
+    t.unit,
+    t.team_count,
+    t.data_start,
+    t.status_start_date,
+    t.status_end_date,
+    t.performer_id,
+    u.performer_department_id,
+    d.depart_short_name AS performer_department_name
+  FROM TEST_OUTFIT_DATA t
+  LEFT JOIN USERS u ON t.performer_id = u.id
+  LEFT JOIN DEPARTMENTS d ON u.performer_department_id = d.id
+  WHERE t.outfit_open = 6
+)
+```
+
+---
+
+## 🔧 КРОК 2: Побудова агрегації (agg\_data)
+
+Потрібно об’єднати `department` (основні записи) і `performer_department_id` (виконавчі):
+
+```sql
+agg_data AS (
+  SELECT
+    'MAIN' AS record_type,
+    CASE WHEN org = 0 THEN department ELSE org_txt END AS group_name,
+    org,
+    department,
+    NULL AS performer_department_id,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date,
+    COUNT(DISTINCT id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  GROUP BY
+    CASE WHEN org = 0 THEN department ELSE org_txt END,
+    org,
+    department,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date
+
+  UNION ALL
+
+  SELECT
+    'SUB' AS record_type,
+    CASE WHEN org = 0 THEN performer_department_name ELSE org_txt END AS group_name,
+    org,
+    department,
+    performer_department_id,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date,
+    COUNT(DISTINCT id_outfit) AS brigades,
+    SUM(team_count) AS people
+  FROM base_data
+  WHERE performer_department_id IS NOT NULL
+  GROUP BY
+    CASE WHEN org = 0 THEN performer_department_name ELSE org_txt END,
+    org,
+    department,
+    performer_department_id,
+    unit,
+    data_start,
+    status_start_date,
+    status_end_date
+)
+```
+
+---
+
+## 🔧 КРОК 3: Вивід фінального SELECT
+
+Тепер просто додаємо `record_type` у фінальну вибірку:
+
+```sql
+SELECT
+  record_type,
+  group_name,
+  org,
+  department,
+  performer_department_id,
+  data_start,
+  status_start_date,
+  status_end_date,
+  NVL(SUM(CASE WHEN unit = 0 THEN people END), 0) AS u1_people,
+  NVL(SUM(CASE WHEN unit = 0 THEN brigades END), 0) AS u1_brigades,
+  NVL(SUM(CASE WHEN unit = 1 THEN people END), 0) AS u2_people,
+  NVL(SUM(CASE WHEN unit = 1 THEN brigades END), 0) AS u2_brigades,
+  NVL(SUM(CASE WHEN unit = 2 THEN people END), 0) AS u3_people,
+  NVL(SUM(CASE WHEN unit = 2 THEN brigades END), 0) AS u3_brigades,
+  SUM(people) AS total_people,
+  SUM(brigades) AS total_brigades
+FROM agg_data
+GROUP BY
+  record_type,
+  group_name,
+  org,
+  department,
+  performer_department_id,
+  data_start,
+  status_start_date,
+  status_end_date
+ORDER BY
+  department, record_type, group_name
+```
+
+---
+
+## ✅ APEX реалізація
+
+1. **На основі цієї view створюєш IR.**
+2. **Використовуй `record_type` для візуального форматування:**
+
+   * `MAIN` — жирний або більший шрифт (основний запис).
+   * `SUB` — звичайний або з відступом (через CSS клас).
+
+Наприклад:
+
+```css
+.sub-record td {
+  padding-left: 30px;
+  color: #666;
+  font-style: italic;
+}
+```
+
+І через HTML Expression:
+
+```sql
+CASE WHEN record_type = 'SUB' THEN 'sub-record' END AS css_class
+```
+
+---
+
+## ✅ Альтернативи
+
+* Можна розбити на 2 окремі звіти: основні та дочірні.
+* Або зробити **master-detail звіт**: при кліку на `department`, внизу з’являється деталь по `performer_department_id`.
+
+---
+
+Хочеш — можу повністю сформувати `CREATE VIEW v_outfit_pivot_base` з цими змінами.

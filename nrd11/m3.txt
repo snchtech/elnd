@@ -1,0 +1,105 @@
+Щоб реалізувати **master-detail звіт** у Oracle APEX, де при кліку на `department` в основному звіті (master) внизу з’являється деталь (detail) по `performer_department_id`, виконай наступні кроки:
+
+---
+
+## 🔧 **Кроки налаштування Master-Detail Interactive Report**
+
+### **1. Створити два звіти на одній сторінці**
+
+* **Master Report** – по `department` (основний звіт).
+* **Detail Report** – по `performer_department_id` (детальний звіт).
+
+---
+
+### **2. SQL-запити для звітів**
+
+#### ✅ Master Report (IR або Classic Report):
+
+```sql
+SELECT DISTINCT
+  department,
+  SUM(total_people) AS total_people,
+  SUM(total_brigades) AS total_brigades
+FROM v_outfit_pivot_base
+GROUP BY department
+ORDER BY department
+```
+
+#### ✅ Detail Report (IR або Classic Report):
+
+```sql
+SELECT
+  p.department AS performer_department,
+  d.depart_short_name,
+  v.unit,
+  SUM(v.total_people) AS total_people,
+  SUM(v.total_brigades) AS total_brigades
+FROM v_outfit_pivot_base v
+JOIN users u ON u.id = v.performer_id
+JOIN departments d ON d.id = u.performer_department_id
+JOIN departments p ON p.id = u.performer_department_id
+WHERE v.department = :PXX_SELECTED_DEPARTMENT
+GROUP BY p.department, d.depart_short_name, v.unit
+ORDER BY p.department, v.unit
+```
+
+> 🔸 `:PXX_SELECTED_DEPARTMENT` — це **прихований item** на сторінці, в який записується значення з майстер-звіту.
+
+---
+
+### **3. Створити прихований item `PXX_SELECTED_DEPARTMENT`**
+
+* Тип: Hidden
+* Значення: встановлюється динамічно через Dynamic Action
+
+---
+
+### **4. Налаштувати Dynamic Action на master-звіт**
+
+* **Подія**: `Click` (або `Selection Change [Interactive Report]`)
+
+* **Selection Type**: `Region`
+
+* **Region**: master-звіт
+
+* **True Action 1**: `Set Value`
+
+  * **Set Type**: `Static Assignment` → `JavaScript Expression`
+  * **Value**:
+
+    ```js
+    this.triggeringElement.innerText
+    ```
+
+    (або отримати з потрібної клітинки через JS)
+  * **Set Item(s)**: `PXX_SELECTED_DEPARTMENT`
+
+* **True Action 2**: `Refresh`
+
+  * **Affected Element**: Detail звіт
+
+---
+
+### **5. Опційно: Додати умовне відображення Detail-звіту**
+
+* Встановити `Server Condition` або через `Client-side Condition`, щоб детальний звіт не показувався до вибору з master.
+
+---
+
+### **6. UI покращення (опційно)**:
+
+* Додати іконку ▼ чи панель розгортання/згортання для візуального ефекту.
+* Використовувати Cards або Inline Dialog (якщо хочеш більше інтерактиву).
+
+---
+
+## ✅ Результат
+
+При натисканні на `department` в master-звіті:
+
+* У hidden item записується обране значення.
+* Detail звіт оновлюється і показує дані по `performer_department_id`.
+
+---
+
+Хочеш, я згенерую приклад HTML+JS, якщо потрібно зробити це без перезавантаження або з картками?

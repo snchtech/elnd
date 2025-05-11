@@ -1,0 +1,62 @@
+RETURN q'[
+WITH subtask_tree (
+  seq_id, task_id, parent_seq_id, subtask_content, subtask_order,
+  level_b, path_b, full_number, drag_handle, task_mode
+) AS (
+  SELECT
+    c.seq_id,
+    c.c001,
+    NULL,
+    c.c002,
+    TO_NUMBER(c.c006),
+    1 AS level_b,
+    LPAD(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c006)), 5, '0') AS path_b,
+    TO_CHAR(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c006))) AS full_number,
+    CASE WHEN c.c005 IS NULL THEN '<span class="drag-handle">☰</span>' END,
+    TO_NUMBER(c.n001)
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c.c005 IS NULL
+    AND NVL(c.c010, 'ACTIVE') != 'DELETE'
+
+  UNION ALL
+
+  SELECT
+    child.seq_id,
+    child.c001,
+    TO_NUMBER(child.c005),
+    child.c002,
+    TO_NUMBER(child.c006),
+    parent.level_b + 1,
+    parent.path_b || '.' || LPAD(ROW_NUMBER() OVER (
+      PARTITION BY child.c005 ORDER BY TO_NUMBER(child.c006)
+    ), 5, '0'),
+    parent.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (
+        PARTITION BY child.c005 ORDER BY TO_NUMBER(child.c006)
+      )
+    ),
+    NULL,
+    TO_NUMBER(child.n001)
+  FROM apex_collections child
+  JOIN subtask_tree parent
+    ON TO_NUMBER(child.c005) = parent.seq_id
+  WHERE child.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND NVL(child.c010, 'ACTIVE') != 'DELETE'
+)
+SELECT
+  seq_id AS id,
+  task_id,
+  parent_seq_id AS parent_id,
+  subtask_content,
+  subtask_order,
+  level_b,
+  full_number,
+  path_b,
+  LPAD(' ', (level_b - 1) * 4, ' ') || full_number || ' ' || subtask_content AS display_content,
+  drag_handle,
+  TASK_MODE
+FROM subtask_tree
+WHERE TASK_MODE = 0
+ORDER BY path_b;
+]';

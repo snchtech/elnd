@@ -1,0 +1,80 @@
+Так, звісно. Щоб уникнути проблем із `apex.util.makeApplicationUrl` (який не працює, наприклад, у деяких режимах модального вікна або при складних кешуваннях), краще сформувати URL **на сервері через Ajax Callback** і **отримати його в JS через `apex.server.process`**.
+
+---
+
+## ✅ Що ми зробимо:
+
+1. Створимо Ajax Callback `GEN_DETAIL_URL`.
+2. На сервері сформуємо `APEX_PAGE.GET_URL(...)`.
+3. У JS отримаємо цей URL → відкриємо його через `apex.navigation.redirect(...)` або `.dialog.open(...)`.
+
+---
+
+### 🔧 Крок 1. Ajax Callback `GEN_DETAIL_URL`
+
+У сторінці створюємо **Ajax Callback** з наступним кодом:
+
+```plsql
+DECLARE
+  v_url VARCHAR2(4000);
+BEGIN
+  -- Формуємо URL
+  v_url := APEX_PAGE.GET_URL(
+    p_page        => 101, -- ID цільової сторінки
+    p_clear_cache => '101',
+    p_items       => 'P101_DEPARTMENT,P101_TIME_MODE,P101_TIME_START,P101_TIME_END',
+    p_values      => apex_application.g_x01 || ',' ||
+                     apex_application.g_x02 || ',' ||
+                     apex_application.g_x03 || ',' ||
+                     apex_application.g_x04
+  );
+
+  -- Повертаємо
+  htp.p(v_url);
+END;
+```
+
+---
+
+### 💡 Крок 2. JS-функція `openDetail(...)`
+
+```js
+function openDetail(department, timeMode, timeStart, timeEnd) {
+  apex.server.process("GEN_DETAIL_URL", {
+    x01: department,
+    x02: timeMode,
+    x03: timeStart,
+    x04: timeEnd
+  }, {
+    dataType: "text",
+    success: function(pUrl) {
+      // Відкриваємо як redirect або dialog
+      apex.navigation.redirect(pUrl);
+      // або:
+      // apex.navigation.dialog.open(pUrl, {title: "Деталі"});
+    },
+    error: function() {
+      apex.message.alert("Не вдалося згенерувати URL.");
+    }
+  });
+}
+```
+
+---
+
+### 🧪 Приклад виклику:
+
+У звіті в колонці:
+
+```sql
+'<a href="javascript:void(0);" onclick="openDetail(''' 
+|| CASE WHEN :P0_CURRENT_DEPARTMENT IS NOT NULL THEN :P0_CURRENT_DEPARTMENT ELSE department END || ''','''
+|| :P_TIME_MODE || ''','''
+|| NVL(TO_CHAR(:P_TIME_START, 'YYYY-MM-DD"T"HH24:MI:SS'), '') || ''','''
+|| NVL(TO_CHAR(:P_TIME_END, 'YYYY-MM-DD"T"HH24:MI:SS'), '') || ''')">
+  <span class="fa fa-search-plus" title="Переглянути деталі"></span></a>' AS view_icon
+```
+
+---
+
+Хочеш, щоб ми адаптували це одразу **для відкриття у модальному вікні** (через `apex.navigation.dialog.open`) з відповідними параметрами?

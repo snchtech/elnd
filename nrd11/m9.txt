@@ -1,0 +1,60 @@
+Так, ти можеш **згенерувати дві різні варіації коду** — одна для `P_TIME_MODE`, інша для `P_TIME_START`/`P_TIME_END`. Для цього потрібно в SQL **використати умовну логіку** (наприклад, через `CASE` або дві окремі колонки в залежності від режиму).
+
+---
+
+### ✅ Варіант 1: Один рядок з умовним `CASE` (універсально)
+
+```sql
+CASE 
+  WHEN :P_TIME_MODE IS NOT NULL THEN 
+    '<a href="javascript:void(0);" onclick="openDetail(''' 
+    || REPLACE(NVL(:P0_CURRENT_DEPARTMENT, department), '''', '') || ''','''
+    || :P_TIME_MODE || ''',''' || ''',''' || ''')">'
+    || '<span class="fa fa-clock" title="За часовим режимом"></span></a>'
+    
+  WHEN :P_TIME_START IS NOT NULL OR :P_TIME_END IS NOT NULL THEN 
+    '<a href="javascript:void(0);" onclick="openDetail(''' 
+    || REPLACE(NVL(:P0_CURRENT_DEPARTMENT, department), '''', '') || ''',''' || ''','''
+    || NVL(TO_CHAR(:P_TIME_START, 'YYYY-MM-DD HH24:MI:SS'), '') || ''','''
+    || NVL(TO_CHAR(:P_TIME_END, 'YYYY-MM-DD HH24:MI:SS'), '') || ''')">'
+    || '<span class="fa fa-calendar" title="За діапазоном дат"></span></a>'
+    
+  ELSE NULL
+END AS view_icon
+```
+
+---
+
+### ✅ Варіант 2: Дві окремі колонки (для двох типів перегляду)
+
+#### 1. **Кнопка для TIME\_MODE**
+
+```sql
+'<a href="javascript:void(0);" onclick="openDetail(''' 
+|| REPLACE(NVL(:P0_CURRENT_DEPARTMENT, department), '''', '') || ''','''
+|| :P_TIME_MODE || ''',''' || ''',''' || ''')">'
+|| '<span class="fa fa-clock" title="Режим часу"></span></a>' AS view_icon_mode
+```
+
+#### 2. **Кнопка для TIME\_START/END**
+
+```sql
+'<a href="javascript:void(0);" onclick="openDetail(''' 
+|| REPLACE(NVL(:P0_CURRENT_DEPARTMENT, department), '''', '') || ''',''' || ''','''
+|| NVL(TO_CHAR(:P_TIME_START, 'YYYY-MM-DD HH24:MI:SS'), '') || ''','''
+|| NVL(TO_CHAR(:P_TIME_END, 'YYYY-MM-DD HH24:MI:SS'), '') || ''')">'
+|| '<span class="fa fa-calendar" title="Діапазон дат"></span></a>' AS view_icon_period
+```
+
+> **Увага**: переконайся, що ти увімкнув `Escape special characters = No` в налаштуваннях відповідної колонки в APEX.
+
+---
+
+### 📌 Примітка
+
+У функції `openDetail` перевіряй логіку, щоб:
+
+* Якщо `mode !== ''` — працює режим `TIME_MODE`
+* Інакше — використовуються `start` / `end`.
+
+Хочеш — можу допомогти з JS функцією `openDetail(...)`, яка це обробляє.

@@ -1,0 +1,98 @@
+Щоб реалізувати описану логіку, потрібно поєднати кілька речей:
+
+---
+
+## ✅ Що потрібно:
+
+1. **Піктограма в першій колонці** звіту.
+2. При кліку передаються параметри:
+
+   * `department` (з рядка, або `P0_CURRENT_DEPARTMENT`, якщо є).
+   * `P_TIME_MODE` або `P_TIME_START` + `P_TIME_END`.
+3. **Формується URL** для переходу на іншу сторінку/модальне вікно.
+
+---
+
+## 🛠 Частина 1: Колонка з іконкою
+
+У SQL звіту додай колонку (в кінці або на початку):
+
+```sql
+'<a href="javascript:void(0);" onclick="openDetail(''' 
+|| CASE 
+     WHEN :P0_CURRENT_DEPARTMENT IS NOT NULL THEN :P0_CURRENT_DEPARTMENT 
+     ELSE department 
+   END || ''',''' 
+|| :P_TIME_MODE || ''','''
+|| NVL(TO_CHAR(:P_TIME_START, 'YYYY-MM-DD"T"HH24:MI:SS'), '') || ''','''
+|| NVL(TO_CHAR(:P_TIME_END, 'YYYY-MM-DD"T"HH24:MI:SS'), '') || ''')">
+  <span class="fa fa-search-plus" title="Переглянути деталі"></span></a>' AS view_icon
+```
+
+> 🔸 Примітка: `view_icon` — це колонка, яку ти відобразиш як HTML у звіті.
+
+---
+
+## 🛠 Частина 2: JavaScript-функція `openDetail`
+
+Додай у властивості сторінки > Function and Global Variable Declaration:
+
+```js
+function openDetail(department, timeMode, timeStart, timeEnd) {
+  let url;
+
+  if (timeMode) {
+    url = apex.util.makeApplicationUrl({
+      pageId: 101,  // Заміни на ID цільової сторінки
+      clearCache: "101",
+      itemNames: ["P101_DEPARTMENT", "P101_TIME_MODE"],
+      itemValues: [department, timeMode]
+    });
+  } else {
+    url = apex.util.makeApplicationUrl({
+      pageId: 101,
+      clearCache: "101",
+      itemNames: ["P101_DEPARTMENT", "P101_TIME_START", "P101_TIME_END"],
+      itemValues: [department, timeStart, timeEnd]
+    });
+  }
+
+  apex.navigation.redirect(url); // або .dialog.open для модального
+}
+```
+
+---
+
+## 🧾 Як врахувати це у `WHERE` у звіті (на сторінці 101):
+
+```sql
+WHERE 1=1
+  AND (
+    :P101_DEPARTMENT IS NULL OR department = :P101_DEPARTMENT
+  )
+  AND (
+    (:P101_TIME_MODE = 'NOW' AND status_start_date < SYSDATE AND status_end_date IS NULL)
+    OR (:P101_TIME_MODE = 'DAY' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= TRUNC(SYSDATE)))
+    OR (:P101_TIME_MODE = 'SHIFT' AND status_start_date < SYSDATE AND (status_end_date IS NULL OR status_end_date >= :P_SHIFT_START))
+    OR (
+      :P101_TIME_MODE IS NULL AND
+      :P101_TIME_START IS NOT NULL AND
+      :P101_TIME_END IS NOT NULL AND
+      status_start_date <= :P101_TIME_END AND
+      (status_end_date IS NULL OR :P101_TIME_START < status_end_date)
+    )
+  )
+```
+
+---
+
+## 🧩 Додатково:
+
+* Колонку `view_icon` відображай у звіті як **HTML Expression**:
+  В APEX: `Column Formatting → Escape special characters → No`
+
+* Можеш також додати Dynamic Action на `apex.navigation.redirect` → `modal` замість redirect.
+
+---
+
+Хочеш, щоб я адаптував це одразу під **модальне вікно** через `apex.navigation.dialog.open`?

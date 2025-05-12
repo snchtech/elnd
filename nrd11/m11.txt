@@ -1,0 +1,59 @@
+В Oracle APEX (в IR або Classic Report), якщо ти хочеш динамічно задати **row style** (тобто стиль рядка), подібно до того, як це робиться з `column_style`, ти можеш скористатися псевдоколонкою `ROW_CLASS` або `ROW_STYLE` в SQL-запиті. Нижче поясню, як це зробити.
+
+---
+
+### ✅ 1. Використання `ROW_STYLE` (Inline CSS)
+
+```sql
+SELECT 
+  department,
+  total_people,
+  total_brigades,
+  CASE 
+    WHEN total_people > 50 THEN 'background-color: #fde2e2; font-weight: bold;'
+    ELSE NULL
+  END AS ROW_STYLE
+FROM your_view
+```
+
+📌 У IR або Classic Report:
+
+* Перейди до **Attributes > Layout > Row Style** → встанови в `ROW_STYLE`.
+
+---
+
+### ✅ 2. Використання `ROW_CLASS` (CSS Class)
+
+```sql
+SELECT 
+  department,
+  total_people,
+  total_brigades,
+  CASE 
+    WHEN total_people > 50 THEN 'highlight-red'
+    ELSE NULL
+  END AS ROW_CLASS
+FROM your_view
+```
+
+📌 У IR або Classic Report:
+
+* Перейди до **Attributes > Layout > Row CSS Classes** → встанови в `ROW_CLASS`.
+
+Далі в CSS (Page > Inline CSS або Universal Theme → Custom CSS):
+
+```css
+.highlight-red {
+  background-color: #ffd6d6 !important;
+  font-weight: bold;
+}
+```
+
+---
+
+### 📌 Що обрати?
+
+* `ROW_STYLE` — швидко і без класів, прямо в SQL.
+* `ROW_CLASS` — краще для підтримки і тем оформлення.
+
+Хочеш — можу допомогти інтегрувати в твій звіт на основі `v_outfit_pivot_base`. Хочеш стилізувати, наприклад, рядки де `org = 1`?

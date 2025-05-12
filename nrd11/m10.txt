@@ -1,0 +1,98 @@
+Ось оновлена функція `openDetail(mode, start, end, department)` для Oracle APEX, яка:
+
+1. **Приймає параметри**:
+
+   * `mode` — значення `NOW`, `DAY`, `SHIFT` (або порожнє).
+   * `start` / `end` — дати у форматі ISO (`'YYYY-MM-DD HH24:MI:SS'`) або пусті.
+   * `department` — код відділу.
+
+2. **Визначає режим**:
+
+   * Якщо `mode` заданий → використовується часова логіка.
+   * Інакше, якщо задані `start` та `end`, → використовуються як діапазон.
+
+3. **Звертається до APEX AJAX callback `GEN_DETAIL_URL`**, який генерує `f?p=...` URL і повертає його.
+
+4. **Використовує `apex.navigation.redirect()` для відкриття сторінки.**
+
+---
+
+### ✅ JavaScript функція `openDetail`
+
+```js
+function openDetail(department, mode, start, end) {
+  // Визначаємо, які параметри використовуються
+  const useMode = mode && mode.trim() !== "";
+  const usePeriod = start && end;
+
+  // Передаємо через AJAX Processing
+  apex.server.process("GEN_DETAIL_URL", {
+    x01: department,
+    x02: useMode ? mode : '',
+    x03: usePeriod ? start : '',
+    x04: usePeriod ? end : ''
+  }, {
+    dataType: "text",
+    success: function (url) {
+      if (url) {
+        apex.navigation.redirect(url);
+      } else {
+        apex.message.alert("Не вдалося згенерувати URL для переходу.");
+      }
+    },
+    error: function () {
+      apex.message.alert("Помилка при створенні URL.");
+    }
+  });
+}
+```
+
+---
+
+### ✅ Серверний процес `GEN_DETAIL_URL` (AJAX Callback)
+
+```plsql
+DECLARE
+  l_url VARCHAR2(4000);
+BEGIN
+  -- Отримання параметрів
+  DECLARE
+    l_department    VARCHAR2(100) := apex_application.g_x01;
+    l_time_mode     VARCHAR2(10)  := apex_application.g_x02;
+    l_time_start    VARCHAR2(100) := apex_application.g_x03;
+    l_time_end      VARCHAR2(100) := apex_application.g_x04;
+  BEGIN
+    -- Побудова URL залежно від режиму
+    IF l_time_mode IS NOT NULL THEN
+      l_url := APEX_PAGE.GET_URL(
+        p_page        => 15,  -- заміни на свій номер сторінки
+        p_clear_cache => '15',
+        p_items       => 'P15_DEPARTMENT,P15_TIME_MODE',
+        p_values      => l_department || ',' || l_time_mode
+      );
+    ELSIF l_time_start IS NOT NULL AND l_time_end IS NOT NULL THEN
+      l_url := APEX_PAGE.GET_URL(
+        p_page        => 15,
+        p_clear_cache => '15',
+        p_items       => 'P15_DEPARTMENT,P15_TIME_START,P15_TIME_END',
+        p_values      => l_department || ',' || l_time_start || ',' || l_time_end
+      );
+    ELSE
+      l_url := NULL;
+    END IF;
+  END;
+
+  -- Повернення URL
+  htp.p(l_url);
+END;
+```
+
+---
+
+### 🟢 Переваги підходу:
+
+* Безпечне формування URL на сервері.
+* Гнучке управління логікою (перевірки, додаткові параметри).
+* Просте оновлення сторінки.
+
+Хочеш — можу допомогти ще й додати логіку для відкриття в **модальному вікні** замість redirect.

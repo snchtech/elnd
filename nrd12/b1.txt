@@ -1,0 +1,78 @@
+Дуже гарне спостереження. Те, що ти описуєш — типова ситуація, коли намагаються вручну зафіксувати `<thead>` таблиці у **Oracle APEX**, особливо в **модальному вікні** з **Interactive Report (IR)**.
+
+Твій код фіксує `thead`, але не компенсує його **висоту** під час переходу в `position: fixed`, тому:
+
+* При **скролі вниз** — шапка "вилітає" вгору і фіксується як треба.
+* При **скролі вгору** — оскільки елемент стає `position: static` і втрачає місце, браузер залишає "порожню зону", яку ти бачиш як `js-stickyWidget-placeholder` (в APEX sticky headers так і працюють).
+
+---
+
+## 🔍 Чому це відбувається:
+
+APEX (і jQuery UI в цілому) використовують `stickyWidget.js`, який сам керує вставкою `placeholder` елементів для фіксованих заголовків. Коли ти самостійно фіксуєш заголовок через `position: fixed`, цей механізм втрачає зв'язок і не працює стабільно.
+
+---
+
+## ✅ Рішення:
+
+### 🔧 Варіант 1: **Додати padding-top для tbody при фіксації**
+
+Твій код можна доповнити розрахунком висоти заголовка, і при `fixed` — додавати відступ до `tbody`, щоб місце зберігалось:
+
+```javascript
+var dialogBody = document.querySelector('.t-Dialog-body');
+var report = document.querySelector('.t-Report--interactiveReport');
+var reportHeader = report.querySelector('thead');
+var reportBody = report.querySelector('tbody');
+
+if (!dialogBody || !reportHeader || !reportBody) return;
+
+var headerHeight = reportHeader.offsetHeight;
+var headerOffsetTop = reportHeader.getBoundingClientRect().top + window.pageYOffset;
+
+dialogBody.addEventListener('scroll', function () {
+  var scrollTop = dialogBody.scrollTop;
+
+  if (scrollTop > headerOffsetTop) {
+    reportHeader.style.position = 'fixed';
+    reportHeader.style.top = '0';
+    reportHeader.style.left = '0';
+    reportHeader.style.right = '0';
+    reportHeader.style.zIndex = '1000';
+    reportHeader.style.backgroundColor = '#fff';
+
+    // Додай відступ для tbody
+    reportBody.style.paddingTop = headerHeight + 'px';
+  } else {
+    reportHeader.style.position = '';
+    reportHeader.style.top = '';
+    reportHeader.style.left = '';
+    reportHeader.style.right = '';
+    reportHeader.style.zIndex = '';
+    reportHeader.style.backgroundColor = '';
+
+    reportBody.style.paddingTop = '';
+  }
+});
+```
+
+---
+
+### 🔧 Варіант 2: **Не робити фіксацію вручну, а активувати стандартну Sticky Header APEX**
+
+У APEX для **IR** вже є вбудована опція **"Fixed to Page"** або **"Sticky Header"**:
+
+* Зайди в **Attributes** → **Pagination** → **Report Attributes**
+* Активуй: `Fixed Header = Yes`
+* APEX сам додасть правильний placeholder, позиціонування і висоту
+
+> Але для цього потрібно, щоб сторінка була не модальна, або ж правильно стилізована (в модальних вікнах іноді sticky headers працюють некоректно).
+
+---
+
+## 🧠 Рекомендація:
+
+* Якщо можеш — краще **використовуй вбудований sticky header** APEX.
+* Якщо потрібно реалізувати вручну — **додавай відступ** (як у Варіанті 1), щоб не було візуального "стрибка".
+
+Хочеш — можу також допомогти зробити анімацію появи/зникнення шапки при фіксації?

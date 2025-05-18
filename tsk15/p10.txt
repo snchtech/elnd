@@ -1,0 +1,89 @@
+Ось оновлений JavaScript-код згідно з твоїми вимогами:
+
+* ✅ Перевіряє наявність заповнених полів та записів у колекціях.
+* ✅ Показує одне загальне повідомлення з підтвердженням.
+* ✅ Якщо користувач підтверджує — очищає поля та викликає **Ajax Callback**, який очищає колекції через `APEX_COLLECTION.DELETE_COLLECTION`.
+* ✅ Після цього дозволяє перемикання перемикача `P_TASK_MODE`.
+
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+  const switchItem = document.querySelector('#P_TASK_MODE');
+  if (!switchItem) return;
+
+  const wrapper = switchItem.closest('.t-Form-fieldContainer');
+  if (!wrapper) return;
+
+  // Створюємо overlay
+  const overlay = document.createElement('span');
+  overlay.className = 'switch-overlay';
+  overlay.title = 'Очистіть дані перед зміною режиму';
+  wrapper.style.position = 'relative';
+  wrapper.appendChild(overlay);
+
+  overlay.addEventListener('click', function () {
+    const hasSubtasks = apex.region('TASK_SUBTASKS_IG_1')?.widget()?.interactiveGrid("getViews", "grid").model.length > 0;
+    const hasSubtemplates = apex.region('TASK_TEMPLATE_SUBTASKS_IG')?.widget()?.interactiveGrid("getViews", "grid").model.length > 0;
+    const hasFilledFields = ['P_TASK_CONTENT', 'P_NOTE', 'P_UNIT'].some(id => $v(id)?.trim() !== '');
+
+    if (hasSubtasks || hasSubtemplates || hasFilledFields) {
+      apex.message.confirm("Усі введені дані буде очищено. Ви впевнені, що хочете змінити тип?", function (okPressed) {
+        if (okPressed) {
+          // Очищаємо поля форми
+          const fieldsToClear = [
+            'P_TASK_CONTENT', 'P_NOTE', 'P_UNIT', 'P_PLANNING_DATE_START',
+            'P_PLANNING_DATE_END', 'P_PERIOD_MODE', 'P_PERIOD_INTERVAL',
+            'P_PERIOD_TIME', 'P_WEEKLY_DAYS', 'P_WEEKLY_TIME',
+            'P_DATE_END', 'P_TYPE_ID'
+          ];
+          fieldsToClear.forEach(id => $s(id, ""));
+
+          // Викликаємо процес для очищення колекцій
+          apex.server.process("CLEAR_TASK_SUB_COLLECTIONS", {
+            x01: $v('P_TASK_MODE')  // передаємо task_mode, якщо потрібно
+          }, {
+            dataType: "json",
+            success: function () {
+              // Після очищення колекції перемикаємо вручну
+              overlay.remove(); // знімаємо блокування
+              apex.item("P_TASK_MODE").setValue($v("P_TASK_MODE") === '0' ? '1' : '0');
+            },
+            error: function () {
+              apex.message.alert("Помилка при очищенні колекцій.");
+            }
+          });
+        }
+      });
+    } else {
+      // Якщо нічого не заповнено — просто перемикаємо
+      overlay.remove();
+      apex.item("P_TASK_MODE").setValue($v("P_TASK_MODE") === '0' ? '1' : '0');
+    }
+  });
+});
+```
+
+---
+
+### 🔁 PL/SQL Ajax Callback (назва: `CLEAR_TASK_SUB_COLLECTIONS`):
+
+```plsql
+BEGIN
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+  END IF;
+
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_TEMPLATE_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_TEMPLATE_SUBTASKS_COLLECTION');
+  END IF;
+END;
+```
+
+---
+
+💡 **Результат**:
+
+* Користувач не може випадково перемкнути тип і втратити дані.
+* Очистка колекцій та полів відбувається тільки за згодою.
+* Код уніфікований і гнучкий для подальших доповнень.
+
+Хочеш, щоб я виніс перелік `fieldsToClear` в окрему функцію або зробив її глобальною для переюзу?

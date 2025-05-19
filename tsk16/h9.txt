@@ -1,0 +1,53 @@
+Ось оновлений код перевірки наявності дочірніх записів **у колекції**, залежно від `TASK_MODE` (0 — підзавдання, 1 — підшаблони):
+
+```plsql
+DECLARE
+  l_parent_seq_id VARCHAR2(50) := APEX_APPLICATION.G_X01;
+  l_task_mode     NUMBER;
+  l_collection    VARCHAR2(50);
+  l_child_count   NUMBER;
+BEGIN
+  -- Визначаємо TASK_MODE по SEQ_ID
+  SELECT n001
+  INTO l_task_mode
+  FROM APEX_COLLECTIONS
+  WHERE seq_id = l_parent_seq_id;
+
+  -- Колекція відповідно до режиму
+  l_collection := CASE 
+                    WHEN l_task_mode = 0 THEN 'TASK_SUBTASKS_COLLECTION'
+                    WHEN l_task_mode = 1 THEN 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+                  END;
+
+  -- Підрахунок дочірніх записів по C005 (parent_id)
+  SELECT COUNT(*)
+  INTO l_child_count
+  FROM APEX_COLLECTIONS
+  WHERE collection_name = l_collection
+    AND NVL(c010, 'ACTIVE') != 'DELETE' -- не враховуємо вже помічені на видалення
+    AND c005 = l_parent_seq_id;
+
+  -- Повертаємо JSON
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('hasChildren', CASE WHEN l_child_count > 0 THEN 'Y' ELSE 'N' END);
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('hasChildren', 'ERROR');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### ✅ Що враховано:
+
+* Колекція визначається автоматично через `N001` (task\_mode) з батьківського запису.
+* Перевірка `C005 = SEQ_ID` — це і є parent-child зв’язок.
+* Ігноруються записи, помічені на видалення (`C010 = 'DELETE'`).
+* Формат відповіді `{"hasChildren": "Y"}` або `{"hasChildren": "N"}` — сумісний із уже наявною JS логікою.
+
+Можу також допомогти з JS, якщо ти викликаєш цю перевірку перед підтвердженням видалення.

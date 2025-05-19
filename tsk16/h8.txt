@@ -1,0 +1,68 @@
+Ось оновлений універсальний код `PL/SQL` для видалення підзавдання або підшаблону з колекції, враховуючи нову структуру колекцій та `TASK_MODE`:
+
+```plsql
+DECLARE
+  l_seq_id    NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01);
+  l_task_mode NUMBER;
+  l_coll_name VARCHAR2(50);
+  l_task_id   VARCHAR2(100);
+BEGIN
+  -- Визначаємо TASK_MODE для цього запису
+  SELECT n001
+  INTO l_task_mode
+  FROM APEX_COLLECTIONS
+  WHERE SEQ_ID = l_seq_id;
+
+  -- Визначаємо ім'я колекції відповідно до режиму
+  l_coll_name := CASE
+                   WHEN l_task_mode = 0 THEN 'TASK_SUBTASKS_COLLECTION'
+                   WHEN l_task_mode = 1 THEN 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+                 END;
+
+  -- Отримаємо TASK_ID / TEMPLATE_ID
+  SELECT c001
+  INTO l_task_id
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = l_coll_name
+    AND SEQ_ID = l_seq_id;
+
+  -- Якщо TASK_ID / TEMPLATE_ID існує → запис вже збережений → позначаємо як DELETE
+  IF l_task_id IS NOT NULL THEN
+    APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+      p_collection_name => l_coll_name,
+      p_seq             => l_seq_id,
+      p_attr_number     => 10, -- C010 (UPDATOR / DELETE flag)
+      p_attr_value      => 'DELETE'
+    );
+  ELSE
+    -- Інакше видаляємо повністю
+    APEX_COLLECTION.DELETE_MEMBER(
+      p_collection_name => l_coll_name,
+      p_seq             => l_seq_id
+    );
+  END IF;
+
+  -- JSON відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### ✅ Що враховано:
+
+* Працює **одночасно** і для `TASK_SUBTASKS_COLLECTION`, і для `TASK_TEMPLATE_SUBTASKS_COLLECTION`.
+* Визначає колекцію автоматично за `N001` (тобто `TASK_MODE`).
+* Якщо запис був збережений (`C001` має ID) — позначається як `'DELETE'` через `C010`.
+* Якщо це новий запис — повністю видаляється з колекції.
+
+Якщо треба, можу також підготувати JS-функцію для виклику цього процесу, з підтвердженням.

@@ -1,0 +1,57 @@
+Щоб **визначити наступний `SUBTASK_ORDER`** в колекціях `APEX_COLLECTIONS` (а не в таблицях), нам потрібно замінити SQL-запит до таблиці на **вибірку через `SELECT ... FROM TABLE(...)`** з `apex_collections`.
+
+Ось як переписати **для підзавдань** і **підшаблонів** (колекцій `TASK_SUBTASKS_COLLECTION` і `TASK_TEMPLATE_SUBTASKS_COLLECTION`):
+
+---
+
+### ✅ Для підзавдань (TASK\_SUBTASKS\_COLLECTION)
+
+```plsql
+DECLARE
+  v_next_order NUMBER;
+BEGIN
+  SELECT NVL(MAX(TO_NUMBER(c005)), 0) + 1
+  INTO v_next_order
+  FROM apex_collections
+  WHERE collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND TO_NUMBER(c001) = :P6_TASK_ID -- TASK_ID
+    AND NVL(TO_NUMBER(c004), 0) = NVL(:P6_PARENT_ID, 0)
+    AND NVL(c010, 'ACTIVE') != 'DELETE'; -- Не враховуємо видалені
+
+  :P6_SUBTASK_ORDER := v_next_order;
+END;
+```
+
+---
+
+### ✅ Для підшаблонів (TASK\_TEMPLATE\_SUBTASKS\_COLLECTION)
+
+```plsql
+DECLARE
+  v_next_order NUMBER;
+BEGIN
+  SELECT NVL(MAX(TO_NUMBER(c005)), 0) + 1
+  INTO v_next_order
+  FROM apex_collections
+  WHERE collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+    AND TO_NUMBER(c001) = :P6_TASK_ID -- TEMPLATE_ID
+    AND NVL(TO_NUMBER(c004), 0) = NVL(:P6_PARENT_ID, 0)
+    AND NVL(c010, 'ACTIVE') != 'DELETE';
+
+  :P6_SUBTASK_ORDER := v_next_order;
+END;
+```
+
+---
+
+### 📌 Пояснення
+
+* `c001` — TASK\_ID або TEMPLATE\_ID
+* `c004` — PARENT\_ID
+* `c005` — SUBTASK\_ORDER
+* `c010` — мітка `DELETE` (ігноруємо видалені)
+* `TO_NUMBER(...)` — обов’язково, бо колонки `cXXX` типу VARCHAR2
+
+---
+
+Цей код можна використовувати в `PL/SQL Function Body` або як окремий `Before Submit` процес, щоб встановити порядок перед вставкою в колекцію. Готовий допомогти з інтеграцією цього коду в поточну логіку кнопок чи форм.

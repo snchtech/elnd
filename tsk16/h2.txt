@@ -1,0 +1,95 @@
+Ось оновлений PL/SQL-код для **ініціалізації колекції `TASK_SUBTASKS_COLLECTION`**, який:
+
+* підтримує нову **структуру полів** колекції;
+* автоматично заповнює:
+
+  * `DATE_CREATE := SYSDATE`
+  * `DATE_UPDATE := NULL`
+  * `CREATOR := :P0_USER_ID`
+  * `UPDATOR := NULL`
+* підтримує завантаження **підзавдань або підшаблонів** залежно від `:P8_TASK_MODE` (0 — завдання, 1 — шаблон).
+
+---
+
+### ✅ Оновлений код:
+
+```plsql
+BEGIN
+  IF NOT APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.CREATE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+    -- Якщо є існуючий запис (TASK або TEMPLATE)
+    IF :P8_TASK_ID IS NOT NULL THEN
+
+      -- Варіант 1: Завдання
+      IF :P8_TASK_MODE = 0 THEN
+        FOR r IN (
+          SELECT 
+            TASK_ID,
+            SUBTASK_CONTENT,
+            PLANNING_DATE_END,
+            PARENT_ID,
+            SUBTASK_ORDER,
+            STATUS_ID
+          FROM TASK_SUBTASKS
+          WHERE TASK_ID = :P8_TASK_ID
+        ) LOOP
+          APEX_COLLECTION.ADD_MEMBER(
+            p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+            p_c001 => r.TASK_ID,
+            p_c002 => r.SUBTASK_CONTENT,
+            p_c003 => r.PLANNING_DATE_END,
+            p_c004 => r.PARENT_ID,
+            p_c005 => r.SUBTASK_ORDER,
+            p_c006 => r.STATUS_ID,
+            p_c007 => SYSDATE,         -- DATE_CREATE
+            p_c008 => NULL,            -- DATE_UPDATE
+            p_c009 => :P0_USER_ID,     -- CREATOR
+            p_c010 => NULL,            -- UPDATOR
+            p_n001 => 0                -- TASK_MODE
+          );
+        END LOOP;
+
+      -- Варіант 2: Шаблони
+      ELSIF :P8_TASK_MODE = 1 THEN
+        FOR r IN (
+          SELECT 
+            TEMPLATE_ID,
+            SUBTASK_CONTENT,
+            NULL AS PLANNING_DATE_END, -- відсутнє у шаблонів
+            PARENT_ID,
+            SUBTASK_ORDER,
+            STATUS_ID
+          FROM TASK_TEMPLATE_SUBTASKS
+          WHERE TEMPLATE_ID = :P8_TASK_ID
+        ) LOOP
+          APEX_COLLECTION.ADD_MEMBER(
+            p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+            p_c001 => r.TEMPLATE_ID,
+            p_c002 => r.SUBTASK_CONTENT,
+            p_c003 => r.PLANNING_DATE_END,
+            p_c004 => r.PARENT_ID,
+            p_c005 => r.SUBTASK_ORDER,
+            p_c006 => r.STATUS_ID,
+            p_c007 => SYSDATE,         -- DATE_CREATE
+            p_c008 => NULL,            -- DATE_UPDATE
+            p_c009 => :P0_USER_ID,     -- CREATOR
+            p_c010 => NULL,            -- UPDATOR
+            p_n001 => 1                -- TASK_MODE
+          );
+        END LOOP;
+      END IF;
+
+    END IF;
+  END IF;
+END;
+```
+
+---
+
+### 🔁 Примітки:
+
+* Цей код враховує `:P8_TASK_MODE` і працює **для однієї колекції**, яка одночасно підтримує як завдання, так і шаблони.
+* Якщо потрібно — можна розділити на окремі колекції для завдань і шаблонів (`TASK_SUBTASKS_COLLECTION`, `TASK_TEMPLATE_SUBTASKS_COLLECTION`), але зараз усе реалізовано в єдиній.
+
+Готовий доповнити кодом очищення колекції при старті, або логікою `UPDATE/DELETE`, якщо потрібно.

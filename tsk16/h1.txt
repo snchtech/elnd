@@ -1,0 +1,126 @@
+Щоб функція `setRequired` коректно працювала з `Checkbox Group` у Oracle APEX, потрібно:
+
+1. Правильно знаходити всі `<input type="checkbox">` для даного item.
+2. Встановлювати атрибут `required` **на всі чекбокси**, але перевірка браузером спрацює лише якщо всі з них мають `required` (HTML особливість).
+3. Додати валідацію вручну при сабміті сторінки, оскільки `checkbox group` не завжди коректно перевіряється стандартним HTML5 required.
+4. Забезпечити показ червоного трикутника (`required` indicator), як для інших елементів.
+
+---
+
+### 🔧 Оновлена функція `setRequired` (з підтримкою Checkbox Group)
+
+```javascript
+function setRequired(itemName, isRequired) {
+  var item = apex.item(itemName);
+  var el = null;
+
+  // Спеціально для Checkbox Group
+  var isCheckboxGroup = false;
+
+  if (item && item.node && item.node.length > 0) {
+    var tag = item.node[0].tagName;
+
+    if (tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'INPUT') {
+      el = item.node[0];
+    } else if (tag === 'OPTION') {
+      el = document.getElementById(itemName);
+    } else if (tag === 'DIV' && item.node[0].classList.contains('checkbox_group')) {
+      // Checkbox group wrapper
+      isCheckboxGroup = true;
+      el = item.node[0];
+    }
+  }
+
+  if (!el) {
+    el = document.getElementById(itemName + '_input') || document.getElementById(itemName);
+  }
+
+  if (!el) {
+    console.warn('Не знайдено елемент для:', itemName);
+    return;
+  }
+
+  var wrapper = el.closest('.t-Form-itemWrapper');
+  var container = el.closest('.t-Form-inputContainer');
+  var assistance = container ? container.querySelector('.t-Form-itemAssistance') : null;
+
+  if (isRequired) {
+    if (isCheckboxGroup) {
+      // Додаємо required на всі чекбокси
+      const checkboxes = el.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => cb.setAttribute('required', 'required'));
+    } else {
+      el.setAttribute('required', 'required');
+    }
+
+    el.classList.add('is-required');
+    if (wrapper) wrapper.classList.add('apex-item-wrapper--required');
+
+    if (container && !container.querySelector('.t-Form-itemRequired-marker')) {
+      var marker = document.createElement('div');
+      marker.className = 't-Form-itemRequired-marker';
+      marker.setAttribute('aria-hidden', 'true');
+      container.insertBefore(marker, wrapper);
+    }
+
+    if (assistance && !assistance.querySelector('.t-Form-itemRequired')) {
+      var requiredDiv = document.createElement('div');
+      requiredDiv.className = 't-Form-itemRequired';
+      requiredDiv.setAttribute('aria-hidden', 'true');
+      requiredDiv.innerText = 'Required';
+      assistance.appendChild(requiredDiv);
+    }
+  } else {
+    if (isCheckboxGroup) {
+      const checkboxes = el.querySelectorAll('input[type="checkbox"]');
+      checkboxes.forEach(cb => cb.removeAttribute('required'));
+    } else {
+      el.removeAttribute('required');
+    }
+
+    el.classList.remove('is-required');
+    if (wrapper) wrapper.classList.remove('apex-item-wrapper--required');
+
+    if (container) {
+      var marker = container.querySelector('.t-Form-itemRequired-marker');
+      if (marker) marker.remove();
+    }
+
+    if (assistance) {
+      var requiredDiv = assistance.querySelector('.t-Form-itemRequired');
+      if (requiredDiv) requiredDiv.remove();
+    }
+  }
+}
+```
+
+---
+
+### ✅ Додатково: JavaScript-валидація перед Submit (опціонально)
+
+Якщо ти хочеш жорстко перевіряти, чи вибрано хоча б один checkbox, можеш створити Dynamic Action:
+
+* **Event**: *Before Submit*
+* **True Action**: *Execute JavaScript Code*
+
+```javascript
+var checkboxes = document.querySelectorAll('#P3_DEPARTMENTS input[type="checkbox"]');
+var atLeastOneChecked = Array.from(checkboxes).some(cb => cb.checked);
+
+if (!atLeastOneChecked) {
+  apex.message.showErrors([
+    {
+      type: "error",
+      location: "inline",
+      pageItem: "P3_DEPARTMENTS",
+      message: "Потрібно вибрати хоча б один підрозділ",
+      unsafe: false
+    }
+  ]);
+  apex.event.cancelSubmit(); // зупиняємо сабміт
+}
+```
+
+---
+
+🔁 Тепер `setRequired` буде працювати **і з Select, Text, Date, Textarea**, і з **Checkbox Group**, включаючи візуальні індикатори та HTML5-перевірку. Якщо треба — можу підготувати версію для `Radio Group` або `Switch`.

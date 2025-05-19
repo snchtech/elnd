@@ -1,0 +1,66 @@
+Ось оновлений варіант `UPDATE_SUBTASK_IN_COLLECTION`, що враховує:
+
+* **нову структуру** колекцій;
+* **поділ на колекції**: `TASK_SUBTASKS_COLLECTION` або `TASK_TEMPLATE_SUBTASKS_COLLECTION`;
+* **використання `TASK_MODE`** (`0` – завдання, `1` – шаблон).
+
+---
+
+### ✅ Оновлений `PL/SQL` код:
+
+```plsql
+DECLARE
+  l_collection_name VARCHAR2(50);
+BEGIN
+  -- Визначаємо назву колекції залежно від TASK_MODE
+  IF APEX_APPLICATION.G_X08 = '0' THEN
+    l_collection_name := 'TASK_SUBTASKS_COLLECTION';
+  ELSE
+    l_collection_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  APEX_COLLECTION.UPDATE_MEMBER (
+    p_collection_name => l_collection_name,
+    p_seq             => :P9_SEQ_ID,
+    p_c001 => APEX_APPLICATION.G_X01, -- TASK_ID або TEMPLATE_ID
+    p_c002 => APEX_APPLICATION.G_X02, -- SUBTASK_CONTENT
+    p_c003 => '1',                    -- STATUS_ID (статично або окремо)
+    p_c004 => APEX_APPLICATION.G_X03, -- PLANNING_DATE_END
+    p_c005 => APEX_APPLICATION.G_X04, -- PARENT_ID
+    p_c006 => APEX_APPLICATION.G_X05, -- SUBTASK_ORDER
+    p_c007 => NULL,                   -- DATE_CREATE (залишається)
+    p_c008 => SYSDATE,                -- DATE_UPDATE
+    p_c009 => NULL,                   -- CREATOR
+    p_c010 => :P0_USER_ID,            -- UPDATOR
+    p_n001 => TO_NUMBER(APEX_APPLICATION.G_X08) -- TASK_MODE
+  );
+
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### 📥 G\_X змінні
+
+| G\_X   | Значення                  |
+| ------ | ------------------------- |
+| G\_X01 | TASK\_ID або TEMPLATE\_ID |
+| G\_X02 | SUBTASK\_CONTENT          |
+| G\_X03 | PLANNING\_DATE\_END       |
+| G\_X04 | PARENT\_ID                |
+| G\_X05 | SUBTASK\_ORDER            |
+| G\_X08 | TASK\_MODE (`0` або `1`)  |
+
+---
+
+🔔 Якщо треба — можу одразу дати JS-код виклику для цього процесу через `apex.server.process(...)`.

@@ -1,0 +1,161 @@
+Ось оновлений SQL-запит для **IG**, переписаний під **нову структуру колекції**, де:
+
+* `C001 = TASK_ID або TEMPLATE_ID`
+* `C002 = SUBTASK_CONTENT`
+* `C003 = PLANNING_DATE_END`
+* `C004 = PARENT_ID`
+* `C005 = SUBTASK_ORDER`
+* `C006 = STATUS_ID`
+* `C007 = DATE_CREATE`
+* `C008 = DATE_UPDATE`
+* `C009 = CREATOR`
+* `C010 = UPDATOR`
+* `N001 = TASK_MODE (0 або 1)`
+
+---
+
+### ✅ 1. Для підзавдань (`TASK_MODE = 0`, колекція `TASK_SUBTASKS_COLLECTION`)
+
+```sql
+RETURN q'[
+WITH subtask_tree (
+  seq_id, task_id, parent_seq_id, subtask_content, subtask_order,
+  level_b, path_b, full_number, drag_handle, TASK_MODE
+) AS (
+  -- Батьківські підзавдання
+  SELECT
+    c.seq_id,
+    c.c001 AS task_id,
+    NULL AS parent_seq_id,
+    c.c002 AS subtask_content,
+    TO_NUMBER(c.c005) AS subtask_order,
+    1 AS level_b,
+    LPAD(ROWNUM, 5, '0') AS path_b,
+    TO_CHAR(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c005))) AS full_number,
+    CASE WHEN c.c004 IS NULL THEN '<span class="drag-handle">☰</span>' ELSE NULL END AS drag_handle,
+    c.n001 AS TASK_MODE
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c.c004 IS NULL
+    AND NVL(c.c010, 'ACTIVE') != 'DELETE'
+
+  UNION ALL
+
+  -- Дочірні підзавдання
+  SELECT
+    child.seq_id,
+    child.c001,
+    TO_NUMBER(child.c004),
+    child.c002,
+    TO_NUMBER(child.c005),
+    parent.level_b + 1,
+    parent.path_b || '.' || LPAD(ROWNUM, 5, '0'),
+    parent.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (PARTITION BY child.c004 ORDER BY TO_NUMBER(child.c005))
+    ),
+    CASE WHEN child.c004 IS NULL THEN '<span class="drag-handle">☰</span>' ELSE NULL END,
+    TO_NUMBER(child.n001)
+  FROM apex_collections child
+  JOIN subtask_tree parent
+    ON TO_NUMBER(child.c004) = parent.seq_id
+  WHERE child.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND NVL(child.c010, 'ACTIVE') != 'DELETE'
+)
+SELECT
+  seq_id AS id,
+  task_id,
+  parent_seq_id AS parent_id,
+  subtask_content,
+  subtask_order,
+  level_b,
+  full_number,
+  path_b,
+  LPAD(' ', (level_b - 1) * 4, ' ') || full_number || ' ' || subtask_content AS display_content,
+  drag_handle,
+  TASK_MODE
+FROM subtask_tree
+WHERE TASK_MODE = 0
+ORDER BY path_b
+]';
+```
+
+---
+
+### ✅ 2. Для підшаблонів (`TASK_MODE = 1`, колекція `TASK_TEMPLATE_SUBTASKS_COLLECTION`)
+
+```sql
+RETURN q'[
+WITH subtemplate_tree (
+  seq_id, template_id, parent_seq_id, subtask_content, subtask_order,
+  level_b, path_b, full_number, drag_handle, TASK_MODE
+) AS (
+  -- Батьківські підшаблони
+  SELECT
+    c.seq_id,
+    c.c001 AS template_id,
+    NULL AS parent_seq_id,
+    c.c002 AS subtask_content,
+    TO_NUMBER(c.c005) AS subtask_order,
+    1 AS level_b,
+    LPAD(ROWNUM, 5, '0') AS path_b,
+    TO_CHAR(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c005))) AS full_number,
+    CASE WHEN c.c004 IS NULL THEN '<span class="drag-handle">☰</span>' ELSE NULL END AS drag_handle,
+    c.n001 AS TASK_MODE
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+    AND c.c004 IS NULL
+    AND NVL(c.c010, 'ACTIVE') != 'DELETE'
+
+  UNION ALL
+
+  -- Дочірні підшаблони
+  SELECT
+    child.seq_id,
+    child.c001,
+    TO_NUMBER(child.c004),
+    child.c002,
+    TO_NUMBER(child.c005),
+    parent.level_b + 1,
+    parent.path_b || '.' || LPAD(ROWNUM, 5, '0'),
+    parent.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (PARTITION BY child.c004 ORDER BY TO_NUMBER(child.c005))
+    ),
+    CASE WHEN child.c004 IS NULL THEN '<span class="drag-handle">☰</span>' ELSE NULL END,
+    TO_NUMBER(child.n001)
+  FROM apex_collections child
+  JOIN subtemplate_tree parent
+    ON TO_NUMBER(child.c004) = parent.seq_id
+  WHERE child.collection_name = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+    AND NVL(child.c010, 'ACTIVE') != 'DELETE'
+)
+SELECT
+  seq_id AS id,
+  template_id,
+  parent_seq_id AS parent_id,
+  subtask_content,
+  subtask_order,
+  level_b,
+  full_number,
+  path_b,
+  LPAD(' ', (level_b - 1) * 4, ' ') || full_number || ' ' || subtask_content AS display_content,
+  drag_handle,
+  TASK_MODE
+FROM subtemplate_tree
+WHERE TASK_MODE = 1
+ORDER BY path_b
+]';
+```
+
+---
+
+### 🧩 Пояснення:
+
+* `c004` = `PARENT_ID`
+* `c005` = `SUBTASK_ORDER`
+* `n001` = `TASK_MODE`
+* Фільтр `NVL(c.c010, 'ACTIVE') != 'DELETE'` виключає мітки на видалення
+* В обох запитах рекурсія по `seq_id` як унікальному ID колекції
+
+---
+
+Готовий допомогти з `insert/update/delete` з колекції або з переходом на таблицю при збереженні.

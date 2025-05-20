@@ -1,0 +1,152 @@
+Ось оновлений **PL/SQL код** з урахуванням нової структури колекцій, що містить:
+
+* `c001` — `task_id`
+* `c002` — `subtask_content`
+* `d001` — `planning_date_end`
+* `c003` — `parent_id`
+* `c004` — `subtask_order`
+* `c005` — `status_id`
+* `d002` — `date_create`
+* `d003` — `date_update`
+* `c006` — `creator`
+* `c007` — `updator`
+* `n001` — `task_mode`
+
+---
+
+### ✅ **Оновлений код створення TASK або TEMPLATE та вставки пов'язаних підзавдань / підшаблонів**
+
+```plsql
+DECLARE
+  v_new_id NUMBER;
+  l_coll_name VARCHAR2(50);
+BEGIN
+  IF :P8_TASK_MODE = 0 THEN
+    -- 🟩 Завдання
+    v_new_id := TASKS_SEQ.NEXTVAL;
+
+    INSERT INTO TASKS (
+      ID, TASK_CONTENT, PLANNING_DATE_START, PLANNING_DATE_END,
+      NOTE, TYPE_ID, UNIT_ID, DATE_CREATE
+    ) VALUES (
+      v_new_id,
+      :P8_TASK_CONTENT,
+      :P8_PLANNING_DATE_START,
+      :P8_PLANNING_DATE_END,
+      :P8_NOTE,
+      :P8_TYPE_ID,
+      :P8_UNIT,
+      SYSDATE
+    );
+
+    l_coll_name := 'TASK_SUBTASKS_COLLECTION';
+
+  ELSIF :P8_TASK_MODE = 1 THEN
+    -- 🟦 Шаблон
+    v_new_id := TASK_TEMPLATE_SEQ.NEXTVAL;
+
+    INSERT INTO TASK_TEMPLATES (
+      ID, TASK_CONTENT, NOTE, TYPE_ID, UNIT_ID, DATE_CREATE,
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME, WEEKLY_DAYS, WEEKLY_TIME, DATE_END
+    ) VALUES (
+      v_new_id,
+      :P8_TASK_CONTENT,
+      :P8_NOTE,
+      :P8_TYPE_ID,
+      :P8_UNIT,
+      SYSDATE,
+      :P8_PERIOD_MODE,
+      :P8_PERIOD_INTERVAL,
+      :P8_PERIOD_TIME,
+      :P8_WEEKLY_DAYS,
+      :P8_WEEKLY_TIME,
+      :P8_DATE_END
+    );
+
+    l_coll_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  -- 🟨 Зберігаємо ID у P8_TASK_ID для подальших дій
+  :P8_TASK_ID := v_new_id;
+
+  -- 🔁 Вставка підзаписів з колекції
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = l_coll_name
+      AND NVL(c010, 'ACTIVE') != 'DELETE'
+      AND TO_NUMBER(n001) = :P8_TASK_MODE
+  ) LOOP
+
+    IF :P8_TASK_MODE = 0 THEN
+      -- 🟩 Підзавдання
+      INSERT INTO TASK_SUBTASKS (
+        TASK_ID,
+        SUBTASK_CONTENT,
+        PLANNING_DATE_END,
+        PARENT_ID,
+        SUBTASK_ORDER,
+        STATUS_ID,
+        DATE_CREATE,
+        DATE_UPDATE,
+        CREATOR,
+        UPDATOR
+      ) VALUES (
+        v_new_id,
+        r.c002,
+        r.d001,
+        TO_NUMBER(r.c003),
+        TO_NUMBER(r.c004),
+        TO_NUMBER(r.c005),
+        r.d002,
+        r.d003,
+        TO_NUMBER(r.c006),
+        TO_NUMBER(r.c007)
+      );
+
+    ELSIF :P8_TASK_MODE = 1 THEN
+      -- 🟦 Підшаблон
+      INSERT INTO TASK_TEMPLATE_SUBTASKS (
+        TEMPLATE_ID,
+        SUBTASK_CONTENT,
+        PARENT_ID,
+        SUBTASK_ORDER,
+        STATUS_ID,
+        DATE_CREATE,
+        DATE_UPDATE,
+        CREATOR,
+        UPDATOR
+      ) VALUES (
+        v_new_id,
+        r.c002,
+        TO_NUMBER(r.c003),
+        TO_NUMBER(r.c004),
+        TO_NUMBER(r.c005),
+        r.d002,
+        r.d003,
+        TO_NUMBER(r.c006),
+        TO_NUMBER(r.c007)
+      );
+    END IF;
+
+  END LOOP;
+
+  -- 🧹 Очищення колекції
+  APEX_COLLECTION.DELETE_COLLECTION(l_coll_name);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, '❌ Помилка збереження завдання/шаблону: ' || SQLERRM);
+END;
+```
+
+---
+
+### 📝 Примітки:
+
+* Поля `d002`, `d003` — автоматично можуть бути `SYSDATE` або `NULL` в залежності від етапу.
+* `c006`, `c007` — ідентифікатори користувача (наприклад, `:P0_USER_ID`).
+* Перевірка `NVL(c010, 'ACTIVE') != 'DELETE'` виключає видалені записи.
+* `TO_NUMBER()` використовується для числових колонок колекції.
+
+Хочете, також покажу **версію для оновлення** існуючого завдання з колекції з тією ж структурою?

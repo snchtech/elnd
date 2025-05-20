@@ -1,0 +1,75 @@
+Ось **повноцінна PL/SQL процедура**, яка **перераховує `SUBTASK_ORDER`** в колекції `TASK_SUBTASKS_COLLECTION` або `TASK_TEMPLATE_SUBTASKS_COLLECTION` згідно з `PARENT_ID`.
+
+> ✅ Працює для вкладених підзавдань будь-якої глибини.
+
+---
+
+### 🔧 `REORDER_SUBTASKS_COLLECTION`
+
+```plsql
+DECLARE
+  l_collection_name VARCHAR2(100);
+  l_task_mode       NUMBER := :P0_TASK_MODE; -- 0 = task, 1 = template
+  l_parent_ids      SYS.ODCINUMBERLIST := SYS.ODCINUMBERLIST();
+  l_idx             NUMBER := 0;
+BEGIN
+  -- 1. Визначаємо колекцію
+  IF l_task_mode = 0 THEN
+    l_collection_name := 'TASK_SUBTASKS_COLLECTION';
+  ELSE
+    l_collection_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  -- 2. Збираємо всі унікальні PARENT_ID
+  FOR r IN (
+    SELECT DISTINCT NVL(TO_NUMBER(c005), 0) AS parent_id
+    FROM apex_collections
+    WHERE collection_name = l_collection_name
+      AND NVL(c010, 'ACTIVE') != 'DELETE'
+  ) LOOP
+    l_parent_ids.EXTEND;
+    l_parent_ids(l_parent_ids.COUNT) := r.parent_id;
+  END LOOP;
+
+  -- 3. Для кожного PARENT_ID перевпорядковуємо SUBTASK_ORDER
+  FOR i IN 1 .. l_parent_ids.COUNT LOOP
+    l_idx := 0;
+
+    FOR r IN (
+      SELECT seq_id
+      FROM apex_collections
+      WHERE collection_name = l_collection_name
+        AND NVL(TO_NUMBER(c005), 0) = l_parent_ids(i)
+        AND NVL(c010, 'ACTIVE') != 'DELETE'
+      ORDER BY TO_NUMBER(c006) NULLS LAST, seq_id
+    ) LOOP
+      l_idx := l_idx + 1;
+
+      APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+        p_collection_name => l_collection_name,
+        p_seq             => r.seq_id,
+        p_attr_number     => 6, -- c006 = SUBTASK_ORDER
+        p_attr_value      => TO_CHAR(l_idx)
+      );
+    END LOOP;
+  END LOOP;
+
+END;
+```
+
+---
+
+### 🟢 Як використовувати
+
+* Додай цей код як **PL/SQL Process** після видалення або drag/drop.
+* Перед викликом обов’язково встанови `:P0_TASK_MODE`, або заміни на `:P6_TASK_MODE`, якщо інше ім’я.
+* Можна також викликати через **Ajax Callback** + `apex.server.process(...)`.
+
+---
+
+### 📌 Додатково
+
+* Якщо хочеш, можу також показати, **як викликати цю процедуру з JavaScript** після успішного оновлення/видалення.
+* Або зробити **одну процедуру, яка і видаляє, і перенумеровує одразу**.
+
+Хочеш продовжити?

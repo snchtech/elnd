@@ -1,0 +1,142 @@
+Ось оновлений код для **оновлення завдання або шаблону** та обробки пов’язаних **підзавдань або підшаблонів** на основі **нової структури колекції**, яку ти надав:
+
+---
+
+### ✅ **Оновлений код**
+
+```plsql
+DECLARE
+  v_task_id   NUMBER := :P8_TASK_ID;
+  v_task_mode NUMBER := :P8_TASK_MODE;
+  l_coll_name VARCHAR2(50);
+BEGIN
+  -- 1. ОНОВЛЕННЯ ГОЛОВНОГО ЗАПИСУ
+  IF v_task_mode = 0 THEN
+    UPDATE TASKS
+    SET 
+      TASK_CONTENT         = :P8_TASK_CONTENT,
+      PLANNING_DATE_START  = :P8_PLANNING_DATE_START,
+      PLANNING_DATE_END    = :P8_PLANNING_DATE_END,
+      NOTE                 = :P8_NOTE,
+      TYPE_ID              = :P8_TYPE_ID,
+      UNIT_ID              = :P8_UNIT
+    WHERE ID = v_task_id;
+
+    l_coll_name := 'TASK_SUBTASKS_COLLECTION';
+
+  ELSIF v_task_mode = 1 THEN
+    UPDATE TASK_TEMPLATES
+    SET
+      TASK_CONTENT     = :P8_TASK_CONTENT,
+      NOTE             = :P8_NOTE,
+      TYPE_ID          = :P8_TYPE_ID,
+      UNIT_ID          = :P8_UNIT,
+      PERIOD_MODE      = :P8_PERIOD_MODE,
+      PERIOD_INTERVAL  = :P8_PERIOD_INTERVAL,
+      PERIOD_TIME      = :P8_PERIOD_TIME,
+      WEEKLY_DAYS      = :P8_WEEKLY_DAYS,
+      WEEKLY_TIME      = :P8_WEEKLY_TIME,
+      DATE_END         = :P8_DATE_END
+    WHERE ID = v_task_id;
+
+    l_coll_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  -- 2. ОБРОБКА КОЛЕКЦІЇ
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = l_coll_name
+      AND TO_NUMBER(n001) = v_task_mode
+  ) LOOP
+
+    -- ВИДАЛЕННЯ
+    IF r.c010 = 'DELETE' AND r.c007 IS NOT NULL THEN
+      IF v_task_mode = 0 THEN
+        DELETE FROM TASK_SUBTASKS WHERE ID = TO_NUMBER(r.c007);
+      ELSE
+        DELETE FROM TASK_TEMPLATE_SUBTASKS WHERE ID = TO_NUMBER(r.c007);
+      END IF;
+
+    -- НОВИЙ ЗАПИС
+    ELSIF r.c007 IS NULL THEN
+      IF v_task_mode = 0 THEN
+        INSERT INTO TASK_SUBTASKS (
+          TASK_ID, SUBTASK_CONTENT, PLANNING_DATE_END, PARENT_ID,
+          SUBTASK_ORDER, STATUS_ID, DATE_CREATE, DATE_UPDATE, CREATOR, UPDATOR
+        ) VALUES (
+          v_task_id,
+          r.c002,
+          r.d001,
+          TO_NUMBER(r.c003),
+          TO_NUMBER(r.c004),
+          TO_NUMBER(r.c005),
+          r.d002,
+          r.d003,
+          TO_NUMBER(r.c006),
+          TO_NUMBER(r.c007)
+        );
+      ELSE
+        INSERT INTO TASK_TEMPLATE_SUBTASKS (
+          TEMPLATE_ID, SUBTASK_CONTENT, PARENT_ID, SUBTASK_ORDER,
+          STATUS_ID, DATE_CREATE, DATE_UPDATE, CREATOR, UPDATOR
+        ) VALUES (
+          v_task_id,
+          r.c002,
+          TO_NUMBER(r.c003),
+          TO_NUMBER(r.c004),
+          TO_NUMBER(r.c005),
+          r.d002,
+          r.d003,
+          TO_NUMBER(r.c006),
+          TO_NUMBER(r.c007)
+        );
+      END IF;
+
+    -- ОНОВЛЕННЯ
+    ELSE
+      IF v_task_mode = 0 THEN
+        UPDATE TASK_SUBTASKS
+        SET 
+          SUBTASK_CONTENT    = r.c002,
+          PLANNING_DATE_END  = r.d001,
+          PARENT_ID          = TO_NUMBER(r.c003),
+          SUBTASK_ORDER      = TO_NUMBER(r.c004),
+          STATUS_ID          = TO_NUMBER(r.c005),
+          DATE_UPDATE        = r.d003,
+          UPDATOR            = TO_NUMBER(r.c007)
+        WHERE ID = TO_NUMBER(r.c007);
+      ELSE
+        UPDATE TASK_TEMPLATE_SUBTASKS
+        SET 
+          SUBTASK_CONTENT    = r.c002,
+          PARENT_ID          = TO_NUMBER(r.c003),
+          SUBTASK_ORDER      = TO_NUMBER(r.c004),
+          STATUS_ID          = TO_NUMBER(r.c005),
+          DATE_UPDATE        = r.d003,
+          UPDATOR            = TO_NUMBER(r.c007)
+        WHERE ID = TO_NUMBER(r.c007);
+      END IF;
+
+    END IF;
+  END LOOP;
+
+  -- 3. ОЧИЩЕННЯ КОЛЕКЦІЇ
+  APEX_COLLECTION.DELETE_COLLECTION(l_coll_name);
+
+EXCEPTION
+  WHEN OTHERS THEN
+    raise_application_error(-20001, '❌ Помилка при оновленні: ' || SQLERRM);
+END;
+```
+
+---
+
+### 📝 Коментарі:
+
+* `r.c007` використовується як `ID` у БД. Якщо `NULL` — це новий запис.
+* `c010 = 'DELETE'` — позначка на видалення.
+* `n001` = `TASK_MODE` — для фільтрації між завданнями та шаблонами.
+* Поля `DATE_CREATE`, `DATE_UPDATE`, `CREATOR`, `UPDATOR` записуються без перетворень, оскільки вже формуються в колекції.
+
+Якщо хочеш — можу також додати логіку для автоматичного **оновлення SUBTASK\_ORDER при зміні** або **сортуванні в IG**.

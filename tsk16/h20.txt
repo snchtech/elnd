@@ -1,0 +1,135 @@
+Оновлений код процедури `DUPLICATE_TASK_OR_TEMPLATE` із використанням **колекцій** `TASK_SUBTASKS_COLLECTION` та `TASK_TEMPLATE_SUBTASKS_COLLECTION` і курсорів без використання `APEX_COLLECTION.GET_...` виглядає так:
+
+```plsql
+DECLARE
+  v_new_id          NUMBER;
+  v_seq_id          NUMBER;
+  l_collection_name VARCHAR2(50);
+  l_id_map          DBMS_SQL.NUMBER_TABLE;
+
+  -- Типи режимів
+  c_task_mode     CONSTANT NUMBER := 0;
+  c_template_mode CONSTANT NUMBER := 1;
+
+  -- Курсор по відповідній колекції
+  CURSOR c_items(p_coll_name VARCHAR2) IS
+    SELECT *
+    FROM apex_collections
+    WHERE collection_name = p_coll_name
+      AND NVL(c010, 'ACTIVE') != 'DELETE';
+
+BEGIN
+  -- Визначаємо що дублюємо
+  IF :P5_SWITCH = c_task_mode THEN
+    -- 📌 TASK
+    SELECT TASKS_SEQ.NEXTVAL INTO v_new_id FROM DUAL;
+
+    INSERT INTO TASKS (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, PLANNING_DATE_START,
+      PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+      PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+    )
+    SELECT
+      v_new_id, SYSDATE, TASK_CONTENT, CREATOR_ID, SYSDATE,
+      PLANNING_DATE_END, STATUS_ID, DEPARTMENT_ID, UNIT_ID, TYPE_ID,
+      PAGE_LIST_ID, IS_GENERATED, GENERATED_DATE, TEMPLATE_ID, NOTE
+    FROM TASKS WHERE ID = :P5_TASK_ID;
+
+    l_collection_name := 'TASK_SUBTASKS_COLLECTION';
+
+  ELSE
+    -- 📌 TEMPLATE
+    SELECT TASK_TEMPLATE_SEQ.NEXTVAL INTO v_new_id FROM DUAL;
+
+    INSERT INTO TASK_TEMPLATES (
+      ID, DATE_CREATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+      DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID,
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+      HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+    )
+    SELECT
+      v_new_id, SYSDATE, TASK_CONTENT, CREATOR_ID, STATUS_ID,
+      DEPARTMENT_ID, UNIT_ID, TYPE_ID, PAGE_LIST_ID,
+      PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME,
+      HOURLY_TIMES, NEXT_RUN_DATE, DATE_END
+    FROM TASK_TEMPLATES WHERE ID = :P5_TASK_ID;
+
+    l_collection_name := 'TASK_TEMPLATE_SUBTASKS_COLLECTION';
+  END IF;
+
+  -- Перевіряємо наявність колекції
+  IF APEX_COLLECTION.COLLECTION_EXISTS(l_collection_name) THEN
+    -- 🔁 Дублювання елементів
+    FOR r IN c_items(l_collection_name) LOOP
+      v_seq_id := APEX_COLLECTION.ADD_MEMBER(
+        p_collection_name => l_collection_name,
+        p_c001 => v_new_id,                -- TASK_ID or TEMPLATE_ID
+        p_c002 => r.c002,                  -- CONTENT
+        p_d001 => r.d001,                  -- PLANNING_DATE_END
+        p_c003 => r.c003,                  -- PARENT_ID (тимчасово старий)
+        p_c004 => r.c004,                  -- SUBTASK_ORDER
+        p_c005 => r.c005,                  -- STATUS_ID
+        p_d002 => SYSDATE,                 -- DATE_CREATE
+        p_d003 => NULL,                    -- DATE_UPDATE
+        p_c006 => r.c006,                  -- CREATOR
+        p_c007 => NULL,                    -- UPDATOR
+        p_n001 => :P5_SWITCH               -- TASK_MODE
+      );
+
+      l_id_map(r.seq_id) := v_seq_id;
+    END LOOP;
+
+    -- 🔁 Оновлюємо PARENT_ID
+    FOR i IN 1 .. l_id_map.COUNT LOOP
+      DECLARE
+        v_old_seq_id NUMBER := l_id_map.FIRST;
+        v_new_seq_id NUMBER := l_id_map(v_old_seq_id);
+        v_old_parent VARCHAR2(100);
+        v_new_parent NUMBER;
+      BEGIN
+        SELECT c003
+        INTO v_old_parent
+        FROM apex_collections
+        WHERE collection_name = l_collection_name AND seq_id = v_old_seq_id;
+
+        IF v_old_parent IS NOT NULL THEN
+          v_new_parent := l_id_map(TO_NUMBER(v_old_parent));
+          APEX_COLLECTION.UPDATE_MEMBER_ATTRIBUTE(
+            p_collection_name => l_collection_name,
+            p_seq             => v_new_seq_id,
+            p_attr_number     => 4, -- C003
+            p_attr_value      => v_new_parent
+          );
+        END IF;
+      END;
+    END LOOP;
+  END IF;
+
+  -- ✅ JSON
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.WRITE('newId', v_new_id);
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+### ✅ Пояснення:
+
+* Використовується `l_collection_name` залежно від `P5_SWITCH`.
+* Дані читаються через `CURSOR` з `apex_collections`.
+* Спочатку створюються нові записи в колекції.
+* Потім відбувається друга фаза — оновлення `PARENT_ID` з мапи `l_id_map`.
+
+Можна додатково:
+
+* Додати логіку очищення тимчасових атрибутів (якщо потрібно).
+* Після дублювання — відобразити запис у формі.
+
+Готовий допомогти з відкриттям сторінки у модальному вікні після дублювання, якщо треба.

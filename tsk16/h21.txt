@@ -1,0 +1,93 @@
+Ось оновлений процес для **анулювання завдання або шаблону**, що враховує:
+
+1. Встановлення `STATUS_ID = 11` у таблицях `TASKS` або `TASK_TEMPLATES`.
+2. Встановлення `STATUS_ID = 11` для відповідних підзавдань або підшаблонів.
+3. Запис до `SIGNATUREHISTORY` по кожному запису з `SIGNATURERIGHTS`, якого ще немає в `SIGNATUREHISTORY`.
+
+---
+
+### ✅ **PL/SQL код процесу:**
+
+```plsql
+DECLARE
+  v_task_id      NUMBER := TO_NUMBER(APEX_APPLICATION.G_X01); -- Отримуємо ID із клієнта
+  v_task_mode    NUMBER := TO_NUMBER(APEX_APPLICATION.G_X02); -- 0 - завдання, 1 - шаблон
+  v_user_id      NUMBER := :P0_USER_ID;
+BEGIN
+  IF v_task_mode = 0 THEN
+    -- 🔸 Завдання
+    UPDATE TASKS
+    SET STATUS_ID = 11
+    WHERE ID = v_task_id;
+
+    UPDATE TASK_SUBTASKS
+    SET STATUS_ID = 11
+    WHERE TASK_ID = v_task_id;
+
+  ELSIF v_task_mode = 1 THEN
+    -- 🔸 Шаблон
+    UPDATE TASK_TEMPLATES
+    SET STATUS_ID = 11
+    WHERE ID = v_task_id;
+
+    UPDATE TASK_TEMPLATE_SUBTASKS
+    SET STATUS_ID = 11
+    WHERE TEMPLATE_ID = v_task_id;
+  END IF;
+
+  -- 🔸 Додаємо записи в SIGNATUREHISTORY, яких ще немає
+  FOR r IN (
+    SELECT sr.ID AS SR_ID, sr.STAGE_ID
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN SIGNATUREHISTORY sh
+      ON sr.ID = sh.SIGNATURE_RIGHT_ID
+    WHERE sr.TASK_ID = v_task_id
+      AND sh.ID IS NULL -- тільки ті, що ще не мають історії
+  ) LOOP
+    INSERT INTO SIGNATUREHISTORY (
+      SIGNATURE_RIGHT_ID,
+      NEW_STATUS_ID,
+      SIGNER_BY,
+      SIGNER_DATE,
+      NOTE,
+      SDATE
+    ) VALUES (
+      r.SR_ID,
+      11,
+      v_user_id,
+      SYSDATE,
+      'Анульовано',
+      SYSDATE
+    );
+  END LOOP;
+
+  -- ✅ JSON-відповідь
+  APEX_JSON.OPEN_OBJECT;
+  APEX_JSON.WRITE('status', 'ok');
+  APEX_JSON.CLOSE_OBJECT;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('status', 'error');
+    APEX_JSON.WRITE('message', SQLERRM);
+    APEX_JSON.CLOSE_OBJECT;
+END;
+```
+
+---
+
+### 📌 Як використовувати:
+
+* `G_X01` — передаєш `TASK_ID` або `TEMPLATE_ID`
+* `G_X02` — передаєш режим: `0` (TASK), `1` (TEMPLATE)
+* `P0_USER_ID` — використовуємо як `SIGNER_BY` у `SIGNATUREHISTORY`
+
+---
+
+### 🧩 Додатково:
+
+* Можна додати повідомлення для користувача (`apex.message`) про успішну ануляцію.
+* Якщо потрібно логувати ці дії окремо — можна додати лог-таблицю.
+
+Готовий допомогти налаштувати це і на кнопці в UI.

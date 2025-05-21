@@ -1,0 +1,102 @@
+Щоб реалізувати логіку приховування та блокування елементів в Oracle APEX при `TASK_ACTION_MODE = 0` (перегляд), виконай наступні кроки:
+
+---
+
+### ✅ 1. **Приховати кнопки**
+
+#### Кнопки `ADD_SUBTASK` і `ADD_SUBTASK_TEMPLATE`:
+
+* В APEX в атрибутах кнопки:
+
+  * **Server Condition**:
+
+    * `Item = P_TASK_ACTION_MODE`
+    * `Value = 0`
+    * `Condition Type = Item is NOT equal to`
+
+АБО, якщо робиш це в JavaScript:
+
+```js
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  $("#ADD_SUBTASK").hide();
+  $("#ADD_SUBTASK_TEMPLATE").hide();
+}
+```
+
+---
+
+### ✅ 2. **Приховати меню редагування IG**
+
+Якщо у тебе є кастомне меню або клас `.a-Button--rowMenu`:
+
+```js
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  $(".a-Button--rowMenu").hide(); // стандартна кнопка меню рядка
+  $("#custom-ig-menu").hide();    // якщо є кастомне меню
+}
+```
+
+---
+
+### ✅ 3. **Приховати checkbox колонку (Select Row Column)**
+
+Щоб прибрати колонку вибору рядків:
+
+* Перейди в **Attributes > Row Selector** твого IG:
+
+  * Встанови **"Show Row Selector" = "No"**.
+  * Або динамічно (якщо треба лиш у `TASK_ACTION_MODE = 0`), можна ховати через JavaScript:
+
+```js
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  $(".a-IRR-table th.a-IRR-header--select").hide(); // заголовок
+  $(".a-IRR-table td.a-IRR-selectCol").hide();      // самі чекбокси
+}
+```
+
+---
+
+### ✅ 4. **Заборонити редагування IG**
+
+#### 🔹 Варіант 1 — через атрибути:
+
+* Перейди до **Attributes > Edit**:
+
+  * `Enable Editing = Yes`
+  * Вказати **Editable = "Only when P\_TASK\_ACTION\_MODE != 0"\`**
+
+#### 🔹 Варіант 2 — через JavaScript:
+
+```js
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  apex.region("TASK_SUBTASKS_IG_1").widget().interactiveGrid("option", "editable", false);
+  apex.region("TASK_TEMPLATE_SUBTASKS_IG").widget().interactiveGrid("option", "editable", false);
+}
+```
+
+> ⚠️ Цей код варто запускати в дії типу **"Execute when Page Loads"** або в **Dynamic Action on Page Load**.
+
+---
+
+### 📦 Альтернатива: все в одному блоці JavaScript
+
+```js
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  // Кнопки
+  $("#ADD_SUBTASK, #ADD_SUBTASK_TEMPLATE").hide();
+
+  // Меню
+  $(".a-Button--rowMenu, #custom-ig-menu").hide();
+
+  // Checkbox стовпці
+  $(".a-IRR-table th.a-IRR-header--select, .a-IRR-table td.a-IRR-selectCol").hide();
+
+  // IG в режим тільки для читання
+  apex.region("TASK_SUBTASKS_IG_1")?.widget()?.interactiveGrid("option", "editable", false);
+  apex.region("TASK_TEMPLATE_SUBTASKS_IG")?.widget()?.interactiveGrid("option", "editable", false);
+}
+```
+
+🔁 **Якщо TASK\_ACTION\_MODE може змінюватись на сторінці** (наприклад, по перемикачу), краще робити це через Dynamic Action з event `Change` по `P_TASK_ACTION_MODE`.
+
+Готовий допомогти адаптувати цей код під твою конкретну реалізацію сторінки, якщо покажеш ID регіонів/кнопок.

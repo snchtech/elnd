@@ -1,0 +1,53 @@
+Щоб приховати `switch-overlay`, який ти додаєш до `#P_TASK_MODE`, **у режимі `TASK_ACTION_MODE = 0`**, просто додай JS-код, який перевіряє значення `P_TASK_ACTION_MODE` і ховає оверлей.
+
+---
+
+### ✅ Приклад JS-коду (на Page Load або в Dynamic Action):
+
+```js
+document.addEventListener("DOMContentLoaded", function () {
+  if ($v("P_TASK_ACTION_MODE") === '0') {
+    const overlay = document.querySelector("#P_TASK_MODE").closest('.t-Form-fieldContainer')?.querySelector('.switch-overlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
+  }
+});
+```
+
+---
+
+### ✅ Якщо хочеш через CSS:
+
+(тільки якщо `P_TASK_ACTION_MODE` не змінюється динамічно)
+
+```css
+/* CSS (тільки якщо можна визначити по класу або data-атрибуту) */
+#P_TASK_MODE[data-task-action-mode="0"] + .switch-overlay {
+  display: none !important;
+}
+```
+
+> Але краще використовувати **JS**, якщо `P_TASK_ACTION_MODE` змінюється або ти хочеш повністю контролювати показ/приховування.
+
+---
+
+### ✅ Додатково: якщо `P_TASK_ACTION_MODE` змінюється динамічно
+
+Створи **Dynamic Action**:
+
+* **Event:** Change
+* **Item:** `P_TASK_ACTION_MODE`
+* **True Action:** `Execute JavaScript Code`:
+
+```js
+const overlay = document.querySelector("#P_TASK_MODE").closest('.t-Form-fieldContainer')?.querySelector('.switch-overlay');
+
+if ($v("P_TASK_ACTION_MODE") === '0') {
+  if (overlay) overlay.style.display = 'none';
+} else {
+  if (overlay) overlay.style.display = 'block';
+}
+```
+
+🔄 Таким чином, `switch-overlay` повністю вимикається в режимі перегляду (`TASK_ACTION_MODE = 0`). Готовий допомогти адаптувати цей код, якщо у тебе кастомні ID чи layout.

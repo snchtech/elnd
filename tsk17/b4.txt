@@ -1,0 +1,120 @@
+Чудово, продовжимо з урахуванням нової логіки `required` для кожної групи.
+
+---
+
+## ✅ **Загальний план**
+
+Ми:
+
+1. Використаємо вже наявну функцію `updateGroups(groupName)` — розширимо її.
+2. Додамо до неї динамічне керування **`setRequired(true/false)`** для кожного item.
+3. Збережемо існуючу залежну логіку для `P2_POSITION`, `P2_DEPARTMENT`, `P2_UNIT`.
+
+---
+
+## 🔧 **1. Доповнена функція `updateGroups(groupName)`**
+
+```javascript
+function updateGroups(activeGroup) {
+  const groups = {
+    group1: ['P2_POSITION', 'P2_DEPARTMENT', 'P2_UNIT'],
+    group2: ['P2_NAME'],
+    group3: ['P2_SHIFT', 'P2_SHIFT_NUMBER']
+  };
+
+  // Скидаємо значення всіх чекбоксів
+  $s('P2_GROUP1_CHECK', null);
+  $s('P2_GROUP2_CHECK', null);
+  $s('P2_GROUP3_CHECK', null);
+  $s('P2_' + activeGroup.toUpperCase() + '_CHECK', 'Y');
+
+  // Проходимо по всіх групах
+  Object.keys(groups).forEach(group => {
+    groups[group].forEach(item => {
+      const isActive = group === activeGroup;
+
+      // Включаємо / вимикаємо поля
+      isActive ? apex.item(item).enable() : apex.item(item).disable();
+
+      // Очищення обов'язковості
+      apex.item(item).setRequired(false);
+    });
+  });
+
+  // Тепер обробляємо "required" для активної групи
+  if (activeGroup === 'group1') {
+    // Постійно required
+    apex.item('P2_POSITION').setRequired(true);
+
+    // Решта логіки — залишається вашою залежною (див. нижче)
+    // Можна викликати тригер тут:
+    apex.item('P2_POSITION').setValue($v('P2_POSITION'), null, true);
+    apex.item('P2_DEPARTMENT').setValue($v('P2_DEPARTMENT'), null, true);
+
+  } else if (activeGroup === 'group2') {
+    apex.item('P2_NAME').setRequired(true);
+
+  } else if (activeGroup === 'group3') {
+    apex.item('P2_SHIFT').setRequired(true);
+    apex.item('P2_SHIFT_NUMBER').setRequired(true);
+  }
+}
+```
+
+---
+
+## 🧠 **2. Логіка залежної required для group1**
+
+### Використайте **Dynamic Actions** типу `Change`:
+
+#### 🟦 Для `P2_POSITION`
+
+**Client-Side Condition**: якщо `P2_GROUP1_CHECK = Y`
+**True Action**:
+
+```javascript
+if ($v('P2_POSITION') === 'X' || $v('P2_POSITION') === 'Y') {
+  apex.item('P2_DEPARTMENT').setRequired(true);
+} else {
+  apex.item('P2_DEPARTMENT').setRequired(false);
+}
+```
+
+#### 🟦 Для `P2_DEPARTMENT`
+
+**Client-Side Condition**: якщо `P2_GROUP1_CHECK = Y`
+**True Action**:
+
+```javascript
+if ($v('P2_DEPARTMENT') === '1' || $v('P2_DEPARTMENT') === '2') {
+  apex.item('P2_UNIT').setRequired(true);
+} else {
+  apex.item('P2_UNIT').setRequired(false);
+}
+```
+
+📌 АБО якщо ця логіка складна — винесіть її в одну загальну JS-функцію `updateGroup1Required()` і викликайте після зміни `P2_POSITION` / `P2_DEPARTMENT`.
+
+---
+
+## 🚀 **3. Виклик при завантаженні сторінки**
+
+У секції **"Execute when Page Loads"**:
+
+```js
+updateGroups('group1'); // або інша логіка, якщо зберігаєте останній вибір
+```
+
+---
+
+## 🔍 Результат:
+
+| Група  | Required поля                 | Інші — не required, неактивні |
+| ------ | ----------------------------- | ----------------------------- |
+| group1 | P2\_POSITION + залежна логіка | group2, group3 — неактивні    |
+| group2 | P2\_NAME                      | group1, group3 — неактивні    |
+| group3 | P2\_SHIFT, P2\_SHIFT\_NUMBER  | group1, group2 — неактивні    |
+
+---
+
+🔔 Хочете — можу допомогти з повною вставкою цієї логіки в APEX через export-файл або APEX code snippet.

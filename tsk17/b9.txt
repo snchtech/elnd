@@ -1,0 +1,105 @@
+Ось приклад SQL-запиту для створення звіту за шаблонами завдань, який відповідає вашій структурі, включно з підстановкою підшаблонів, періодичністю, автором, виконавцями тощо:
+
+---
+
+## ✅ **SQL-запит (можна використовувати для View)**
+
+```sql
+SELECT
+    tt.ID AS TEMPLATE_ID,
+
+    -- 1. Лінк на інформаційну картку
+    '<a href="javascript:void(0);" onclick="openTemplateDetail(' || tt.ID || ')">' ||
+    '<span class="fa fa-info-circle"></span></a>' AS LINK_ICON,
+
+    -- 2. UNIT
+    u.NAME AS UNIT_NAME,
+
+    -- 3. Зміст завдання або список підшаблонів
+    CASE 
+        WHEN tt.TYPE_ID = 0 THEN tt.TASK_CONTENT
+        ELSE (
+            SELECT LISTAGG('<li>' || sts.SUBTASK_CONTENT || '</li>', '')
+            WITHIN GROUP (ORDER BY sts.SUBTASK_ORDER)
+            FROM TASK_TEMPLATE_SUBTASK sts
+            WHERE sts.TEMPLATE_ID = tt.ID
+        )
+    END AS TASK_DESCRIPTION_HTML,
+
+    -- 4. Хто створив
+    (
+        SELECT '<span class="task_creator">' ||
+               NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') || 
+               '</span>'
+        FROM USER_TABLE u2
+        LEFT JOIN POSITION_TABLE pos ON pos.ID = u2.POSITION_ID
+        LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = u2.DEPARTMENT_ID
+        WHERE u2.ID = tt.CREATOR_ID
+        FETCH FIRST ROW ONLY
+    ) AS CREATOR_INFO,
+
+    -- 5. Виконавці (STAGES_ID = 2, TASK_ID замінено на TEMPLATE_ID)
+    (
+        SELECT LISTAGG(
+            '<span class="task_creator">' || 
+            NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') || '</span>' ||
+            COALESCE((
+                SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                FROM SIGNATUREHISTORY h
+                JOIN USERS us ON us.ID = h.SIGNER_BY
+                WHERE h.SIGNRIGHT_ID = sr2.ID
+                FETCH FIRST ROW ONLY
+            ), ''),
+        ' <br> ') 
+        FROM SIGNATURERIGHTS sr2
+        LEFT JOIN POSITION_TABLE pos ON pos.ID = sr2.POSITION_ID
+        LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr2.DEPARTMENT_ID
+        LEFT JOIN USER_TABLE u2 ON u2.ID = sr2.USER_ID
+        WHERE sr2.SUBTASK_ID IN (
+            SELECT ID FROM TASK_TEMPLATE_SUBTASK WHERE TEMPLATE_ID = tt.ID
+        ) AND sr2.STAGES_ID = 2
+    ) AS EXECUTOR_INFO,
+
+    -- 6. Статус
+    st.NAME AS STATUS_NAME,
+
+    -- 7. Підрозділ
+    dep.NAME AS DEPARTMENT_NAME,
+
+    -- 8. Періодичність
+    CASE
+        WHEN tt.PERIOD_MODE = 1 THEN 
+            '<b>Кожні</b> ' || tt.PERIOD_INTERVAL || ' днів о ' || TO_CHAR(tt.PERIOD_TIME, 'HH24:MI')
+        WHEN tt.PERIOD_MODE = 2 THEN 
+            '<b>Що</b> ' || tt.WEEKLY_DAY || ' о ' || tt.WEEKLY_TIMES
+        ELSE NULL
+    END AS PERIOD_INFO_HTML,
+
+    -- 9. Наступна дата запуску
+    TO_CHAR(tt.NEXT_RUN_DATE, 'DD.MM.YYYY') AS NEXT_RUN_DATE,
+
+    -- 10. Дата завершення
+    TO_CHAR(tt.DATE_END, 'DD.MM.YYYY') AS DATE_END
+
+FROM TASK_TEMPLATES tt
+LEFT JOIN UNIT u ON u.ID = tt.UNIT_ID
+LEFT JOIN STATUS_TABLE st ON st.ID = tt.STATUS_ID
+LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = tt.DEPARTMENT_ID;
+```
+
+---
+
+## 📌 Коротко про ключові частини:
+
+| Поле                    | Опис                                                                |
+| ----------------------- | ------------------------------------------------------------------- |
+| `TASK_DESCRIPTION_HTML` | Виводить HTML-список підшаблонів або основний вміст                 |
+| `CREATOR_INFO`          | Автор шаблону (позиція, відділ, ім’я)                               |
+| `EXECUTOR_INFO`         | Перелік виконавців з підписами, якщо є                              |
+| `PERIOD_INFO_HTML`      | Динамічно згенерований опис періодичності залежно від `PERIOD_MODE` |
+| `NEXT_RUN_DATE`         | Поки що NULL — буде розраховуватись окремо                          |
+| `LINK_ICON`             | Клік по іконці викликає `openTemplateDetail(id)`                    |
+
+---
+
+🔧 Якщо у вас є специфіка для `openTemplateDetail`, або логіка підрахунку `NEXT_RUN_DATE`, можу допомогти окремо. Також готовий сформувати `CREATE OR REPLACE VIEW` для цього запиту.

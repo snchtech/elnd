@@ -1,0 +1,113 @@
+Щоб додати до вашого рекурсивного запиту колонку `SIGNER_DATE` з таблиці `SIGNATUREHISTORY`, потрібно:
+
+* виконати `LEFT JOIN` між підзавданнями та `SIGNATURERIGHTS`, використовуючи `SUBTASK_ID = seq_id`, але тільки якщо такий запис уже існує в таблиці (тобто якщо `seq_id` співпадає з `SUBTASK_ID` у `SIGNATURERIGHTS`).
+* далі — `JOIN` з `SIGNATUREHISTORY`, щоб отримати `SIGNER_DATE`.
+* якщо підзавдання нове (є лише в колекції), `SIGNER_DATE` буде `NULL`.
+
+---
+
+## ✅ Оновлений SQL-запит
+
+Вам потрібно обгорнути `subtask_tree` у ще один `WITH`, або ж використати його як підзапит і ззовні доєднати `SIGNER_DATE`.
+
+Ось **змінену версію запиту**, з доданою колонкою `fact_date_end` (тобто `SIGNER_DATE`):
+
+```sql
+RETURN q'[
+WITH subtask_tree (
+  seq_id, task_id, parent_seq_id, subtask_content, subtask_order,
+  level_b, path_b, full_number, drag_handle, task_mode
+) AS (
+  SELECT
+    c.seq_id,
+    c.c001,
+    NULL,
+    c.c002,
+    TO_NUMBER(c.c006),
+    1 AS level_b,
+    LPAD(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c006)), 5, '0') AS path_b,
+    TO_CHAR(ROW_NUMBER() OVER (ORDER BY TO_NUMBER(c.c006))) AS full_number,
+    CASE WHEN c.c005 IS NULL THEN '<span class="drag-handle">☰</span>' END,
+    TO_NUMBER(c.n001)
+  FROM apex_collections c
+  WHERE c.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND c.c005 IS NULL
+    AND NVL(c.c010, 'ACTIVE') != 'DELETE'
+
+  UNION ALL
+
+  SELECT
+    child.seq_id,
+    child.c001,
+    TO_NUMBER(child.c005),
+    child.c002,
+    TO_NUMBER(child.c006),
+    parent.level_b + 1,
+    parent.path_b || '.' || LPAD(ROW_NUMBER() OVER (
+      PARTITION BY child.c005 ORDER BY TO_NUMBER(child.c006)
+    ), 5, '0'),
+    parent.full_number || '.' || TO_CHAR(
+      ROW_NUMBER() OVER (
+        PARTITION BY child.c005 ORDER BY TO_NUMBER(child.c006)
+      )
+    ),
+    NULL,
+    TO_NUMBER(child.n001)
+  FROM apex_collections child
+  JOIN subtask_tree parent
+    ON TO_NUMBER(child.c005) = parent.seq_id
+  WHERE child.collection_name = 'TASK_SUBTASKS_COLLECTION'
+    AND NVL(child.c010, 'ACTIVE') != 'DELETE'
+)
+SELECT
+  st.seq_id AS id,
+  st.task_id,
+  st.parent_seq_id AS parent_id,
+  st.subtask_content,
+  st.subtask_order,
+  st.level_b,
+  st.full_number,
+  st.path_b,
+  LPAD(' ', (st.level_b - 1) * 4, ' ') || st.full_number || ' ' || st.subtask_content AS display_content,
+  st.drag_handle,
+  st.task_mode,
+  sh.SIGNER_DATE AS fact_date_end
+FROM subtask_tree st
+LEFT JOIN signaturerights sr
+  ON sr.subtask_id = st.seq_id
+LEFT JOIN signaturehistory sh
+  ON sh.signright_id = sr.id
+WHERE st.task_mode = 0
+ORDER BY st.path_b;
+]';
+```
+
+---
+
+## 📌 Пояснення:
+
+* `LEFT JOIN signaturerights sr ON sr.subtask_id = st.seq_id` — якщо існує запис у БД, прив’язуємо його.
+* `LEFT JOIN signaturehistory sh ON sh.signright_id = sr.id` — отримуємо відповідну історію підпису.
+* `sh.SIGNER_DATE` → колонка `fact_date_end`.
+
+---
+
+## ✅ Додатково:
+
+* Якщо в `SIGNATUREHISTORY` зберігається **історія**, і вам потрібно тільки **останню дату**, замініть `JOIN` на:
+
+```sql
+LEFT JOIN (
+  SELECT signright_id, MAX(signer_date) AS signer_date
+  FROM signaturehistory
+  GROUP BY signright_id
+) sh ON sh.signright_id = sr.id
+```
+
+Це гарантує, що буде взята лише **найпізніша дата підпису** для кожного `signright_id`.
+
+---
+
+🔔 Якщо структура `SIGNATUREHISTORY` дозволяє зберігати кілька підписів на один `signright_id`, краще використовувати `MAX(signer_date)` або навіть `ROWNUM = 1 ORDER BY signer_date DESC`.
+
+Хочете — можу адаптувати під варіант з `RANK()` або `ROWNUM`.

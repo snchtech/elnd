@@ -1,0 +1,116 @@
+Чудово, давай доопрацюємо функцію `GET_NEXT_RUN_DATE`, щоб вона підтримувала **множинний список днів тижня (`WEEKLY_DAY`)**, наприклад:
+
+```sql
+'2,4,6' -- вівторок, четвер, субота
+```
+
+---
+
+## ✅ ОНОВЛЕНА ФУНКЦІЯ `GET_NEXT_RUN_DATE`
+
+```sql
+CREATE OR REPLACE FUNCTION GET_NEXT_RUN_DATE (
+    p_period_mode     IN NUMBER,
+    p_period_interval IN NUMBER DEFAULT NULL,
+    p_period_time     IN DATE DEFAULT NULL,
+    p_weekly_days     IN VARCHAR2 DEFAULT NULL, -- список днів тижня через кому
+    p_weekly_times    IN VARCHAR2 DEFAULT NULL  -- список часів через кому
+) RETURN DATE IS
+    v_now           DATE := SYSDATE;
+    v_next_run     DATE;
+    v_temp_date    DATE;
+    v_min_datetime DATE := NULL;
+    v_day_num      NUMBER;
+    v_time_val     VARCHAR2(10);
+    v_days_ahead   NUMBER;
+BEGIN
+    IF p_period_mode = 1 THEN
+        -- Через N днів
+        IF p_period_interval IS NOT NULL AND p_period_time IS NOT NULL THEN
+            v_next_run := TRUNC(v_now) + p_period_interval + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+        END IF;
+
+    ELSIF p_period_mode = 2 THEN
+        -- По кількох днях тижня та часах
+        FOR day_row IN (
+            SELECT TO_NUMBER(REGEXP_SUBSTR(p_weekly_days, '[^,]+', 1, LEVEL)) AS day_val
+            FROM dual
+            CONNECT BY LEVEL <= REGEXP_COUNT(p_weekly_days, ',') + 1
+        ) LOOP
+            FOR time_row IN (
+                SELECT REGEXP_SUBSTR(p_weekly_times, '[^,]+', 1, LEVEL) AS time_val
+                FROM dual
+                CONNECT BY LEVEL <= REGEXP_COUNT(p_weekly_times, ',') + 1
+            ) LOOP
+                -- розрахунок найближчої дати для кожної комбінації день + час
+                v_days_ahead := MOD((day_row.day_val + 7 - TO_CHAR(v_now, 'D')), 7);
+                v_temp_date := TRUNC(v_now) + v_days_ahead + TO_NUMBER(TO_CHAR(TO_DATE(time_row.time_val, 'HH24:MI'), 'SSSSS')) / 86400;
+
+                -- якщо поточний день і час у минулому – пересуваємо на наступний тиждень
+                IF v_days_ahead = 0 AND v_temp_date <= v_now THEN
+                    v_temp_date := v_temp_date + 7;
+                END IF;
+
+                IF v_min_datetime IS NULL OR v_temp_date < v_min_datetime THEN
+                    v_min_datetime := v_temp_date;
+                END IF;
+            END LOOP;
+        END LOOP;
+
+        v_next_run := v_min_datetime;
+    END IF;
+
+    RETURN v_next_run;
+END GET_NEXT_RUN_DATE;
+/
+```
+
+---
+
+## 🔁 ПРИКЛАД ВИКЛИКУ
+
+### 🔹 У SQL-запиті:
+
+```sql
+SELECT
+  TO_CHAR(
+    GET_NEXT_RUN_DATE(
+      PERIOD_MODE,
+      PERIOD_INTERVAL,
+      PERIOD_TIME,
+      WEEKLY_DAY,      -- тепер: список днів, напр. '2,4,6'
+      WEEKLY_TIMES     -- напр. '10:00,18:00'
+    ),
+    'DD.MM.YYYY HH24:MI'
+  ) AS NEXT_RUN_DATE
+FROM TASK_TEMPLATES;
+```
+
+### 🔹 У APEX / JOB:
+
+```plsql
+UPDATE TASK_TEMPLATES
+SET NEXT_RUN_DATE = GET_NEXT_RUN_DATE(
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    WEEKLY_DAY,
+    WEEKLY_TIMES
+)
+WHERE ID = :P_TEMPLATE_ID;
+```
+
+---
+
+## 📝 Примітки
+
+* Вхідні `WEEKLY_DAY` і `WEEKLY_TIMES` тепер — **рядки з переліком через кому** (наприклад: `'2,4'`, `'08:00,14:00'`).
+* Функція перевіряє всі **комбінації день + час**, обирає **найближчу**, яка більша за `SYSDATE`.
+* День тижня — як у `TO_CHAR(..., 'D')`, залежно від `NLS_TERRITORY`, але зазвичай:
+
+  * `1` = неділя, `2` = понеділок, ..., `7` = субота (**перевір у своїй системі!**)
+  * Якщо хочеш 1=ПН → краще використовуй `TO_CHAR(..., 'D', 'NLS_TERRITORY=Ukraine')`
+
+---
+
+🔔 Якщо потрібно — можу зробити окрему версію з локалізованою прив’язкою днів або винести це в `PACKAGE`.

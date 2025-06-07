@@ -1,0 +1,153 @@
+Ти хочеш динамічно розраховувати `NEXT_RUN_DATE` у двох сценаріях:
+
+1. 📌 При **створенні шаблону** — встановлювати початкову дату запуску.
+2. 🔁 При **job створення завдань** — **оновлювати `NEXT_RUN_DATE`** після кожного запуску, обчислюючи наступну найближчу дату на основі параметрів періодичності.
+
+Розглянемо обидва варіанти. Формат збереження і виводу: `DD.MM.YYYY HH24:MI`.
+
+---
+
+## 📅 Пояснення логіки
+
+### 🔷 **PERIOD\_MODE = 1 (через N днів)**
+
+* `PERIOD_INTERVAL` — інтервал у днях (наприклад, 2 або 30).
+* `PERIOD_TIME` — час запуску (наприклад, `10:00`, `18:00`).
+* 👉 `NEXT_RUN_DATE = SYSDATE + n днів` до найближчої дати з часом `PERIOD_TIME`.
+
+### 🔷 **PERIOD\_MODE = 2 (по днях тижня)**
+
+* `WEEKLY_DAY` — номер дня тижня (1=ПН, 2=ВТ, ..., 7=НД).
+* `WEEKLY_TIMES` — список часу у форматі `10:00,18:00,...`.
+* 👉 Вибираємо **найближчий день і час**, які більші за поточний момент (`SYSDATE`).
+
+---
+
+## ✅ КОД ДЛЯ СТВОРЕННЯ (PL/SQL фрагмент)
+
+```plsql
+DECLARE
+  v_next_run_date DATE;
+  v_now DATE := SYSDATE;
+BEGIN
+  -- PERIOD_MODE 1: через інтервал у днях
+  IF :P_PERIOD_MODE = 1 THEN
+    v_next_run_date := TRUNC(v_now) + :P_PERIOD_INTERVAL + TO_NUMBER(TO_CHAR(:P_PERIOD_TIME, 'SSSSS')) / 86400;
+
+  -- PERIOD_MODE 2: по днях тижня і часах
+  ELSIF :P_PERIOD_MODE = 2 THEN
+    DECLARE
+      v_min_date DATE := NULL;
+      v_day_target NUMBER := :P_WEEKLY_DAY; -- 1=Monday
+      v_now_day NUMBER := TO_CHAR(v_now, 'D'); -- поточний день тижня
+      v_days_ahead NUMBER;
+      v_time_str VARCHAR2(10);
+      v_time_date DATE;
+    BEGIN
+      FOR time_item IN (
+        SELECT REGEXP_SUBSTR(:P_WEEKLY_TIMES, '[^,]+', 1, LEVEL) AS time_part
+        FROM dual
+        CONNECT BY LEVEL <= REGEXP_COUNT(:P_WEEKLY_TIMES, ',') + 1
+      )
+      LOOP
+        v_days_ahead := (v_day_target + 7 - TO_CHAR(v_now, 'D')) MOD 7;
+        IF v_days_ahead = 0 THEN
+          -- поточний день, перевіримо чи час вже минув
+          v_time_date := TRUNC(v_now) + TO_NUMBER(TO_CHAR(TO_DATE(time_item.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+          IF v_time_date <= v_now THEN
+            v_days_ahead := 7;
+          END IF;
+        END IF;
+
+        v_time_date := TRUNC(v_now) + v_days_ahead + TO_NUMBER(TO_CHAR(TO_DATE(time_item.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+
+        IF v_min_date IS NULL OR v_time_date < v_min_date THEN
+          v_min_date := v_time_date;
+        END IF;
+      END LOOP;
+
+      v_next_run_date := v_min_date;
+    END;
+  END IF;
+
+  -- оновлення в TASK_TEMPLATES (тільки при створенні шаблону)
+  UPDATE TASK_TEMPLATES
+  SET NEXT_RUN_DATE = v_next_run_date
+  WHERE ID = :P_TEMPLATE_ID;
+END;
+```
+
+---
+
+## 🔁 КОД ДЛЯ JOB (оновлення після запуску):
+
+```plsql
+DECLARE
+  v_next_run_date DATE;
+  v_now DATE := SYSDATE;
+BEGIN
+  FOR rec IN (
+    SELECT ID, PERIOD_MODE, PERIOD_INTERVAL, PERIOD_TIME, WEEKLY_DAY, WEEKLY_TIMES
+    FROM TASK_TEMPLATES
+    WHERE STATUS_ID = 1 -- активні шаблони
+  ) LOOP
+    -- ===== LOGIKA =====
+    IF rec.PERIOD_MODE = 1 THEN
+      v_next_run_date := TRUNC(v_now) + rec.PERIOD_INTERVAL + TO_NUMBER(TO_CHAR(rec.PERIOD_TIME, 'SSSSS')) / 86400;
+
+    ELSIF rec.PERIOD_MODE = 2 THEN
+      DECLARE
+        v_min_date DATE := NULL;
+        v_days_ahead NUMBER;
+        v_time_date DATE;
+      BEGIN
+        FOR time_item IN (
+          SELECT REGEXP_SUBSTR(rec.WEEKLY_TIMES, '[^,]+', 1, LEVEL) AS time_part
+          FROM dual
+          CONNECT BY LEVEL <= REGEXP_COUNT(rec.WEEKLY_TIMES, ',') + 1
+        )
+        LOOP
+          v_days_ahead := (rec.WEEKLY_DAY + 7 - TO_CHAR(v_now, 'D')) MOD 7;
+          IF v_days_ahead = 0 THEN
+            v_time_date := TRUNC(v_now) + TO_NUMBER(TO_CHAR(TO_DATE(time_item.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+            IF v_time_date <= v_now THEN
+              v_days_ahead := 7;
+            END IF;
+          END IF;
+
+          v_time_date := TRUNC(v_now) + v_days_ahead + TO_NUMBER(TO_CHAR(TO_DATE(time_item.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+
+          IF v_min_date IS NULL OR v_time_date < v_min_date THEN
+            v_min_date := v_time_date;
+          END IF;
+        END LOOP;
+
+        v_next_run_date := v_min_date;
+      END;
+    END IF;
+
+    -- оновлення в шаблоні
+    UPDATE TASK_TEMPLATES
+    SET NEXT_RUN_DATE = v_next_run_date
+    WHERE ID = rec.ID;
+  END LOOP;
+END;
+```
+
+---
+
+## 🖨 Формат у звіті
+
+У SELECT-запиті звіту, де виводиш колонку:
+
+```sql
+TO_CHAR(tt.NEXT_RUN_DATE, 'DD.MM.YYYY HH24:MI') AS NEXT_RUN_DATE
+```
+
+---
+
+## 🧪 Хочеш протестувати?
+
+Можу дати окремі приклади виклику функції розрахунку `NEXT_RUN_DATE` або винести логіку в **PL/SQL-функцію** для повторного використання (`GET_NEXT_RUN_DATE(...)`).
+
+Напиши, якщо потрібно таке оформлення.

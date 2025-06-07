@@ -1,0 +1,108 @@
+Ок! Створимо багаторазову **PL/SQL-функцію `GET_NEXT_RUN_DATE`**, яка:
+
+* приймає параметри: `PERIOD_MODE`, `PERIOD_INTERVAL`, `PERIOD_TIME`, `WEEKLY_DAY`, `WEEKLY_TIMES`
+* повертає `DATE` — найближчу дату наступного запуску
+* підтримує обидва режими (`PERIOD_MODE = 1` і `2`)
+* автоматично визначає найближчий момент у майбутньому
+
+---
+
+## ✅ 1. **Функція у схемі (Oracle)**
+
+```sql
+CREATE OR REPLACE FUNCTION GET_NEXT_RUN_DATE (
+    p_period_mode     IN NUMBER,
+    p_period_interval IN NUMBER DEFAULT NULL,
+    p_period_time     IN DATE DEFAULT NULL,
+    p_weekly_day      IN NUMBER DEFAULT NULL,
+    p_weekly_times    IN VARCHAR2 DEFAULT NULL
+) RETURN DATE IS
+    v_now           DATE := SYSDATE;
+    v_next_run     DATE;
+    v_temp_time    DATE;
+    v_min_datetime DATE;
+    v_days_ahead   NUMBER;
+BEGIN
+    IF p_period_mode = 1 THEN
+        -- Через N днів
+        IF p_period_interval IS NOT NULL AND p_period_time IS NOT NULL THEN
+            v_next_run := TRUNC(v_now) + p_period_interval + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+        END IF;
+
+    ELSIF p_period_mode = 2 THEN
+        -- По днях тижня та часах (WEEKLY_DAY + WEEKLY_TIMES)
+        FOR time_row IN (
+            SELECT REGEXP_SUBSTR(p_weekly_times, '[^,]+', 1, LEVEL) AS time_part
+            FROM dual
+            CONNECT BY LEVEL <= REGEXP_COUNT(p_weekly_times, ',') + 1
+        )
+        LOOP
+            v_days_ahead := MOD((p_weekly_day + 7 - TO_CHAR(v_now, 'D')), 7);
+            IF v_days_ahead = 0 THEN
+                v_temp_time := TRUNC(v_now) + TO_NUMBER(TO_CHAR(TO_DATE(time_row.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+                IF v_temp_time <= v_now THEN
+                    v_days_ahead := 7;
+                END IF;
+            END IF;
+
+            v_temp_time := TRUNC(v_now) + v_days_ahead + TO_NUMBER(TO_CHAR(TO_DATE(time_row.time_part, 'HH24:MI'), 'SSSSS')) / 86400;
+
+            IF v_min_datetime IS NULL OR v_temp_time < v_min_datetime THEN
+                v_min_datetime := v_temp_time;
+            END IF;
+        END LOOP;
+
+        v_next_run := v_min_datetime;
+    END IF;
+
+    RETURN v_next_run;
+END GET_NEXT_RUN_DATE;
+/
+```
+
+---
+
+## 🧪 2. **Приклад використання в SQL-запиті**
+
+```sql
+SELECT
+  GET_NEXT_RUN_DATE(
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    WEEKLY_DAY,
+    WEEKLY_TIMES
+  ) AS NEXT_RUN_DATE
+FROM TASK_TEMPLATES;
+```
+
+---
+
+## 🔄 3. **Приклад виклику в APEX або job**
+
+```plsql
+UPDATE TASK_TEMPLATES
+SET NEXT_RUN_DATE = GET_NEXT_RUN_DATE(
+    PERIOD_MODE,
+    PERIOD_INTERVAL,
+    PERIOD_TIME,
+    WEEKLY_DAY,
+    WEEKLY_TIMES
+)
+WHERE ID = :P_TEMPLATE_ID;
+```
+
+---
+
+## 📝 Примітки
+
+* Функція використовує `TO_CHAR(..., 'SSSSS') / 86400`, щоб додати час до дати.
+* Якщо тобі потрібно **відображення у вигляді рядка** (наприклад, `'12.06.2025 10:00'`), можеш обгорнути у `TO_CHAR(...)`:
+
+  ```sql
+  TO_CHAR(GET_NEXT_RUN_DATE(...), 'DD.MM.YYYY HH24:MI')
+  ```
+
+---
+
+🔧 Якщо хочеш — можу ще винести цю функцію в `PACKAGE` з логікою створення задач або додати обробку множинних днів (`WEEKLY_DAY` як список). Напиши, якщо треба.

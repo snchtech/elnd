@@ -1,0 +1,70 @@
+Ось оновлена версія SQL-коду для колонки **"Хто видав"**, яка реалізує **всю логіку, що ти описав**, включаючи:
+
+* перевірку, чи є `USER_ID`,
+* співпадіння або розбіжність `USER_ID` та `SIGNER_BY`,
+* фраза `"Видано:"` — лише якщо підписував інший користувач,
+* вивід лише дати — якщо підписував той самий користувач,
+* або як зараз — якщо `USER_ID` відсутній.
+
+---
+
+### ✅ Оновлений SQL-фрагмент:
+
+```sql
+(
+    SELECT 
+        '<span class="task_creator">' ||
+        NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') ||
+        '</span>' ||
+
+        -- Додатково: блок SIGNATUREHISTORY, якщо є USER_ID
+        CASE 
+            WHEN sr.USER_ID IS NOT NULL THEN
+                (
+                    SELECT 
+                        CASE 
+                            WHEN h.SIGNER_BY = sr.USER_ID THEN 
+                                -- Підписав той самий, що і USER_ID: лише час
+                                '<span class="signer_info">' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                            ELSE 
+                                -- Підписав інший: "Видано: USERNAME, дата"
+                                '<span class="signer_info">Видано: ' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                        END
+                    FROM SIGNATUREHISTORY h
+                    JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+                    WHERE h.SIGNRIGHT_ID = sr.ID
+                    FETCH FIRST ROW ONLY
+                )
+            ELSE
+                -- USER_ID = NULL, тоді виводимо як раніше
+                (
+                    SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                    FROM SIGNATUREHISTORY h
+                    JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+                    WHERE h.SIGNRIGHT_ID = sr.ID
+                    FETCH FIRST ROW ONLY
+                )
+        END
+
+    FROM SIGNATURERIGHTS sr
+    LEFT JOIN POSITION_TABLE pos ON pos.ID = sr.POSITION_ID
+    LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr.DEPARTMENT_ID
+    LEFT JOIN USER_TABLE u2 ON u2.ID = sr.USER_ID
+    WHERE sr.TASK_ID = t.ID AND sr.STAGES_ID = 1
+    FETCH FIRST ROW ONLY
+) AS CREATOR_INFO
+```
+
+---
+
+### 🔎 Що робить цей код:
+
+| Випадок               | Результат                                                                |
+| --------------------- | ------------------------------------------------------------------------ |
+| `USER_ID = SIGNER_BY` | Виводиться лише дата `<span class="signer_info">12.06.2025 10:32</span>` |
+| `USER_ID ≠ SIGNER_BY` | Виводиться `Видано: Іванов, 12.06.2025 10:32`                            |
+| `USER_ID IS NULL`     | Виводиться звичайна підписна інформація (як раніше)                      |
+
+---
+
+🔄 **Хочеш, я так само адаптую логіку для "Виконавців" (STAGE = 2)?**

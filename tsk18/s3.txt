@@ -1,0 +1,62 @@
+Щоб реалізувати бажану логіку формування **колонки статусу** в основному звіті журналу завдань, ми можемо використати **корельований підзапит** із пріоритетом `SIGNATUREHISTORY.NEW_STATUS_ID` (якщо є) — інакше брати `TASKS.STATUS_ID`.
+
+---
+
+### ✅ Оновлений SQL-фрагмент для `STATUS_NAME`
+
+```sql
+(
+  SELECT s2.NAME
+  FROM SIGNATUREHISTORY h
+  JOIN SIGNATURERIGHTS r ON r.ID = h.SIGNRIGHT_ID AND r.TASK_ID = t.ID
+  JOIN STATUS_TABLE s2 ON s2.ID = h.NEW_STATUS_ID
+  WHERE h.NEW_STATUS_ID IS NOT NULL
+  AND r.TASK_ID = t.ID
+  AND r.STAGES_ID = (
+    SELECT MAX(r2.STAGES_ID)
+    FROM SIGNATUREHISTORY h2
+    JOIN SIGNATURERIGHTS r2 ON r2.ID = h2.SIGNRIGHT_ID
+    WHERE r2.TASK_ID = t.ID AND h2.NEW_STATUS_ID IS NOT NULL
+  )
+  FETCH FIRST ROW ONLY
+)
+-- Якщо в SIGNATUREHISTORY немає записів — повернути TASKS.STATUS_ID як запасний варіант
+AS STATUS_NAME_FINAL
+```
+
+> Альтернативно, щоб гарантувати fallback, можна обгорнути у `COALESCE()`:
+
+```sql
+COALESCE((
+  SELECT s2.NAME
+  FROM SIGNATUREHISTORY h
+  JOIN SIGNATURERIGHTS r ON r.ID = h.SIGNRIGHT_ID AND r.TASK_ID = t.ID
+  JOIN STATUS_TABLE s2 ON s2.ID = h.NEW_STATUS_ID
+  WHERE h.NEW_STATUS_ID IS NOT NULL
+  AND r.STAGES_ID = (
+    SELECT MAX(r2.STAGES_ID)
+    FROM SIGNATUREHISTORY h2
+    JOIN SIGNATURERIGHTS r2 ON r2.ID = h2.SIGNRIGHT_ID
+    WHERE r2.TASK_ID = t.ID AND h2.NEW_STATUS_ID IS NOT NULL
+  )
+  FETCH FIRST ROW ONLY
+), st.NAME) AS STATUS_NAME_FINAL
+```
+
+---
+
+### 🔎 Як це працює:
+
+1. **Підзапит** бере з `SIGNATUREHISTORY` запис з максимальним `STAGES_ID`, який має `NEW_STATUS_ID`.
+2. До цього запису приєднується `STATUS_TABLE`, щоб отримати `NAME`.
+3. Якщо жодного такого запису немає, використовується `TASKS.STATUS_ID` → `st.NAME`.
+
+---
+
+🔧 **Передумови:**
+
+* У `FROM` частині вашого запиту має бути `JOIN STATUS_TABLE st ON st.ID = t.STATUS_ID`.
+
+---
+
+Готовий допомогти й з подібною логікою для інших колонок — наприклад, `фактична дата завершення`, якщо треба враховувати `SIGNATUREHISTORY` для `stage = 3`.

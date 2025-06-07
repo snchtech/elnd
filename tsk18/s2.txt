@@ -1,0 +1,63 @@
+Ось адаптована версія SQL-коду для **колонки виконавці**, з урахуванням твоєї логіки для `SIGNATURERIGHTS.STAGES_ID = 2` (виконавці):
+
+---
+
+### ✅ Оновлений SQL-фрагмент для `EXECUTOR_INFO`
+
+```sql
+(
+    SELECT LISTAGG(
+        '<span class="task_creator">' || 
+        NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || NVL(u2.USERNAME, '') || '</span>' ||
+
+        CASE 
+            WHEN sr2.USER_ID IS NOT NULL THEN
+                (
+                    SELECT 
+                        CASE 
+                            WHEN h.SIGNER_BY = sr2.USER_ID THEN 
+                                -- Підписав той самий користувач: тільки час
+                                '<span class="signer_info">' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                            ELSE 
+                                -- Підписав інший: "Виконавець: USERNAME, дата"
+                                '<span class="signer_info">Виконавець: ' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                        END
+                    FROM SIGNATUREHISTORY h
+                    JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+                    WHERE h.SIGNRIGHT_ID = sr2.ID
+                    FETCH FIRST ROW ONLY
+                )
+            ELSE
+                -- USER_ID = NULL, виводимо як раніше
+                (
+                    SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+                    FROM SIGNATUREHISTORY h
+                    JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+                    WHERE h.SIGNRIGHT_ID = sr2.ID
+                    FETCH FIRST ROW ONLY
+                )
+        END,
+    ' <br> ') 
+    FROM SIGNATURERIGHTS sr2
+    LEFT JOIN POSITION_TABLE pos ON pos.ID = sr2.POSITION_ID
+    LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr2.DEPARTMENT_ID
+    LEFT JOIN USER_TABLE u2 ON u2.ID = sr2.USER_ID
+    WHERE sr2.TASK_ID = t.ID AND sr2.STAGES_ID = 2
+) AS EXECUTOR_INFO
+```
+
+---
+
+### 🔎 Пояснення логіки:
+
+| Умова                 | Вивід                                                    |
+| --------------------- | -------------------------------------------------------- |
+| `USER_ID = SIGNER_BY` | Лише дата і час у `<span class="signer_info">...</span>` |
+| `USER_ID ≠ SIGNER_BY` | `Виконавець: username, дата`                             |
+| `USER_ID IS NULL`     | Виводимо `username + дата`, як у попередній версії       |
+
+---
+
+🟩 Тепер логіка колонки "Виконавці" повністю відповідає колонці "Хто видав".
+
+🔜 Якщо потрібно — можу аналогічно адаптувати колонку "Фактична дата завершення" (stage = 3).

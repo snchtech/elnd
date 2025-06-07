@@ -1,0 +1,59 @@
+Щоб у колонці **PERIOD\_INFO\_HTML** замість `tt.WEEKLY_DAY` (яке зберігає `ID`) відображалась назва дня тижня з таблиці `WEEK_DAYS`, потрібно зробити **`LEFT JOIN` на таблицю `WEEK_DAYS`** і використати `wd.NAME` замість `tt.WEEKLY_DAY`.
+
+---
+
+### 🔧 ОНОВЛЕНА ЧАСТИНА SQL
+
+```sql
+-- 8. Періодичність
+CASE
+    WHEN tt.PERIOD_MODE = 1 THEN 
+        '<b>Кожні</b> ' || tt.PERIOD_INTERVAL || ' днів о ' || TO_CHAR(tt.PERIOD_TIME, 'HH24:MI')
+    WHEN tt.PERIOD_MODE = 2 THEN 
+        '<b>Що</b> ' || wd.NAME || ' о ' || tt.WEEKLY_TIMES
+    ELSE NULL
+END AS PERIOD_INFO_HTML,
+```
+
+---
+
+### 🔗 Додай JOIN до `WEEK_DAYS`
+
+У секцію `FROM ...`:
+
+```sql
+LEFT JOIN WEEK_DAYS wd ON wd.ID = tt.WEEKLY_DAY
+```
+
+---
+
+### ✅ Підсумковий фрагмент:
+
+```sql
+-- 8. Періодичність
+CASE
+    WHEN tt.PERIOD_MODE = 1 THEN 
+        '<b>Кожні</b> ' || tt.PERIOD_INTERVAL || ' днів о ' || TO_CHAR(tt.PERIOD_TIME, 'HH24:MI')
+    WHEN tt.PERIOD_MODE = 2 THEN 
+        '<b>Що</b> ' || wd.NAME || ' о ' || tt.WEEKLY_TIMES
+    ELSE NULL
+END AS PERIOD_INFO_HTML
+```
+
+```sql
+...
+FROM TASK_TEMPLATES tt
+LEFT JOIN UNIT u ON u.ID = tt.UNIT_ID
+LEFT JOIN STATUS_TABLE st ON st.ID = tt.STATUS_ID
+LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = tt.DEPARTMENT_ID
+LEFT JOIN WEEK_DAYS wd ON wd.ID = tt.WEEKLY_DAY;
+```
+
+---
+
+📝 **Примітка:** Переконайся, що:
+
+* `WEEK_DAYS` має поля `ID` (номер дня) та `NAME` (наприклад, `"понеділок"`, `"вівторок"`, ...).
+* Якщо `tt.WEEKLY_DAY` — масив або список ID, тоді треба буде змінити логіку (`IN (...)`, `LISTAGG` або `JOIN ... CONNECT BY`). Але з твоїх слів – це одиночне значення.
+
+Підкажи, якщо `WEEKLY_DAY` підтримує кілька днів — адаптую.

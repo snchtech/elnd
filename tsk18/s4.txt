@@ -1,0 +1,134 @@
+Для реалізації **одного інтерактивного звіту** з перемикачем між вкладками **(без дублювання звітів)** у Oracle APEX, де фільтрація відбувається за логікою:
+
+* **Заплановані**
+* **На поточну зміну**
+* **Проблемні**
+* **Архів**
+
+🔧 **Реалізація складається з 4 частин:**
+
+---
+
+### ✅ **1. Додаємо елемент `PXX_TAB_MODE`**
+
+**Тип:** `Hidden`
+**Стартове значення:** `'PLANNED'`
+
+Цей item буде визначати активну вкладку і керувати фільтрацією.
+
+---
+
+### ✅ **2. Перед `Header` додаємо динамічний PL/SQL процес**
+
+```plsql
+DECLARE
+  v_now         DATE := SYSDATE;
+  v_hour        NUMBER := TO_NUMBER(TO_CHAR(v_now, 'HH24'));
+BEGIN
+  IF v_hour BETWEEN 6 AND 13 THEN
+    :PXX_SHIFT_START := TRUNC(v_now) + 6/24;
+    :PXX_SHIFT_END   := TRUNC(v_now) + 14/24;
+  ELSIF v_hour BETWEEN 14 AND 21 THEN
+    :PXX_SHIFT_START := TRUNC(v_now) + 14/24;
+    :PXX_SHIFT_END   := TRUNC(v_now) + 22/24;
+  ELSE
+    IF v_hour >= 22 THEN
+      :PXX_SHIFT_START := TRUNC(v_now) + 22/24;
+      :PXX_SHIFT_END   := TRUNC(v_now + 1) + 6/24;
+    ELSE -- 0 до 5
+      :PXX_SHIFT_START := TRUNC(v_now - 1) + 22/24;
+      :PXX_SHIFT_END   := TRUNC(v_now) + 6/24;
+    END IF;
+  END IF;
+END;
+```
+
+Створюємо два item:
+
+* `PXX_SHIFT_START`
+* `PXX_SHIFT_END`
+
+Тип — `Hidden`, session state збережений.
+
+---
+
+### ✅ **3. SQL-запит у звіті (основному)**
+
+```sql
+SELECT ...
+FROM TASKS t
+LEFT JOIN STATUS_TABLE st ON st.ID = t.STATUS_ID
+WHERE
+  (:PXX_TAB_MODE = 'PLANNED')
+
+  OR (:PXX_TAB_MODE = 'SHIFT'
+      AND (
+        (t.PLANNING_DATE_START < :PXX_SHIFT_END AND (t.ACTUAL_DATE_END IS NULL OR t.ACTUAL_DATE_END > :PXX_SHIFT_START)) OR
+        (t.PLANNING_DATE_END BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END)
+      )
+     )
+
+  OR (:PXX_TAB_MODE = 'PROBLEM'
+      AND (
+        (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+        OR EXISTS (
+          SELECT 1
+          FROM DICT_APP_CONFIRM_LIST d
+          WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+            AND NOT EXISTS (
+              SELECT 1
+              FROM SIGNATURERIGHTS r
+              WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+            )
+        )
+      )
+     )
+
+  OR (:PXX_TAB_MODE = 'ARCHIVE' AND t.STATUS_ID = 14)
+```
+
+> ⚠ `ACTUAL_DATE_END` — заміни на підзапит або колонку з твого view, де вона розраховується.
+
+---
+
+### ✅ **4. Додаємо кнопки-вкладки**
+
+**Використай HTML-елемент (Static Region)** зі стилізованими кнопками:
+
+```html
+<div class="t-TabsRegion">
+  <button type="button" class="t-Button" onclick="setTab('PLANNED')">Заплановані</button>
+  <button type="button" class="t-Button" onclick="setTab('SHIFT')">На поточну зміну</button>
+  <button type="button" class="t-Button" onclick="setTab('PROBLEM')">Проблемні</button>
+  <button type="button" class="t-Button" onclick="setTab('ARCHIVE')">Архів</button>
+</div>
+```
+
+І додай JavaScript до сторінки:
+
+```js
+function setTab(mode) {
+  apex.item("PXX_TAB_MODE").setValue(mode);
+  apex.region("report_static_id").refresh(); // Замінити на Static ID вашого звіту
+}
+```
+
+---
+
+### 🔁 **Що буде відбуватись**
+
+* При завантаженні: `PXX_TAB_MODE = 'PLANNED'` → показуються всі.
+* При натисканні кнопки: змінюється значення `PXX_TAB_MODE` і **рефрешиться лише один звіт**.
+* SQL-запит гнучко реагує на зміну значення `PXX_TAB_MODE`.
+
+---
+
+### 🟢 Оптимізація
+
+* Завдяки одному SQL-запиту уникаємо дублювання звітів.
+* Усі умови — в `WHERE`, що добре кешується.
+* Пара shift\_start/shift\_end рахується 1 раз при завантаженні.
+
+---
+
+Хочеш — я можу одразу скласти повну APEX demo-структуру для імпорту з усім стилем і діями.

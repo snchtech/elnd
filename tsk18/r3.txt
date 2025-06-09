@@ -1,0 +1,173 @@
+     apex.region("YOUR_IG_STATIC_ID").call("getActions").set("edit", true);
+----
+     function setCellsToReadOnly() {
+       var ig = apex.region("YOUR_IG_STATIC_ID").widget();
+       var model = ig.interactiveGrid("getViews", "grid").model;
+       model.forEach(function(record) {
+         if (model.getValue(record, "COLUMN_NAME") === "CONDITION") {
+           model.meta[record.id].fields["COLUMN_NAME"].ck = 1; // 'ck' sets read-only
+         }
+       });
+       ig.interactiveGrid("refresh");
+     }
+-------
+
+Ти хочеш, щоб у певному режимі (`P6_TASK_ACTION_MODE`) **Interactive Grid (IG)** став **лише для перегляду**, без:
+
+* кнопки **`ADD_SUBTASK`**
+* можливості **редагування полів у гріді**
+* кнопок **редагування/видалення** в кожному рядку IG
+
+---
+
+## ✅ Рішення – повністю контролюємо IG в режимі перегляду
+
+---
+
+### 🔹 1. **Приховати кнопку `ADD_SUBTASK`**
+
+#### 📍 Dynamic Action:
+
+* **Event**: `Page Load` або `Change` на `P6_TASK_ACTION_MODE`
+* **True Condition** (JavaScript):
+
+```javascript
+if ($v('P6_TASK_ACTION_MODE') === '0' || $v('P6_TASK_ACTION_MODE') === '2') {
+  $('#ADD_SUBTASK').hide(); // ID кнопки
+} else {
+  $('#ADD_SUBTASK').show();
+}
+```
+
+> 🔁 Або використовуй *Server-side Condition* на кнопці:
+
+```plsql
+:P6_TASK_ACTION_MODE NOT IN (0, 2)
+```
+
+---
+
+### 🔹 2. **Зробити IG тільки для перегляду (disable edit)**
+
+> APEX не має прямого перемикача "IG → Read-only", але можна **вимкнути функції редагування через JavaScript**.
+
+#### 📍 Dynamic Action на `Page Load` (або Change):
+
+```javascript
+if ($v('P6_TASK_ACTION_MODE') === '0' || $v('P6_TASK_ACTION_MODE') === '2') {
+  var ig$ = apex.region("your_ig_static_id").widget(); // заміни static ID IG
+  ig$.interactiveGrid("getActions").disable("row-add");
+  ig$.interactiveGrid("getActions").disable("row-edit");
+  ig$.interactiveGrid("getActions").disable("row-delete");
+
+  // Вимикаємо редагування клітинок
+  var model = ig$.interactiveGrid("getViews", "grid").model;
+  model.setEditable(false);
+}
+```
+
+> 🔍 `your_ig_static_id` — це Static ID регіону з IG. Задай його в APEX, наприклад: `subtasks_ig`
+
+---
+
+### 🔹 3. **Прибрати кнопки редагування/видалення в рядках IG**
+
+> Якщо використовуєш стандартний IG з автоматичним "Actions Column", просто **вимкни `row-actions`**:
+
+#### У Dynamic Action (разом з попереднім):
+
+```javascript
+ig$.interactiveGrid("getActions").disable("row-actions");
+```
+
+> або в APEX → IG Attributes → **Features** → зніми `Row Selector`, `Row Actions`
+> (але тоді буде завжди вимкнено)
+
+---
+
+## 🔁 Альтернатива — повністю змінити конфігурацію IG
+
+Якщо потрібно **повністю прибрати все, що стосується редагування**, ще один варіант:
+
+* зробити 2 IG: один editable, інший read-only
+* керувати видимістю через `Server-side Condition` або `Dynamic Action`
+
+Це **найбільш контрольований спосіб**, але потребує дублювання регіонів.
+
+---
+
+## 🔚 Підсумок:
+
+| Що                              | Як зробити                            |
+| ------------------------------- | ------------------------------------- |
+| Сховати кнопку `ADD_SUBTASK`    | JS + Server-side Condition            |
+| Заборонити редагування полів IG | `model.setEditable(false)`            |
+| Прибрати дії з рядків           | `disable("row-actions" / "row-edit")` |
+
+---
+
+🔔 Якщо даш мені **Static ID IG**, я підготую готовий код під твою сторінку.
+
+
+
+Точно — дякую, ти знову правий. В `Interactive Grid` у Oracle APEX **немає методу `model.setEditable(false)`**. Це був помилковий підхід.
+
+Правильний і робочий спосіб зробити **IG лише для перегляду (без редагування клітинок)** — це **деактивувати режим редагування на рівні View** або **перевизначити editable правила для колонок**.
+
+---
+
+## ✅ ПРАВИЛЬНИЙ СПОСІБ: Вимкнути редагування IG через JavaScript (глобально)
+
+```javascript
+if ($v('P6_TASK_ACTION_MODE') === '0' || $v('P6_TASK_ACTION_MODE') === '2') {
+  var ig$ = apex.region("subtasks_ig").widget(); // Замінити на свій Static ID
+  var gridView = ig$.interactiveGrid("getViews", "grid");
+
+  // 1. Вимикаємо всі дії редагування
+  ig$.interactiveGrid("getActions").disable("row-add");
+  ig$.interactiveGrid("getActions").disable("row-delete");
+  ig$.interactiveGrid("getActions").disable("row-duplicate");
+  ig$.interactiveGrid("getActions").disable("row-edit");
+  ig$.interactiveGrid("getActions").disable("edit");
+
+  // 2. Вимикаємо Row Actions (меню дій у кожному рядку)
+  ig$.interactiveGrid("getActions").disable("row-actions");
+
+  // 3. Робимо клітинки лише для перегляду: через editable false на колонках
+  gridView.modelColumns.forEach(function(column) {
+    column.canEdit = false;
+  });
+
+  // 4. Оновлюємо грід після змін editable
+  gridView.view$.grid("refresh");
+}
+```
+
+---
+
+## 📝 Примітка:
+
+* `gridView.modelColumns` — доступ до всіх колонок IG
+* `.canEdit = false` — відключає редагування на клітинковому рівні
+* `"subtasks_ig"` — твій Static ID IG (заміни на актуальний)
+
+---
+
+## 🔁 Альтернатива — якщо хочеш редагувати лише в іншому режимі
+
+Увімкни `canEdit = true` лише тоді, коли `P6_TASK_ACTION_MODE = 1` (наприклад, режим редагування шаблону).
+
+---
+
+## ✅ Підсумок:
+
+| Елемент                        | Як вимкнути                       |
+| ------------------------------ | --------------------------------- |
+| Додавання рядка                | `.disable("row-add")`             |
+| Видалення рядка                | `.disable("row-delete")`          |
+| Меню дій у рядку (Row Actions) | `.disable("row-actions")`         |
+| Редагування клітинок           | `modelColumns[i].canEdit = false` |
+
+---
+
+🔔 Якщо потрібно — можу згенерувати тобі повну функцію `lockIG('region_static_id')`, яку ти зможеш перевикористовувати в проєкті.

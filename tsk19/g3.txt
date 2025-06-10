@@ -1,0 +1,86 @@
+Окей! Давайте оновимо функцію `GET_NEXT_RUN_DATE` так, щоб вона підтримувала **повноцінну логіку періодичного шаблону з новим параметром `PERIOD_START_DATE`**.
+
+---
+
+## ✅ Оновлена функція `GET_NEXT_RUN_DATE`
+
+Ця функція:
+
+* працює для `PERIOD_MODE = 1` (через кожні N днів з часу старту)
+* повертає найближчу дату запуску **після `SYSDATE`**
+* враховує `PERIOD_START_DATE`, `PERIODIC_INTERVAL`, `PERIODIC_TIME`, `PERIOD_END_TIME`
+
+---
+
+### 🔧 PL/SQL: Функція `GET_NEXT_RUN_DATE`
+
+```sql
+CREATE OR REPLACE FUNCTION GET_NEXT_RUN_DATE (
+    p_period_start_date  IN DATE,
+    p_period_interval    IN NUMBER,
+    p_period_time        IN DATE,
+    p_period_end_time    IN DATE DEFAULT NULL
+) RETURN DATE IS
+    v_next_run DATE;
+    v_now      DATE := SYSDATE;
+    v_i        NUMBER := 0;
+    v_candidate DATE;
+BEGIN
+  IF p_period_start_date IS NULL OR p_period_interval IS NULL OR p_period_time IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  LOOP
+    -- Кожна наступна дата = старт + i * інтервал + час
+    v_candidate := TRUNC(p_period_start_date + v_i * p_period_interval)
+                   + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+
+    -- Якщо знайшли дату в майбутньому — повертаємо
+    IF v_candidate > v_now THEN
+      -- Якщо задана дата завершення — перевіримо обмеження
+      IF p_period_end_time IS NOT NULL AND v_candidate > p_period_end_time THEN
+        RETURN NULL;
+      END IF;
+
+      v_next_run := v_candidate;
+      EXIT;
+    END IF;
+
+    v_i := v_i + 1;
+
+    -- Безпечне завершення в разі дуже далекого циклу
+    IF v_i > 10000 THEN
+      RETURN NULL;
+    END IF;
+  END LOOP;
+
+  RETURN v_next_run;
+END GET_NEXT_RUN_DATE;
+/
+```
+
+---
+
+## 📥 Приклад використання
+
+```sql
+SELECT GET_NEXT_RUN_DATE(
+    PERIOD_START_DATE,
+    PERIODIC_INTERVAL,
+    PERIODIC_TIME,
+    PERIOD_END_TIME
+) AS NEXT_RUN_DATE
+FROM TASK_TEMPLATES
+WHERE ID = :TEMPLATE_ID;
+```
+
+---
+
+## 🧪 Результат:
+
+| Старт: `01.06.2025` | Інтервал: `3 дні` | Час: `08:00` | SYSDATE: `07.06.2025 10:30` | Результат: `10.06.2025 08:00` |
+| ------------------- | ----------------- | ------------ | --------------------------- | ----------------------------- |
+
+---
+
+🔔 Якщо ти хочеш **вбудувати це у `JOB` або `UPDATE`**, дай знати — я підготую блок для масового оновлення `NEXT_RUN_DATE` у `TASK_TEMPLATES`.

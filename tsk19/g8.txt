@@ -1,0 +1,120 @@
+Супер, тоді покажу, як **додати і обробити поле `TERM_DAYS` (Термін виконання в днях)** у **Interactive Grid (IG)** для підшаблонів, які зберігаються в колекції `TASK_TEMPLATE_SUBTASKS_COLLECTION`.
+
+---
+
+## ✅ Ціль:
+
+* Додати колонку **"Термін виконання (днів)"** у IG
+* Зберігати її у полі `N002` колекції
+* При створенні завдання через job — розраховувати `PLANNING_DATE_END := PLANNING_DATE_START + TERM_DAYS`
+
+---
+
+## 🔧 1. Додай колонку в IG
+
+### У Interactive Grid:
+
+* Перейдіть до IG → `Columns` → `Add Column`
+* **Name**: `TERM_DAYS`
+* **Heading**: Термін (днів)
+* **Type**: `Number Field`
+* **Default Value**: `1`
+* **Required**: ❌
+* **Value Required**: No
+
+> Можеш зробити цю колонку видимою лише при `P6_TASK_MODE = 1`, якщо потрібно.
+
+---
+
+## 🔁 2. Синхронізація з колекцією `TASK_TEMPLATE_SUBTASKS_COLLECTION`
+
+### У `IG` → `Data Source`:
+
+* Джерело даних: `APEX_COLLECTIONS`
+* Collection Name: `'TASK_TEMPLATE_SUBTASKS_COLLECTION'`
+
+#### У колонках:
+
+* `N002` → прив'язуємо до `TERM_DAYS`
+
+🔧 У SQL-запиті:
+
+```sql
+SELECT
+  c001 AS TASK_ID,
+  c002 AS SUBTASK_CONTENT,
+  d001 AS PLANNING_DATE_END,
+  c003 AS PARENT_ID,
+  c004 AS ORDER_SUBTASK,
+  c005 AS STATUS_ID,
+  d002 AS DATE_CREATE,
+  d003 AS DATE_UPDATE,
+  c006 AS CREATOR,
+  c007 AS UPDATOR,
+  n001 AS TASK_MODE,
+  n002 AS TERM_DAYS, -- тут нове поле
+  c008 AS TEMP_ROW_ID
+FROM APEX_COLLECTIONS
+WHERE COLLECTION_NAME = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+```
+
+---
+
+## 🔁 3. При збереженні з колекції у таблицю `TASK_TEMPLATE_SUBTASK`
+
+У `process`, який зберігає з колекції в БД:
+
+```plsql
+FOR rec IN (
+  SELECT *
+  FROM APEX_COLLECTIONS
+  WHERE COLLECTION_NAME = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+)
+LOOP
+  INSERT INTO TASK_TEMPLATE_SUBTASK (
+    TEMPLATE_ID,
+    SUBTASK_CONTENT,
+    TERM_DAYS,
+    PARENT_ID,
+    ORDER_SUBTASK,
+    STATUS_ID,
+    ...
+  ) VALUES (
+    :TEMPLATE_ID,
+    rec.c002,
+    rec.n002, -- нове поле
+    rec.c003,
+    rec.c004,
+    rec.c005,
+    ...
+  );
+END LOOP;
+```
+
+---
+
+## 🧮 4. У job → розрахунок `PLANNING_DATE_END`
+
+```plsql
+PLANNING_DATE_END := PLANNING_DATE_START + NVL(TTS.TERM_DAYS, 1);
+```
+
+---
+
+## ✅ Підсумок:
+
+| Що                       | Дія                                      |
+| ------------------------ | ---------------------------------------- |
+| IG → колонка `TERM_DAYS` | Прив’язати до `n002`                     |
+| Колекція                 | `n002` = кількість днів до завершення    |
+| Збереження в БД          | `TERM_DAYS` в `TASK_TEMPLATE_SUBTASK`    |
+| Створення підзавдання    | `PLANNING_DATE_END := START + TERM_DAYS` |
+
+---
+
+🔔 Якщо ти хочеш ще:
+
+* задати `default` значення на рівні IG при додаванні рядка
+* або зробити колонку `readonly` в певних режимах
+
+— скажи, я підкажу.

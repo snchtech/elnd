@@ -1,0 +1,61 @@
+Ось універсальна функція `compareApexDates()` — вона:
+
+✅ Парсить дати у форматі `DD.MM.YYYY HH24:MI` (як APEX datepicker з time)
+✅ Повертає:
+
+* `1` якщо `start > end`
+* `-1` якщо `start < end`
+* `0` якщо рівні
+* `null` якщо одна з дат некоректна
+
+---
+
+## ✅ Функція `compareApexDates()`
+
+```javascript
+function parseApexDate(dateStr) {
+  if (!dateStr) return null;
+  const match = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})[ ]+(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const [ , day, month, year, hour, minute ] = match;
+  return new Date(year, month - 1, day, hour, minute);
+}
+
+function compareApexDates(startStr, endStr) {
+  const start = parseApexDate(startStr);
+  const end = parseApexDate(endStr);
+
+  if (!start || !end) return null;
+
+  if (start > end) return 1;
+  if (start < end) return -1;
+  return 0;
+}
+```
+
+---
+
+## 🧪 Приклад використання:
+
+```javascript
+const result = compareApexDates($v('P_PLANNING_DATE_START'), $v('P_PLANNING_DATE_END'));
+
+if (result === 1) {
+  $('#warning_date_range_text')
+    .text('Дата завершення завдання має бути більшою за дату початку виконання')
+    .show();
+} else {
+  $('#warning_date_range_text').hide().text('');
+}
+```
+
+---
+
+## 📋 Додатково: захист на пусті або некоректні значення
+
+Функція повертає `null`, якщо хоча б одна з дат невалідна — це зручно для перевірки в динамічних формах.
+
+---
+
+🔔 Хочеш, можу додати підтримку форматів без часу (`DD.MM.YYYY`) або автоматичне визначення формату.

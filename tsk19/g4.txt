@@ -1,0 +1,77 @@
+Так, твій код **вже близький до правильного формату**, і його можна легко адаптувати під нові умови:
+
+---
+
+## 🔍 Вихідні умови:
+
+* `hours` тепер **не множинне значення**, а одне (`input type="time"`)
+* Додається нове поле — **дата початку** (`input type="date"`)
+* Ти хочеш фразу:
+  `Кожні ${interval} дні о ${hours}, починаючи з ${startDate}`
+
+---
+
+## ✅ Оновлена функція `formatPreview(...)`
+
+```javascript
+function formatPreview(periodMode, weekdays, time, interval, hour, startDate) {
+  if (periodMode === 'WEEKLY_TIME_SCHEDULE') {
+    const daysMap = {
+      '1': 'щонеділі', '2': 'щопонеділка', '3': 'щовівторка',
+      '4': 'щосереди', '5': 'щочетверга', '6': 'щоп’ятниці', '7': 'щосуботи'
+    };
+    const dayLabels = weekdays.split(',').map(d => daysMap[d.trim()]);
+    return `${dayLabels.join(', ')} о ${time}`;
+  } else if (periodMode === 'INTERVAL_DAYS_SINGLETIME') {
+    // Очистити та відформатувати дату, якщо потрібно
+    const formattedDate = formatDate(startDate);
+    return `Кожні ${interval} дні о ${hour}, починаючи з ${formattedDate}`;
+  }
+  return '';
+}
+```
+
+---
+
+## 🔧 Додай допоміжну функцію `formatDate`
+
+```javascript
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
+}
+```
+
+---
+
+## ✅ Як викликати:
+
+```javascript
+const preview = formatPreview(
+  'INTERVAL_DAYS_SINGLETIME',
+  '',                 // weekdays — не використовується тут
+  '',                 // time — не використовується тут
+  '3',                // interval
+  document.getElementById('P6_PERIODIC_TIME').value,
+  document.getElementById('P6_PERIOD_START_DATE').value
+);
+```
+
+---
+
+## 🧪 Приклад результату:
+
+```text
+Кожні 3 дні о 08:00, починаючи з 10.06.2025
+```
+
+---
+
+### 🔔 Додатково:
+
+* Якщо ти хочеш ще й **перевірку** (наприклад, якщо поле не заповнене — не показувати фразу), можу доповнити функцію.
+* Якщо треба підтримати обидва режими (`WEEKLY_TIME_SCHEDULE` і `INTERVAL_DAYS_SINGLETIME`) в APEX динамічно — можу дати код для динамічного оновлення підсумкового preview в якомусь Display Item.

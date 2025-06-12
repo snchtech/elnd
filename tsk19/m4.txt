@@ -1,0 +1,119 @@
+Ось PL/SQL-процедура для **збереження записів з APEX\_COLLECTIONS у базу даних**, яка працює **після дублювання** (після того як ти натискаєш "Зберегти" нову копію):
+
+---
+
+### ✅ **1. Збереження підзавдань (`TASK_SUBTASKS_COLLECTION`) у таблицю `TASK_SUBTASKS`**
+
+```plsql
+DECLARE
+  v_new_id NUMBER := :P6_NEW_TASK_ID; -- або передай через APEX_APPLICATION.G_X03
+  v_new_subtask_id NUMBER;
+BEGIN
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = 'TASK_SUBTASKS_COLLECTION'
+      AND c001 = v_new_id
+      AND c008 = 'NEW'
+  )
+  LOOP
+    SELECT SEQ_TSKTRACK_SUBTSK.NEXTVAL INTO v_new_subtask_id FROM DUAL;
+
+    INSERT INTO TASK_SUBTASKS (
+      ID,
+      TASK_ID,
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PLANNING_DATE_END,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      DATE_CREATE,
+      DATE_UPDATE,
+      CREATOR,
+      UPDATOR,
+      TERM_DAYS
+    ) VALUES (
+      v_new_subtask_id,
+      v_new_id,
+      r.c002,
+      r.c005,
+      r.d001,
+      r.c003,
+      r.c004,
+      r.d002,
+      SYSDATE,
+      r.c006,
+      r.c007,
+      r.n002
+    );
+  END LOOP;
+END;
+```
+
+---
+
+### ✅ **2. Збереження підшаблонів (`TASK_TEMPLATE_SUBTASKS_COLLECTION`) у `TASK_TEMPLATE_SUBTASKS`**
+
+```plsql
+DECLARE
+  v_new_id NUMBER := :P6_NEW_TEMPLATE_ID; -- або через APEX_APPLICATION.G_X03
+  v_new_subtemplate_id NUMBER;
+BEGIN
+  FOR r IN (
+    SELECT *
+    FROM APEX_COLLECTIONS
+    WHERE COLLECTION_NAME = 'TASK_TEMPLATE_SUBTASKS_COLLECTION'
+      AND c001 = v_new_id
+      AND c008 = 'NEW'
+  )
+  LOOP
+    SELECT SEQ_TSKTRACK_SUBTSK_TEMPLATES.NEXTVAL INTO v_new_subtemplate_id FROM DUAL;
+
+    INSERT INTO TASK_TEMPLATE_SUBTASKS (
+      ID,
+      TEMPLATE_ID,
+      SUBTASK_CONTENT,
+      STATUS_ID,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      DATE_CREATE,
+      DATE_UPDATE,
+      CREATOR,
+      UPDATOR,
+      TERM_DAYS
+    ) VALUES (
+      v_new_subtemplate_id,
+      v_new_id,
+      r.c002,
+      r.c005,
+      r.c003,
+      r.c004,
+      r.d002,
+      SYSDATE,
+      r.c006,
+      r.c007,
+      r.n002
+    );
+  END LOOP;
+END;
+```
+
+---
+
+### 📌 Важливі моменти:
+
+* `c001` — повинен містити новий `TASK_ID` / `TEMPLATE_ID` після дублювання.
+* `c008 = 'NEW'` — гарантує, що ми зберігаємо тільки нові записи.
+* `SEQ_...` — генерація ID.
+* Для `DELETE` або `UPDATE` реалізуй аналогічні блоки при потребі.
+
+---
+
+### 🔄 Як викликати:
+
+* Ці процеси додаються як **"PL/SQL Code" Server Process** після натискання кнопки "Зберегти" (наприклад, у модальному вікні).
+* Також можеш викликати їх через `apex.server.process` у JS після успішного `apex.navigation.dialog.close`.
+
+---
+
+Хочеш — можу показати ще й JS-код для збереження та автоматичного оновлення головного звіту після збереження дубліката.

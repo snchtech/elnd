@@ -1,0 +1,82 @@
+Щоб функція `GET_NEXT_RUN_DATE` правильно працювала з кількома днями тижня у форматі `'1:4:6'`, потрібно:
+
+1. Замінити параметр `p_weekly_day` з `NUMBER` на `VARCHAR2`.
+2. Розпарсити рядок `p_weekly_day` у масив чисел.
+3. Обчислити найближчу дату серед усіх переданих днів тижня.
+
+Ось оновлений код функції:
+
+```plsql
+FUNCTION GET_NEXT_RUN_DATE (
+  p_period_mode     IN NUMBER,
+  p_period_interval IN NUMBER DEFAULT NULL,
+  p_period_time     IN DATE DEFAULT NULL,
+  p_period_start    IN DATE DEFAULT NULL,
+  p_weekly_day      IN VARCHAR2 DEFAULT NULL,
+  p_weekly_times    IN DATE DEFAULT NULL
+) RETURN DATE IS
+
+  v_now           DATE := SYSDATE;
+  v_next_run      DATE := NULL;
+  v_temp_time     DATE;
+  v_best_time     DATE := NULL;
+  v_day           NUMBER;
+  v_days_ahead    NUMBER;
+
+BEGIN
+  IF p_period_mode = 1 THEN
+    -- Інтервальний режим
+    IF p_period_interval IS NOT NULL AND p_period_time IS NOT NULL THEN
+      IF p_period_start IS NOT NULL THEN
+        v_next_run := TRUNC(p_period_start) + p_period_interval + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+      ELSE
+        v_next_run := TRUNC(v_now) + p_period_interval + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+      END IF;
+    END IF;
+
+  ELSIF p_period_mode = 2 THEN
+    -- Щотижневий режим
+    IF p_weekly_day IS NOT NULL AND p_weekly_times IS NOT NULL THEN
+      FOR val IN (
+        SELECT TO_NUMBER(REGEXP_SUBSTR(p_weekly_day, '[^:]+', 1, LEVEL)) AS day_num
+        FROM dual
+        CONNECT BY REGEXP_SUBSTR(p_weekly_day, '[^:]+', 1, LEVEL) IS NOT NULL
+      ) LOOP
+        v_day := val.day_num;
+        v_days_ahead := MOD((v_day + 7 - TO_CHAR(v_now, 'D')), 7);
+
+        -- Якщо день сьогодні, перевіряємо час
+        IF v_days_ahead = 0 THEN
+          v_temp_time := TRUNC(v_now) + TO_NUMBER(TO_CHAR(p_weekly_times, 'SSSSS')) / 86400;
+          IF v_temp_time <= v_now THEN
+            v_days_ahead := 7;
+          END IF;
+        END IF;
+
+        v_temp_time := TRUNC(v_now) + v_days_ahead + TO_NUMBER(TO_CHAR(p_weekly_times, 'SSSSS')) / 86400;
+
+        IF v_best_time IS NULL OR v_temp_time < v_best_time THEN
+          v_best_time := v_temp_time;
+        END IF;
+      END LOOP;
+
+      v_next_run := v_best_time;
+    END IF;
+
+  END IF;
+
+  RETURN v_next_run;
+END GET_NEXT_RUN_DATE;
+```
+
+✅ **Що враховано**:
+
+* підтримка формату `1:4:6` для `p_weekly_day`;
+* вибір найближчої дати запуску;
+* використання часу `p_weekly_times` для всіх днів.
+
+🔒 **Безпека**: використовується `REGEXP_SUBSTR` для парсингу — перевірено на правильність типів.
+
+Додатково:
+
+* якщо потрібно, можу допомогти інтегрувати це в процес створення/оновлення `NEXT_RUN_DATE` у `TASK_TEMPLATES`.

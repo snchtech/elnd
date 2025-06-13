@@ -1,0 +1,92 @@
+Great! You're using **Option 2** — you store:
+
+* A **colon-separated list of day IDs** (e.g., `1:2:5`) in a `VARCHAR2` column (e.g., `DAYS`)
+* A **time** (e.g., `16:00`) in another column
+* You now want to **show the names of the days** (e.g., `Monday, Tuesday, Friday in 16:00`) by joining with a `WEEK_DAYS` table
+
+---
+
+### ✅ Goal Output Example:
+
+```
+Monday, Tuesday, Friday in 16:00
+```
+
+---
+
+### 🧱 1. Assumed Table Structure
+
+#### `user_day_settings`
+
+| USER\_ID | DAYS  | DAY\_TIME |
+| -------- | ----- | --------- |
+| U123     | 1:2:5 | 16:00     |
+
+#### `week_days`
+
+| DAY\_ID | DAY\_NAME |
+| ------- | --------- |
+| 1       | Monday    |
+| 2       | Tuesday   |
+| 3       | Wednesday |
+| ...     | ...       |
+
+---
+
+### ✅ 2. SQL View to Transform IDs to Day Names
+
+Here’s how to create a view that:
+
+* Splits the `DAYS` string (`1:2:5`)
+* Joins to the `week_days` table to get names
+* Aggregates names into a string
+* Appends `in HH24:MI` time
+
+#### ✅ SQL View (for Oracle 12c+)
+
+```sql
+CREATE OR REPLACE VIEW v_user_day_summary AS
+SELECT
+    uds.user_id,
+    LISTAGG(wd.day_name, ', ') WITHIN GROUP (ORDER BY TO_NUMBER(column_value)) || ' in ' || TO_CHAR(uds.day_time, 'HH24:MI') AS day_summary
+FROM
+    user_day_settings uds
+    CROSS APPLY apex_string.split(uds.days, ':') d
+    JOIN week_days wd ON wd.day_id = TO_NUMBER(d.column_value)
+GROUP BY
+    uds.user_id,
+    uds.day_time;
+```
+
+---
+
+### 🧪 Example Output:
+
+| USER\_ID | DAY\_SUMMARY                     |
+| -------- | -------------------------------- |
+| U123     | Monday, Tuesday, Friday in 16:00 |
+
+---
+
+### 🔧 Notes:
+
+* `apex_string.split(string, delimiter)` returns a table of values (1, 2, 5, ...)
+* `column_value` is the default column name from `apex_string.split`
+* `TO_NUMBER(column_value)` ensures you can join to `week_days.day_id`
+* `LISTAGG` combines day names in order
+
+---
+
+### ✅ APEX Usage
+
+In your APEX report:
+
+* Base the region on this view (`v_user_day_summary`)
+* Show `DAY_SUMMARY` to the user
+
+---
+
+Let me know if:
+
+* Your Oracle version is lower than 12c (we’ll use a different string splitter)
+* The column name or table names differ — I’ll adjust the code for you

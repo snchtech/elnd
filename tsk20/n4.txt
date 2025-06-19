@@ -1,0 +1,100 @@
+Ось оновлена версія функції `GET_NEXT_RUN_DATE`, яка:
+
+* використовує **таблицю `TASK_TEMPLATE_WEEKDAYS`** замість `p_weekly_day` у форматі `'1:3:6'`;
+* враховує **`p_period_start`** у щотижневому режимі;
+* вимагає на вхід **`p_template_id`** замість `p_weekly_day`;
+* працює з обома режимами (`INTERVAL`, `WEEKLY_TIME_SCHEDULE`).
+
+---
+
+### ✅ **Оновлена функція:**
+
+```sql
+FUNCTION GET_NEXT_RUN_DATE (
+  p_template_id     IN NUMBER,
+  p_period_mode     IN NUMBER,
+  p_period_interval IN NUMBER DEFAULT NULL,
+  p_period_time     IN DATE DEFAULT NULL,
+  p_period_start    IN DATE DEFAULT NULL,
+  p_weekly_times    IN DATE DEFAULT NULL
+) RETURN DATE IS
+
+  v_now           DATE := SYSDATE;
+  v_next_run      DATE := NULL;
+  v_temp_time     DATE;
+  v_best_time     DATE := NULL;
+  v_day           NUMBER;
+  v_days_ahead    NUMBER;
+  v_base_date     DATE;
+
+BEGIN
+  IF p_period_mode = 1 THEN
+    -- Інтервальний режим
+    IF p_period_interval IS NOT NULL AND p_period_time IS NOT NULL THEN
+      v_base_date := NVL(p_period_start, v_now);
+      v_next_run := TRUNC(v_base_date) + p_period_interval
+                    + TO_NUMBER(TO_CHAR(p_period_time, 'SSSSS')) / 86400;
+    END IF;
+
+  ELSIF p_period_mode = 2 THEN
+    -- Щотижневий режим
+    IF p_weekly_times IS NOT NULL THEN
+      v_base_date := NVL(p_period_start, v_now);
+
+      FOR r IN (
+        SELECT WEEKDAY
+        FROM TASK_TEMPLATE_WEEKDAYS
+        WHERE TEMPLATE_ID = p_template_id
+      ) LOOP
+        v_day := r.WEEKDAY;
+        v_days_ahead := MOD((v_day + 7 - TO_CHAR(v_base_date, 'D')), 7);
+
+        -- Якщо день вже сьогодні, перевіряємо час
+        IF v_days_ahead = 0 THEN
+          v_temp_time := TRUNC(v_base_date) + TO_NUMBER(TO_CHAR(p_weekly_times, 'SSSSS')) / 86400;
+          IF v_temp_time <= v_base_date THEN
+            v_days_ahead := 7;
+          END IF;
+        END IF;
+
+        v_temp_time := TRUNC(v_base_date) + v_days_ahead + TO_NUMBER(TO_CHAR(p_weekly_times, 'SSSSS')) / 86400;
+
+        IF v_best_time IS NULL OR v_temp_time < v_best_time THEN
+          v_best_time := v_temp_time;
+        END IF;
+      END LOOP;
+
+      v_next_run := v_best_time;
+    END IF;
+
+  END IF;
+
+  RETURN v_next_run;
+END GET_NEXT_RUN_DATE;
+```
+
+---
+
+### 📌 Примітки:
+
+* `TEMPLATE_ID` тепер обов’язково передається через `p_template_id`.
+* Дані про дні тижня (`1–7`) беруться з таблиці `TASK_TEMPLATE_WEEKDAYS`.
+* Якщо `p_period_start` задано — він є відправною точкою в обох режимах. Якщо ні — береться `SYSDATE`.
+* `TO_CHAR(date, 'SSSSS') / 86400` — конвертує час у дробову частину дня.
+
+---
+
+### ✅ Приклад виклику:
+
+```sql
+GET_NEXT_RUN_DATE(
+  p_template_id     => :P6_ID,
+  p_period_mode     => :P6_PERIOD_MODE,
+  p_period_interval => :P6_PERIOD_INTERVAL,
+  p_period_time     => :P6_PERIOD_TIME,
+  p_period_start    => :P6_PERIOD_START,
+  p_weekly_times    => :P6_WEEKLY_TIMES
+)
+```
+
+Якщо треба, можу також адаптувати цей код до `VIEW`, щоб відображати `NEXT_RUN_DATE` у звіті шаблонів.

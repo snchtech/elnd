@@ -1,0 +1,52 @@
+Ось приклад, як реалізувати бажану логіку в **PL/SQL Dynamic Content** у Oracle APEX:
+
+---
+
+### ✅ **Приклад PL/SQL Dynamic Content:**
+
+```plsql
+DECLARE
+  v_creator_name  VARCHAR2(100);
+  v_updator_name  VARCHAR2(100);
+  v_output        VARCHAR2(4000);
+BEGIN
+  -- Отримуємо ім'я автора
+  SELECT u.user_name
+    INTO v_creator_name
+    FROM users u
+   WHERE u.id = :P7_CREATOR_ID;
+
+  v_output := 'Завдання створено ' || v_creator_name || ' о ' || TO_CHAR(:P7_DATE_CREATE, 'DD.MM.YYYY HH24:MI');
+
+  -- Перевірка, чи є оновлення
+  IF :P7_DATE_UPDATE IS NOT NULL AND :P7_UPDATOR IS NOT NULL THEN
+    SELECT u.user_name
+      INTO v_updator_name
+      FROM users u
+     WHERE u.id = :P7_UPDATOR;
+
+    v_output := v_output || '<br>Завдання оновлено ' || v_updator_name || ' о ' || TO_CHAR(:P7_DATE_UPDATE, 'DD.MM.YYYY HH24:MI');
+  END IF;
+
+  HTP.P(v_output);
+END;
+```
+
+---
+
+### 🔧 Що потрібно:
+
+* Щоб у вас на сторінці були доступні `:P7_CREATOR_ID`, `:P7_DATE_CREATE`, `:P7_UPDATOR`, `:P7_DATE_UPDATE`.
+* Таблиця `users` повинна містити `id` та `user_name` (або адаптуй під свою структуру).
+
+---
+
+### 📝 Якщо це **шаблон**, можеш замінити `Завдання` на `Шаблон`:
+
+```plsql
+v_output := 'Шаблон створено ' || ...
+```
+
+---
+
+Готовий адаптувати код під вашу структуру, якщо в таблиці імена полів або таблиця користувачів відрізняються.

@@ -1,0 +1,60 @@
+Так, у вашому випадку найкраще реалізувати перевірку **через JavaScript**, оскільки `P6_PERIOD_START` і `P6_PERIOD_END` мають маску `dd.mm.yyyy hh24:mi`, і стандартне порівняння рядків не спрацює коректно.
+
+---
+
+### ✅ Ось приклад JavaScript-коду для реалізації такої перевірки:
+
+```javascript
+function parseApexDateTime(str) {
+  // Очікується формат 'dd.mm.yyyy hh24:mi'
+  if (!str) return null;
+
+  const match = str.match(/^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const [_, dd, mm, yyyy, hh, mi] = match;
+  return new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:00`);
+}
+
+function validatePeriodRange() {
+  const startStr = $v('P6_PERIOD_START');
+  const endStr = $v('P6_PERIOD_END');
+
+  const startDate = parseApexDateTime(startStr);
+  const endDate = parseApexDateTime(endStr);
+
+  if (startDate && endDate && endDate < startDate) {
+    $('#period_range_warning')
+      .text('Дата завершення має бути пізнішою за дату початку.')
+      .css('color', 'red')
+      .show();
+  } else {
+    $('#period_range_warning').hide().text('');
+  }
+}
+
+// Викликаємо перевірку при зміні обох полів
+$('#P6_PERIOD_START, #P6_PERIOD_END').on('change', validatePeriodRange);
+```
+
+---
+
+### 🔧 Як підготувати сторінку:
+
+1. 🔻 **Додайте HTML-елемент для повідомлення (наприклад у HTML регіоні):**
+
+```html
+<span id="period_range_warning" style="display:none;"></span>
+```
+
+2. 🧠 **Скрипт вставте в Dynamic Action (тип = Execute JavaScript code)** або у `Function and Global Variable Declaration` на сторінці.
+
+---
+
+### 💡 Порада:
+
+Якщо `DateTime Picker` у вас підключений до APEX item з типом `Date Picker`, краще використовувати `apex.item('P6_PERIOD_START').getValue()` замість `$v(...)` — він буде точніше працювати з типами `date`.
+
+---
+
+Готовий адаптувати цей код до вашої сторінки, якщо потрібно ще стилізувати або зробити перевірку більш гнучкою.

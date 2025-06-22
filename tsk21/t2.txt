@@ -1,0 +1,95 @@
+Ось як реалізувати функціонал **“Історія змін”** у картці завдання в Oracle APEX:
+
+---
+
+## 🔁 1. **Умовне відображення кнопки “Історія змін”**
+
+### ➤ У регіоні **PL/SQL Dynamic Content**:
+
+```plsql
+DECLARE
+  v_count NUMBER;
+BEGIN
+  IF :P6_TASK_ACTION_MODE = 0 THEN
+    SELECT COUNT(*) INTO v_count
+    FROM TASK_CHANGE_LOG
+    WHERE OBJECT_ID = :P6_TASK_ID AND OBJECT_TYPE = 'TASK';
+
+    IF v_count > 0 THEN
+      -- HTML кнопки
+      HTP.P('<button type="button" class="t-Button t-Button--noLabel t-Button--icon t-Button--hot" onclick="apex.navigation.dialog(' ||
+            '''f?p=APP_ID:MODAL_HISTORY:::::P_HISTORY_OBJECT_ID,P_HISTORY_OBJECT_TYPE:' ||
+            :P6_TASK_ID || ',TASK'', {title: ''Історія змін'', height: 500, width: 800}); return false;">');
+      HTP.P('<span class="t-Icon fa fa-history"></span>');
+      HTP.P('</button>');
+    END IF;
+  END IF;
+END;
+```
+
+> 🔒 **Умови:**
+>
+> * Кнопка показується тільки якщо режим = 0 (`VIEW`)
+> * І тільки якщо є хоча б один запис в `TASK_CHANGE_LOG` по цьому `TASK_ID`.
+
+---
+
+## 📄 2. **Модальна сторінка — сторінка історії (наприклад, page 50)**
+
+### ➤ Вхідні елементи:
+
+* `P50_HISTORY_OBJECT_ID` — `TASK_ID` або `TEMPLATE_ID`
+* `P50_HISTORY_OBJECT_TYPE` — `'TASK'` або `'TEMPLATE'`
+
+---
+
+## 📊 3. **Інтерактивний звіт на сторінці 50**
+
+**SQL-запит до `TASK_CHANGE_LOG`:**
+
+```sql
+SELECT 
+  LOG_DATE       AS "Дата зміни",
+  USER_ID        AS "Користувач",
+  FIELD_NAME     AS "Поле",
+  OLD_VALUE      AS "Було",
+  NEW_VALUE      AS "Стало"
+FROM TASK_CHANGE_LOG
+WHERE OBJECT_ID = :P50_HISTORY_OBJECT_ID
+  AND OBJECT_TYPE = :P50_HISTORY_OBJECT_TYPE
+ORDER BY LOG_DATE DESC
+```
+
+---
+
+## 🧩 4. **Додаткові покращення (за бажанням):**
+
+### ✔ Групування змін:
+
+Якщо хочеш бачити зміни по групах (наприклад, усі поля, змінені одним користувачем в одну дату):
+
+```sql
+SELECT 
+  LOG_DATE,
+  USER_ID,
+  LISTAGG(FIELD_NAME || ': ' || OLD_VALUE || ' → ' || NEW_VALUE, CHR(10)) 
+      WITHIN GROUP (ORDER BY FIELD_NAME) AS CHANGES
+FROM TASK_CHANGE_LOG
+WHERE OBJECT_ID = :P50_HISTORY_OBJECT_ID
+  AND OBJECT_TYPE = :P50_HISTORY_OBJECT_TYPE
+GROUP BY LOG_DATE, USER_ID
+ORDER BY LOG_DATE DESC
+```
+
+---
+
+## 🧪 5. **Тестування**
+
+🔹 Створи просте завдання → зміни його назву/дату
+🔹 Переконайся, що `TASK_CHANGE_LOG` наповнюється
+🔹 Відкрий сторінку завдання — з’являється кнопка “Історія змін”
+🔹 Перевір модальне вікно → повинна бути хронологія змін
+
+---
+
+Хочеш — можу одразу зробити ще й приклад **для шаблонів (TEMPLATE)** або створити сторінку з табами (перемикач між завданням і шаблоном).

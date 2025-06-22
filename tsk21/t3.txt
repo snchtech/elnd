@@ -1,0 +1,93 @@
+В Oracle APEX для таких умов найкраще рішення — **додати окрему колонку “Причина проблеми”**, яка динамічно обчислюється в SQL запиті і **видима лише у режимі `PROBLEM`**. Ось детальний підхід 👇
+
+---
+
+## ✅ **1. Додаємо нову колонку в SQL запит Interactive Report**
+
+Приклад частини основного SQL-запиту:
+
+```sql
+SELECT
+  t.ID,
+  t.TASK_CONTENT,
+  t.PLANNING_DATE_END,
+  t.ACTUAL_DATE_END,
+  t.PAGE_LIST_ID,
+  -- інші поля...
+
+  CASE
+    WHEN :PXX_TAB_MODE = 'PROBLEM' THEN
+      CASE
+        WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL THEN 'Протерміноване завдання'
+        WHEN EXISTS (
+          SELECT 1
+          FROM DICT_APP_CONFIRM_LIST d
+          WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+            AND NOT EXISTS (
+              SELECT 1
+              FROM SIGNATURERIGHTS r
+              WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+            )
+        ) THEN 'Недозаповнене завдання'
+        ELSE NULL
+      END
+    ELSE NULL
+  END AS PROBLEM_REASON
+
+FROM TASKS t
+-- інші JOIN-и
+```
+
+---
+
+## 🧩 **2. У звіті APEX:**
+
+* Назви колонку `PROBLEM_REASON` — “Причина проблеми”
+* **Зроби її видимою лише при режимі `PROBLEM`**
+
+  * Увімкни *Server-side Condition* → `Value of Item/Column` = `PXX_TAB_MODE`, Equals = `'PROBLEM'`
+* **Опціонально:** якщо ти використовуєш CSS, можна динамічно ховати/показувати колонку за JS
+
+---
+
+## ✨ Альтернатива: Візуальне маркування (іконка або колір)
+
+Можна створити HTML колонку `STATUS_LABEL`:
+
+```sql
+CASE
+  WHEN :PXX_TAB_MODE = 'PROBLEM' THEN
+    CASE
+      WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL THEN 
+        '<span class="t-Icon fa fa-clock-o" style="color:red;" title="Протерміноване завдання"></span>'
+      WHEN EXISTS (
+        SELECT 1
+        FROM DICT_APP_CONFIRM_LIST d
+        WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+          AND NOT EXISTS (
+            SELECT 1
+            FROM SIGNATURERIGHTS r
+            WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+          )
+      ) THEN 
+        '<span class="t-Icon fa fa-exclamation-circle" style="color:orange;" title="Недозаповнене завдання"></span>'
+      ELSE NULL
+    END
+  ELSE NULL
+END AS STATUS_LABEL
+```
+
+* Відображати це як **HTML Expression** у звіті.
+
+---
+
+## ✅ Результат
+
+| ID  | TASK\_CONTENT    | PLANNING\_DATE\_END | ... | **Причина проблеми**    |
+| --- | ---------------- | ------------------- | --- | ----------------------- |
+| 101 | Перевірити дані  | 05.06.2025          |     | Протерміноване завдання |
+| 102 | Погодження етапу | 07.06.2025          |     | Недозаповнене завдання  |
+
+---
+
+🔧 Хочеш — можу одразу допомогти вставити це в повний SQL-запит або налаштувати `Dynamic Action` на зміну видимості колонки.

@@ -1,0 +1,102 @@
+Щоб вивести **кількість записів у вигляді кольорових кругів біля кнопок вкладок** (PLANNED, SHIFT, PROBLEM), пропоную наступне рішення:
+
+---
+
+## 🔧 1. **Створити динамічний `PL/SQL Dynamic Content` регіон** з HTML
+
+У ньому будемо виконувати окремі `SELECT COUNT(...)` для кожного режиму, крім `ARCHIVE`.
+
+```plsql
+DECLARE
+  v_planned_cnt   NUMBER;
+  v_shift_cnt     NUMBER;
+  v_problem_cnt   NUMBER;
+BEGIN
+  -- Заплановані
+  SELECT COUNT(*) INTO v_planned_cnt
+  FROM TASKS t
+  WHERE t.STATUS_ID <> 14; -- або інші фільтри для planned
+
+  -- На зміну
+  SELECT COUNT(*) INTO v_shift_cnt
+  FROM TASKS t
+  WHERE
+    (t.PLANNING_DATE_START < :PXX_SHIFT_END AND 
+     (t.ACTUAL_DATE_END IS NULL OR t.ACTUAL_DATE_END > :PXX_SHIFT_START))
+    OR (t.PLANNING_DATE_END BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END);
+
+  -- Проблемні
+  SELECT COUNT(*) INTO v_problem_cnt
+  FROM TASKS t
+  WHERE
+    (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+    OR EXISTS (
+      SELECT 1
+      FROM DICT_APP_CONFIRM_LIST d
+      WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+        AND NOT EXISTS (
+          SELECT 1
+          FROM SIGNATURERIGHTS r
+          WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+        )
+    );
+
+  -- Вивід HTML
+  HTP.P('
+  <div class="t-TabsRegion">
+    <button type="button" class="t-Button" onclick="setTab(''PLANNED'')">
+      Заплановані <span class="circle-badge planned">' || v_planned_cnt || '</span>
+    </button>
+    <button type="button" class="t-Button" onclick="setTab(''SHIFT'')">
+      На зміну <span class="circle-badge shift">' || v_shift_cnt || '</span>
+    </button>
+    <button type="button" class="t-Button" onclick="setTab(''PROBLEM'')">
+      Проблемні <span class="circle-badge problem">' || v_problem_cnt || '</span>
+    </button>
+    <button type="button" class="t-Button" onclick="setTab(''ARCHIVE'')">Архів</button>
+  </div>');
+END;
+```
+
+---
+
+## 🎨 2. **CSS для стилізації значків-кіл**
+
+Додай до CSS сторінки (розділ *Inline CSS* або Universal Theme CSS):
+
+```css
+.circle-badge {
+  display: inline-block;
+  min-width: 20px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  color: #fff;
+  background-color: #888;
+  border-radius: 999px;
+  text-align: center;
+}
+
+.circle-badge.planned { background-color: #2185d0; }  /* синій */
+.circle-badge.shift { background-color: #21ba45; }    /* зелений */
+.circle-badge.problem { background-color: #db2828; }  /* червоний */
+```
+
+---
+
+## 📌 3. **Опціонально: оновлення значень без перезавантаження**
+
+Можна окремо зробити `AJAX Callback` або `DA` (Dynamic Action), який буде повторно підвантажувати лише цей блок і оновлювати лічильники при зміні даних.
+
+---
+
+## ✅ Результат
+
+Кнопки виглядатимуть ось так:
+
+```
+[ Заплановані 🔵 15 ]   [ На зміну 🟢 8 ]   [ Проблемні 🔴 3 ]   [ Архів ]
+```
+
+Готовий допомогти вставити це в конкретне місце або налаштувати динамічне оновлення — просто скажи.

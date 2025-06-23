@@ -1,0 +1,127 @@
+Ось як можна **грамотно доопрацювати ваш звіт змін `TASK_CHANGE_LOG`**, враховуючи:
+
+---
+
+### ✅ 1. Додавання операції (Insert / Update / Delete)
+
+Замість `ACTION_TYPE` (який зараз має ID), вам треба зробити приєднання до довідника `DICT_ACTION_TYPE`:
+
+```sql
+DAT.NAME AS "Операція"
+```
+
+---
+
+### ✅ 2. Виведення “Було / Стало” з форматуванням (наприклад, `PERIOD_MODE`, `PERIOD_TIME`, `UNIT_ID`)
+
+#### Варіант 1 — Через CASE в SQL (якщо значень небагато):
+
+```sql
+CASE 
+  WHEN DFN.CODE = 'PERIOD_MODE' THEN 
+    CASE TCL.OLD_VALUE 
+      WHEN '1' THEN 'Кожні N днів'
+      WHEN '2' THEN 'Щотижня'
+      ELSE TCL.OLD_VALUE 
+    END
+  ELSE TCL.OLD_VALUE
+END AS "Було",
+```
+
+Аналогічно для `NEW_VALUE`.
+
+#### Варіант 2 — Через LEFT JOIN до lookup-таблиць:
+
+* Якщо поле має посилання на іншу таблицю (`UNIT_ID` → `DICT_UNITS`, `CREATOR_ID` → `USER_TABLE`, тощо), можна створити окрему таблицю `DICT_FIELD_TRANSLATOR`, яка містить логіку розшифровки, або використовувати `CASE + JOIN`.
+
+#### Форматування часу:
+
+```sql
+CASE 
+  WHEN DFN.CODE = 'PERIOD_TIME' THEN TO_CHAR(TO_DATE(TCL.OLD_VALUE, 'DD.MM.YYYY HH24:MI:SS'), 'HH24:MI')
+  ELSE TCL.OLD_VALUE
+END AS "Було"
+```
+
+*За умови, що OLD\_VALUE — текстова дата. Якщо це зберігалося як `DATE`, краще зберігати у DATE-колонку.*
+
+---
+
+### ✅ 3. Підставлення username замість USER\_ID
+
+Приєднуєте таблицю `USER_TABLE`:
+
+```sql
+UT.USERNAME AS "Користувач"
+```
+
+---
+
+### 🔧 ПРИКЛАД ОНОВЛЕНОГО ЗАПИТУ
+
+```sql
+SELECT 
+  TCL.LOG_DATE       AS "Дата зміни",
+  UT.USERNAME        AS "Користувач",
+  DAT.NAME           AS "Операція",
+  DFN.NAME           AS "Поле",
+
+  -- Було
+  CASE 
+    WHEN DFN.CODE = 'PERIOD_MODE' THEN 
+      CASE TCL.OLD_VALUE 
+        WHEN '1' THEN 'Кожні N днів'
+        WHEN '2' THEN 'Щотижня'
+        ELSE TCL.OLD_VALUE 
+      END
+    WHEN DFN.CODE = 'PERIOD_TIME' THEN 
+      TO_CHAR(TO_DATE(TCL.OLD_VALUE, 'DD.MM.YYYY HH24:MI:SS'), 'HH24:MI')
+    ELSE TCL.OLD_VALUE
+  END AS "Було",
+
+  -- Стало
+  CASE 
+    WHEN DFN.CODE = 'PERIOD_MODE' THEN 
+      CASE TCL.NEW_VALUE 
+        WHEN '1' THEN 'Кожні N днів'
+        WHEN '2' THEN 'Щотижня'
+        ELSE TCL.NEW_VALUE 
+      END
+    WHEN DFN.CODE = 'PERIOD_TIME' THEN 
+      TO_CHAR(TO_DATE(TCL.NEW_VALUE, 'DD.MM.YYYY HH24:MI:SS'), 'HH24:MI')
+    ELSE TCL.NEW_VALUE
+  END AS "Стало"
+
+FROM TASK_CHANGE_LOG TCL
+LEFT JOIN USER_TABLE UT ON UT.USER_ID = TCL.USER_ID
+LEFT JOIN DICT_ACTION_TYPE DAT ON DAT.ID = TCL.ACTION_TYPE_ID
+LEFT JOIN DICT_FIELD_NAME DFN ON DFN.ID = TCL.FIELD_NAME_ID
+
+WHERE TCL.OBJECT_ID = :P50_HISTORY_OBJECT_ID
+  AND TCL.OBJECT_TYPE_ID = (
+    SELECT ID FROM DICT_OBJECT_TYPE WHERE CODE = :P50_HISTORY_OBJECT_TYPE
+  )
+
+ORDER BY TCL.LOG_DATE DESC
+```
+
+---
+
+### ✅ Додатково:
+
+* Якщо `OLD_VALUE` та `NEW_VALUE` можуть бути числами, які мають відповідники у lookup-таблицях (наприклад, `UNIT_ID`, `DEPARTMENT_ID`) — зробіть LEFT JOIN ще й до них, умовно через:
+
+```sql
+LEFT JOIN DICT_UNIT U1 ON DFN.CODE = 'UNIT_ID' AND TO_NUMBER(TCL.OLD_VALUE) = U1.ID
+LEFT JOIN DICT_UNIT U2 ON DFN.CODE = 'UNIT_ID' AND TO_NUMBER(TCL.NEW_VALUE) = U2.ID
+```
+
+І тоді в CASE можна сказати:
+
+```sql
+WHEN DFN.CODE = 'UNIT_ID' THEN U1.UNIT_NAME
+```
+
+---
+
+🔔 Якщо потрібно — можу допомогти зробити окрему функцію `TRANSLATE_LOG_VALUE(p_field_code, p_value)` для централізованої обробки таких полів.

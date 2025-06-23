@@ -1,0 +1,118 @@
+Так, **включити таблицю `TASK_TEMPLATE_WEEKDAYS` у загальне логування змін через `TASK_CHANGE_LOG` — абсолютно можливо** і цілком доцільно, якщо ви хочете відстежувати, **які дні тижня були додані або видалені** в шаблоні.
+
+Ось як це зробити:
+
+---
+
+### ✅ 1. **Що логувати?**
+
+У `TASK_TEMPLATE_WEEKDAYS` зазвичай буде виконуватися:
+
+* **INSERT** — додано день тижня
+* **DELETE** — видалено день тижня
+
+Це і буде записуватись у `TASK_CHANGE_LOG`.
+
+---
+
+### ✅ 2. **Зміни в `TASK_CHANGE_LOG`**
+
+Ваш лог буде мати такі значення:
+
+| Поле             | Значення                                                   |
+| ---------------- | ---------------------------------------------------------- |
+| `OBJECT_TYPE_ID` | → тип: `'SUBTABLE_WEEKDAYS'` або умовно `'TEMPLATE_DAY'`   |
+| `OBJECT_ID`      | → `TEMPLATE_ID`                                            |
+| `FIELD_NAME_ID`  | → умовно `'WEEKDAY'` із вашого довідника `DICT_FIELD_NAME` |
+| `ACTION_TYPE_ID` | → `'INSERT'` або `'DELETE'`                                |
+| `OLD_VALUE`      | → якщо `DELETE`, то `WEEKDAY`                              |
+| `NEW_VALUE`      | → якщо `INSERT`, то `WEEKDAY`                              |
+
+---
+
+### ✅ 3. **Тригер на `TASK_TEMPLATE_WEEKDAYS`**
+
+```sql
+CREATE OR REPLACE TRIGGER TRG_TASK_TEMPLATE_WEEKDAYS_LOG
+AFTER INSERT OR DELETE ON TASK_TEMPLATE_WEEKDAYS
+FOR EACH ROW
+DECLARE
+  v_user VARCHAR2(50);
+  v_action_type VARCHAR2(10);
+BEGIN
+  v_user := NVL(sys_context('APEX$SESSION', 'APP_USER'), USER);
+
+  IF INSERTING THEN
+    v_action_type := 'INSERT';
+    INSERT INTO TASK_CHANGE_LOG (
+      USER_ID, OBJECT_TYPE_ID, OBJECT_ID,
+      ACTION_TYPE_ID, FIELD_NAME_ID,
+      OLD_VALUE, NEW_VALUE
+    ) VALUES (
+      v_user,
+      (SELECT ID FROM DICT_OBJECT_TYPE WHERE CODE = 'TEMPLATE'),
+      :NEW.TEMPLATE_ID,
+      (SELECT ID FROM DICT_ACTION_TYPE WHERE CODE = v_action_type),
+      (SELECT ID FROM DICT_FIELD_NAME WHERE CODE = 'WEEKDAY'),
+      NULL,
+      TO_CHAR(:NEW.WEEKDAY)
+    );
+    
+  ELSIF DELETING THEN
+    v_action_type := 'DELETE';
+    INSERT INTO TASK_CHANGE_LOG (
+      USER_ID, OBJECT_TYPE_ID, OBJECT_ID,
+      ACTION_TYPE_ID, FIELD_NAME_ID,
+      OLD_VALUE, NEW_VALUE
+    ) VALUES (
+      v_user,
+      (SELECT ID FROM DICT_OBJECT_TYPE WHERE CODE = 'TEMPLATE'),
+      :OLD.TEMPLATE_ID,
+      (SELECT ID FROM DICT_ACTION_TYPE WHERE CODE = v_action_type),
+      (SELECT ID FROM DICT_FIELD_NAME WHERE CODE = 'WEEKDAY'),
+      TO_CHAR(:OLD.WEEKDAY),
+      NULL
+    );
+  END IF;
+END;
+/
+```
+
+---
+
+### ✅ 4. **Вивід у звіті історії змін**
+
+Ваш запит залишиться майже тим самим, як у попередньому звіті, просто:
+
+* Буде поле `Поле = 'День тижня'`
+* Значення `Було` = значення `WEEKDAY` при DELETE
+* Значення `Стало` = значення `WEEKDAY` при INSERT
+
+---
+
+### ✅ 5. (Опційно) — Форматування дня тижня
+
+Додайте до SQL таке:
+
+```sql
+CASE 
+  WHEN DFN.CODE = 'WEEKDAY' THEN
+    CASE TO_NUMBER(TCL.NEW_VALUE)
+      WHEN 1 THEN 'Понеділок'
+      WHEN 2 THEN 'Вівторок'
+      WHEN 3 THEN 'Середа'
+      WHEN 4 THEN 'Четвер'
+      WHEN 5 THEN 'П’ятниця'
+      WHEN 6 THEN 'Субота'
+      WHEN 7 THEN 'Неділя'
+      ELSE TCL.NEW_VALUE
+    END
+  ELSE TCL.NEW_VALUE
+END AS "Стало"
+```
+
+---
+
+Хочете — можу допомогти зробити функцію `GET_WEEKDAY_NAME(p_day NUMBER)` або вивести це через lookup-таблицю `DICT_WEEKDAYS`.
+
+Готовий допомогти з реалізацією інтеграції в ваш загальний звіт.

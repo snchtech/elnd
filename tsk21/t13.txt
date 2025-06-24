@@ -1,0 +1,101 @@
+Чудова ідея для візуального підсилення звіту! Ось як ти можеш реалізувати таку колонку в Interactive Report у Oracle APEX:
+
+---
+
+## ✅ **1. Додай нову колонку у SQL-запит:**
+
+```sql
+CASE
+  WHEN :P1_TAB_MODE = 'SHIFT' THEN
+    CASE
+      WHEN t.PLANNING_DATE_START BETWEEN :P1_SHIFT_START AND :P1_SHIFT_END THEN
+        'OPEN'
+      WHEN t.PLANNING_DATE_END BETWEEN :P1_SHIFT_START AND :P1_SHIFT_END THEN
+        'CLOSE'
+      WHEN t.PLANNING_DATE_START <= :P1_SHIFT_START AND t.PLANNING_DATE_END >= :P1_SHIFT_END THEN
+        'PROCESS'
+      ELSE
+        NULL
+    END
+  ELSE
+    NULL
+END AS SHIFT_ACTION
+```
+
+> 🔸 Цю колонку назвемо `SHIFT_ACTION`. Вона буде мати значення `OPEN`, `CLOSE`, `PROCESS` або `NULL`.
+
+---
+
+## ✅ **2. Додай ще одну колонку в IR (назвемо її `SHIFT_ICON_HTML`) з типом `HTML Expression`:**
+
+У колонку встав такий HTML:
+
+```html
+<span class="shift-icon #SHIFT_ACTION#" title="#SHIFT_ACTION_TITLE#">
+  <i class="fa #SHIFT_ACTION_ICON#"></i>
+</span>
+```
+
+---
+
+## ✅ **3. Додай обчислювані колонки:**
+
+У SQL-запиті:
+
+```sql
+-- Заголовок
+CASE
+  WHEN SHIFT_ACTION = 'OPEN' THEN 'Відкрити на зміні'
+  WHEN SHIFT_ACTION = 'CLOSE' THEN 'Закрити на зміні'
+  WHEN SHIFT_ACTION = 'PROCESS' THEN 'В процесі виконання'
+END AS SHIFT_ACTION_TITLE,
+
+-- Іконка
+CASE
+  WHEN SHIFT_ACTION = 'OPEN' THEN 'fa-play-circle'
+  WHEN SHIFT_ACTION = 'CLOSE' THEN 'fa-stop-circle'
+  WHEN SHIFT_ACTION = 'PROCESS' THEN 'fa-sync-alt'
+END AS SHIFT_ACTION_ICON
+```
+
+> 🔸 Використовуються іконки з [Font Awesome](https://fontawesome.com/icons): `fa-play-circle`, `fa-stop-circle`, `fa-sync-alt`.
+
+---
+
+## ✅ **4. CSS для кольорів:**
+
+Додай до сторінки в `Inline CSS` або до `Theme`:
+
+```css
+.shift-icon.OPEN i {
+  color: green;
+}
+.shift-icon.CLOSE i {
+  color: red;
+}
+.shift-icon.PROCESS i {
+  color: orange;
+}
+```
+
+---
+
+## ✅ **5. Опціонально — приховати цю колонку, якщо не `SHIFT`:**
+
+У `Server-Side Condition` колонки `SHIFT_ICON_HTML`:
+
+```sql
+:P1_TAB_MODE = 'SHIFT'
+```
+
+---
+
+## 🔚 Результат:
+
+* **Зелений кружечок** → `Відкрити на зміні`
+* **Червоний кружечок** → `Закрити на зміні`
+* **Помаранчевий кружечок** → `В процесі виконання`
+
+---
+
+🔔 Якщо хочеш — можу дати повний SQL-запит для твоєї сторінки з урахуванням цієї колонки.

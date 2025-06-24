@@ -1,0 +1,99 @@
+Так, ось **приклад повної реалізації**: створення **регіону типу Static Content** із шаблоном **Inline Dialog**, який відкривається через **JavaScript**.
+
+---
+
+## ✅ 1. Створення регіону в APEX
+
+### 🔹 Тип:
+
+* **Region Type:** Static Content
+* **Template:** Inline Dialog
+
+### 🔹 Властивості:
+
+* **Static ID**: наприклад `myCustomDialog`
+
+### 🔹 Вміст (HTML у Static Content):
+
+```html
+<div class="t-DialogRegion-bodyWrap">
+  <div class="t-DialogRegion-body">
+    <h3>Причина анулювання</h3>
+    <textarea id="cancel_reason" rows="5" style="width: 100%;"></textarea>
+    <div class="u-margin-top-sm">
+      <button type="button" class="t-Button t-Button--hot" onclick="onConfirmCancel()">OK</button>
+      <button type="button" class="t-Button" onclick="closeMyDialog()">Скасувати</button>
+    </div>
+  </div>
+</div>
+```
+
+---
+
+## ✅ 2. JavaScript: виклик діалогу
+
+### 🔹 Додай цей код у **Execute when Page Loads**:
+
+```javascript
+function openMyDialog() {
+  $("#myCustomDialog").dialog({
+    modal: true,
+    title: "Підтвердження анулювання",
+    width: 500,
+    height: "auto",
+    dialogClass: "ui-dialog--apex"
+  });
+}
+
+function closeMyDialog() {
+  $("#myCustomDialog").dialog("close");
+}
+
+function onConfirmCancel() {
+  const reason = $("#cancel_reason").val();
+
+  if (!reason.trim()) {
+    alert("Будь ласка, введіть причину анулювання.");
+    return;
+  }
+
+  // викликаємо Ajax процес або щось інше
+  apex.server.process("CANCEL_WITH_REASON", {
+    x01: reason
+  }, {
+    success: function(pData) {
+      closeMyDialog();
+      apex.region("task-report").refresh(); // якщо потрібно
+    }
+  });
+}
+```
+
+---
+
+## ✅ 3. Як викликати з будь-якої кнопки:
+
+```html
+<button type="button" onclick="openMyDialog()">Анулювати із причиною</button>
+```
+
+Або в APEX:
+
+* **Button Action:** Defined by Dynamic Action
+* **Dynamic Action → Execute JavaScript Code:**
+
+```javascript
+openMyDialog();
+```
+
+---
+
+## 🟡 Примітка:
+
+* `dialog()` — це jQuery UI діалог, який використовується в APEX.
+* Стиль `ui-dialog--apex` додає зовнішній вигляд відповідно до теми APEX.
+* Якщо ти хочеш використовувати **Modal Page** замість Inline Dialog, дай знати — покажу інший підхід.
+
+---
+
+Хочеш, я покажу, як цю ж логіку зробити **через модальну сторінку** з передачею значень?

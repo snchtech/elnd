@@ -1,0 +1,84 @@
+Так, **ви можете вивести кілька значків у тій самій колонці**, просто об’єднавши HTML-рядки умовно — якщо обидві умови виконуються.
+
+Ось як оновити ваш вираз `STATUS_LABEL`, щоб відображались **два значки одночасно**, якщо завдання одночасно **і протерміноване**, і **недозаповнене**:
+
+---
+
+### ✅ Оновлений SQL-фрагмент:
+
+```sql
+CASE
+  WHEN :PXX_TAB_MODE = 'PROBLEM' THEN
+    CASE 
+      WHEN 
+        (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+        OR EXISTS (
+          SELECT 1
+          FROM DICT_APP_CONFIRM_LIST d
+          WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+            AND NOT EXISTS (
+              SELECT 1
+              FROM SIGNATURERIGHTS r
+              WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+            )
+        )
+      THEN
+        -- Формуємо HTML рядок з усіма іконками
+        CASE 
+          WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL AND
+               EXISTS (
+                 SELECT 1
+                 FROM DICT_APP_CONFIRM_LIST d
+                 WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM SIGNATURERIGHTS r
+                     WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+                   )
+               )
+          THEN
+            -- Обидві умови виконуються
+            '<span class="t-Icon fa fa-clock-o" style="color:red;" title="Протерміноване завдання"></span> ' ||
+            '<span class="t-Icon fa fa-exclamation-circle" style="color:orange;" title="Недозаповнене завдання"></span>'
+          WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL
+          THEN
+            '<span class="t-Icon fa fa-clock-o" style="color:red;" title="Протерміноване завдання"></span>'
+          WHEN EXISTS (
+            SELECT 1
+            FROM DICT_APP_CONFIRM_LIST d
+            WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+              AND NOT EXISTS (
+                SELECT 1
+                FROM SIGNATURERIGHTS r
+                WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+              )
+          )
+          THEN
+            '<span class="t-Icon fa fa-exclamation-circle" style="color:orange;" title="Недозаповнене завдання"></span>'
+        END
+    END
+  ELSE NULL
+END AS STATUS_LABEL
+```
+
+---
+
+### 📝 Що робить цей код:
+
+* Якщо **обидві умови виконуються**, то додає **дві іконки** в HTML.
+* Якщо виконується лише одна з умов — відповідно одна іконка.
+* Якщо `:PXX_TAB_MODE ≠ 'PROBLEM'` — повертає `NULL`.
+
+---
+
+### 🔧 Рекомендація:
+
+Перевірте, щоб ваші іконки мали невеликий відступ між собою, наприклад:
+
+```html
+<span style="margin-right: 4px;">...</span>
+```
+
+---
+
+Хочеш, щоб ці іконки були інтерактивними (наприклад, при натисканні відкривалось вікно з деталями)?

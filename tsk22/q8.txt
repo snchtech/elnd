@@ -1,0 +1,94 @@
+Ось приклад **PL/SQL процесу**, який **вставляє запис анулювання вручну в `SIGNATUREHISTORY`** (етап `STAGE_ID = 6`, статус `STATUS_ID = 14`), наприклад, в процесі `ANUL_TASK`:
+
+```plsql
+DECLARE
+  v_user_id   VARCHAR2(50) := :APP_USER;
+  v_task_id   NUMBER := :P6_TASK_ID;
+  v_note      VARCHAR2(4000) := :P6_CANCEL_REASON;
+  v_stage_id  NUMBER := 6; -- Етап завершення / анулювання
+BEGIN
+  INSERT INTO SIGNATUREHISTORY (
+    TASK_ID,
+    STAGE_ID,
+    USER_ID,
+    STATUS_ID,
+    ACTION_DATE,
+    NOTE
+  ) VALUES (
+    v_task_id,
+    v_stage_id,
+    v_user_id,
+    14, -- статус анульовано
+    SYSDATE,
+    v_note
+  );
+END;
+```
+
+---
+
+### ✅ Важливі моменти:
+
+* `:P6_TASK_ID` — має бути доступний item на сторінці або передаватися через `apex.server.process(..., {x01, x02})`.
+* `:P6_CANCEL_REASON` — причина, яку ти збирав з текстового поля користувача.
+* Якщо потрібно, можна додатково вставити запис у `SIGNATURERIGHTS`, якщо його там ще немає:
+
+```plsql
+BEGIN
+  -- якщо ще не існує права на етап 6, створити його
+  INSERT INTO SIGNATURERIGHTS (TASK_ID, STAGES_ID)
+  SELECT v_task_id, v_stage_id
+  FROM dual
+  WHERE NOT EXISTS (
+    SELECT 1 FROM SIGNATURERIGHTS
+    WHERE TASK_ID = v_task_id AND STAGES_ID = v_stage_id
+  );
+END;
+```
+
+---
+
+### 🧩 Інтеграція в APEX:
+
+* Зроби **після підтвердження** анулювання (через `customConfirmDialog`) виклик:
+
+```javascript
+apex.server.process('ANUL_TASK', {
+  x01: $v('P6_TASK_ID'),
+  x02: $v('P6_CANCEL_REASON')
+}, {
+  success: function () {
+    apex.message.showPageSuccess('Завдання анульовано.');
+    apex.region('task-report').refresh();
+  }
+});
+```
+
+І в процесі `ANUL_TASK`:
+
+```plsql
+DECLARE
+  v_task_id   NUMBER := APEX_APPLICATION.G_X01;
+  v_reason    VARCHAR2(4000) := APEX_APPLICATION.G_X02;
+BEGIN
+  UPDATE TASKS
+  SET STATUS_ID = 14
+  WHERE ID = v_task_id;
+
+  INSERT INTO SIGNATUREHISTORY (
+    TASK_ID, STAGE_ID, USER_ID, STATUS_ID, ACTION_DATE, NOTE
+  ) VALUES (
+    v_task_id, 6, :APP_USER, 14, SYSDATE, v_reason
+  );
+
+  -- Додати SIGNATURERIGHTS якщо потрібно
+  INSERT INTO SIGNATURERIGHTS (TASK_ID, STAGES_ID)
+  SELECT v_task_id, 6 FROM dual
+  WHERE NOT EXISTS (
+    SELECT 1 FROM SIGNATURERIGHTS WHERE TASK_ID = v_task_id AND STAGES_ID = 6
+  );
+END;
+```
+
+Готово ✅
+Це дозволить правильно **фіксувати анулювання навіть для незаповнених записів** і виводити `actual_date_end` через `SIGNATUREHISTORY`.

@@ -1,0 +1,124 @@
+Ось як можна реалізувати все, що ви описали, **в одному SQL-запиті**, включаючи:
+
+---
+
+### ✅ 1. **Колонку з іконками** для вкладки `PLANNED`
+
+Враховується:
+
+* `status_id = 10` — нові
+* `status_id IN (12,13)` — в роботі
+* `planning_date_end < SYSDATE AND actual_date_end IS NULL` — протерміновані
+* недозаповнені — на основі відсутніх підписів у `signaturerights`
+
+---
+
+### ✅ 2. **Колонку з CSS-класом** для забарвлення рядків:
+
+* `'new-rec'` – нові
+* `'action-rec'` – в роботі
+* `'arch-rec'` – анульовані (`status_id = 14`)
+* `NULL` – інше
+
+---
+
+### 🔧 SQL (фрагмент):
+
+```sql
+-- Колонка з іконками
+CASE
+  WHEN :P1_TAB_MODE = 'PLANNED' THEN
+    (
+      CASE 
+        WHEN t.STATUS_ID = 10 THEN
+          '<span class="fa fa-star" style="color:green;" title="Нове завдання"></span> '
+        ELSE ''
+      END ||
+      CASE 
+        WHEN t.STATUS_ID IN (12,13) THEN
+          '<span class="fa fa-cogs" style="color:orange;" title="В роботі"></span> '
+        ELSE ''
+      END ||
+      CASE 
+        WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL THEN
+          '<span class="fa fa-clock-o" style="color:red;" title="Протерміноване завдання"></span> '
+        ELSE ''
+      END ||
+      CASE 
+        WHEN EXISTS (
+          SELECT 1
+          FROM DICT_APP_CONFIRM_LIST d
+          WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+            AND NOT EXISTS (
+              SELECT 1
+              FROM SIGNATURERIGHTS r
+              WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+            )
+        ) THEN
+          '<span class="fa fa-exclamation-circle" style="color:darkorange;" title="Недозаповнене завдання"></span>'
+        ELSE ''
+      END
+    )
+  ELSE NULL
+END AS STATUS_LABEL_PLANNED,
+
+-- Колонка з класом
+CASE
+  WHEN t.STATUS_ID = 10 THEN 'new-rec'
+  WHEN t.STATUS_ID IN (12,13) THEN 'action-rec'
+  WHEN t.STATUS_ID = 14 THEN 'arch-rec'
+  ELSE NULL
+END AS ROW_CSS_CLASS
+```
+
+---
+
+### ✅ 3. CSS у вашому `Inline CSS` або `Theme Roller`:
+
+```css
+tr.new-rec td {
+  background-color: #e7f7e4 !important; /* світло-зелений */
+}
+tr.action-rec td {
+  background-color: #fff3e0 !important; /* світло-помаранчевий */
+}
+tr.arch-rec td {
+  background-color: #eeeeee !important; /* сірий */
+}
+```
+
+---
+
+### ✅ 4. Установлення CSS-класу для рядка в Interactive Report
+
+У звіті в APEX:
+
+1. В області налаштувань звіту знайди:
+   **Attributes → Appearance → Row CSS Classes**
+2. Вкажи ім'я колонки:
+   `ROW_CSS_CLASS`
+
+---
+
+### 🔁 Якщо треба оновлювати статус динамічно — через JavaScript:
+
+```js
+$("#myReportID").on("apexafterrefresh", function() {
+  $("td[headers='STATUS_LABEL_PLANNED']").each(function() {
+    const $row = $(this).closest("tr");
+    const className = $(this).text().includes("fa-star") ? "new-rec" :
+                      $(this).text().includes("fa-cogs") ? "action-rec" :
+                      $(this).text().includes("fa-clock-o") ? "problem-rec" : "";
+
+    if (className) {
+      $row.addClass(className);
+    }
+  });
+});
+```
+
+---
+
+🔔 **Порада**: якщо у вас вже є інші класи рядків або складні динамічні оновлення — краще використовувати окрему колонку в SQL (як `ROW_CSS_CLASS`), щоб уникнути складного DOM-аналізу через JavaScript.
+
+Хочеш додати ще й значки статусу в шапку звіту як фільтри чи легенду?

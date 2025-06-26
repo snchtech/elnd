@@ -1,0 +1,143 @@
+Ось повна інструкція, як реалізувати перемикачі `Актуальні` / `Архів` для журналу шаблонів (аналогічно до завдань):
+
+---
+
+## 🔹 **1. Прихований item для збереження стану**
+
+Створи **Hidden item** на сторінці, наприклад:
+
+```
+Item: P8_TAB_MODE
+Default Value: ACTIVE
+```
+
+> Це буде `ACTIVE` для актуальних шаблонів, `ARCHIVE` для архівних.
+
+---
+
+## 🔹 **2. Статичний HTML Content з кнопками**
+
+Створи **Static Content Region**, наприклад з ідентифікатором `template-tabs`, і встав у нього PL/SQL через AJAX callback або безпосередньо HTML (див. нижче).
+
+### HTML-шаблон:
+
+```html
+<div class="template-tabs">
+  <button type="button" class="t-Button tab-btn active-tab" data-mode="ACTIVE">
+    Актуальні <span class="circle-badge active-count">0</span>
+  </button>
+  <button type="button" class="t-Button tab-btn" data-mode="ARCHIVE">
+    Архів
+  </button>
+</div>
+```
+
+---
+
+## 🔹 **3. CSS для стилю кнопок**
+
+```css
+.template-tabs {
+  margin-bottom: 10px;
+}
+
+.tab-btn {
+  margin-right: 8px;
+  position: relative;
+}
+
+.circle-badge {
+  background: #4682b4;
+  color: white;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  margin-left: 5px;
+}
+
+.active-tab {
+  background-color: #f3f3f3;
+  border: 2px solid #0076df;
+  font-weight: bold;
+}
+```
+
+---
+
+## 🔹 **4. JS: Обробка кліків і оновлення**
+
+```javascript
+$(document).on('click', '.tab-btn', function() {
+  var selectedMode = $(this).data('mode');
+
+  // Встановити значення в прихований item
+  $s("P8_TAB_MODE", selectedMode);
+
+  // Видалити активний клас з усіх, додати лише вибраній
+  $('.tab-btn').removeClass('active-tab');
+  $(this).addClass('active-tab');
+
+  // Оновити регіон зі звітом
+  apex.region("template-report").refresh();
+});
+```
+
+> Замість `"template-report"` у `apex.region(...)` вкажи **static ID** твого звіту з шаблонами.
+
+---
+
+## 🔹 **5. SQL фільтр у звіті**
+
+```sql
+WHERE (:P8_TAB_MODE = 'ACTIVE' AND s.STATUS_MAIN_ID <> 0)
+   OR (:P8_TAB_MODE = 'ARCHIVE' AND s.STATUS_MAIN_ID = 0)
+```
+
+---
+
+## 🔹 **6. Підрахунок кількості (через AJAX Callback або PL/SQL Dynamic Content)**
+
+У окремому регіоні **PL/SQL Dynamic Content** або AJAX callback:
+
+```plsql
+DECLARE
+  v_active_cnt NUMBER;
+BEGIN
+  SELECT COUNT(*) INTO v_active_cnt
+  FROM TASK_TEMPLATES t
+  JOIN STATUS_TABLE s ON s.ID = t.STATUS_ID
+  WHERE s.STATUS_MAIN_ID <> 0;
+
+  -- Вивід HTML з оновленням лічильника
+  HTP.P('
+  <script>
+    $(".circle-badge.active-count").text("' || v_active_cnt || '");
+  </script>');
+END;
+```
+
+Можеш також **оновлювати весь регіон кнопок через `apex.region(...).refresh()`**, якщо він побудований динамічно.
+
+---
+
+## 🔹 **7. Встановлення значення за замовчуванням**
+
+У dynamic action **Page Load**:
+
+```javascript
+$s("P8_TAB_MODE", "ACTIVE");
+$(".tab-btn[data-mode='ACTIVE']").addClass("active-tab");
+```
+
+> Після цього — `apex.region("template-report").refresh();` або через DA on Page Load.
+
+---
+
+## ✅ У підсумку:
+
+* Кнопки клікабельні, перемикають `P8_TAB_MODE`
+* Підсвічування активної кнопки
+* Лічильник шаблонів
+* SQL фільтрація залежно від вкладки
+
+Готовий допомогти адаптувати під твої назви, якщо надаси точні ID.

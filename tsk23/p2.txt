@@ -1,0 +1,181 @@
+Чудово! Ось **структурований PL/SQL пакет**, який:
+✅ централізує перевірку доступу (з урахуванням заміщення);
+✅ генерує HTML для відображення кнопки/статусу;
+✅ полегшує підтримку та розширення під Групу 3 та інше.
+
+---
+
+## 🌟 1️⃣ Пакет **SIGNATURE\_ACCESS\_PKG**
+
+```plsql
+CREATE OR REPLACE PACKAGE signature_access_pkg IS
+  FUNCTION get_effective_user_id RETURN NUMBER;
+  FUNCTION get_effective_position_id RETURN NUMBER;
+  FUNCTION get_effective_department_id RETURN NUMBER;
+  FUNCTION get_effective_unit_id RETURN NUMBER;
+
+  FUNCTION is_role_allowed (
+    p_signer_group_id      NUMBER,
+    p_signer_user_id       NUMBER,
+    p_signer_position_id   NUMBER,
+    p_signer_department_id NUMBER,
+    p_signer_unit_id       NUMBER
+  ) RETURN BOOLEAN;
+
+  FUNCTION generate_signature_html (
+    p_is_role        BOOLEAN,
+    p_count_cb       NUMBER,
+    p_signature_id   NUMBER,
+    p_button_text    VARCHAR2
+  ) RETURN VARCHAR2;
+END signature_access_pkg;
+/
+```
+
+```plsql
+CREATE OR REPLACE PACKAGE BODY signature_access_pkg IS
+
+  FUNCTION get_effective_user_id RETURN NUMBER IS
+  BEGIN
+    RETURN NVL(:P0_NEW_USER_ID, :P0_USER_ID);
+  END;
+
+  FUNCTION get_effective_position_id RETURN NUMBER IS
+  BEGIN
+    RETURN NVL(:P0_NEW_POSITION_ID, :P0_POSITION_ID);
+  END;
+
+  FUNCTION get_effective_department_id RETURN NUMBER IS
+  BEGIN
+    RETURN NVL(:P0_NEW_DEPARTMENT_ID, :P0_DEPARTMENT_ID);
+  END;
+
+  FUNCTION get_effective_unit_id RETURN NUMBER IS
+  BEGIN
+    RETURN NVL(:P0_NEW_UNIT_ID, :P0_UNIT_ID);
+  END;
+
+  FUNCTION is_role_allowed (
+    p_signer_group_id      NUMBER,
+    p_signer_user_id       NUMBER,
+    p_signer_position_id   NUMBER,
+    p_signer_department_id NUMBER,
+    p_signer_unit_id       NUMBER
+  ) RETURN BOOLEAN IS
+    l_user_id       NUMBER := get_effective_user_id;
+    l_position_id   NUMBER := get_effective_position_id;
+    l_department_id NUMBER := get_effective_department_id;
+    l_unit_id       NUMBER := get_effective_unit_id;
+  BEGIN
+    CASE p_signer_group_id
+      WHEN 2 THEN -- USER
+        RETURN l_user_id = p_signer_user_id;
+
+      WHEN 1 THEN -- POSITION + DEPT + UNIT
+        IF p_signer_position_id IS NOT NULL AND
+           l_position_id = p_signer_position_id THEN
+
+          IF p_signer_department_id IS NULL OR
+             l_department_id = p_signer_department_id THEN
+
+            IF p_signer_unit_id IS NULL OR
+               l_unit_id = p_signer_unit_id THEN
+              RETURN TRUE;
+            END IF;
+
+          END IF;
+
+        END IF;
+        RETURN FALSE;
+
+      ELSE
+        RETURN FALSE; -- Група 3 додати окремо
+    END CASE;
+  END;
+
+  FUNCTION generate_signature_html (
+    p_is_role        BOOLEAN,
+    p_count_cb       NUMBER,
+    p_signature_id   NUMBER,
+    p_button_text    VARCHAR2
+  ) RETURN VARCHAR2 IS
+    l_html VARCHAR2(4000);
+  BEGIN
+    IF p_is_role AND p_count_cb = 0 THEN
+      l_html := '<button id="signature-btn" data-signature-id="' || p_signature_id ||
+                '" class="confirm-signature-button">' || p_button_text || '</button>';
+    ELSIF p_is_role AND p_count_cb > 0 THEN
+      l_html := '<span class="wait-confirm-signature-text">Очікує відмітки</span>';
+    ELSIF NOT p_is_role AND p_count_cb = 0 THEN
+      l_html := '<span class="wait-confirm-signature-text wait-confirm-signature-text-current">Розглядає</span>';
+    ELSE
+      l_html := '<span class="wait-confirm-signature-text">Очікує відмітки</span>';
+    END IF;
+    RETURN l_html;
+  END;
+
+END signature_access_pkg;
+/
+```
+
+---
+
+## 🌟 2️⃣ Як змінюється основний код?
+
+Ваш основний блок перевірки й генерації стає простим і читабельним:
+
+```plsql
+DECLARE
+  l_is_role      BOOLEAN;
+  l_count_cb     NUMBER := 0; -- Рахівник кнопок для підстадії
+  l_signature_id NUMBER := :P1_SIGNATURE_ID; -- Приклад
+  l_html         VARCHAR2(4000);
+  l_btn_text     VARCHAR2(4000) := 'Відмітити';
+BEGIN
+  l_is_role := signature_access_pkg.is_role_allowed (
+                  p_signer_group_id      => :P1_SIGNER_GROUP_ID,
+                  p_signer_user_id       => :P1_SIGNER_USER_ID,
+                  p_signer_position_id   => :P1_SIGNER_POSITION_ID,
+                  p_signer_department_id => :P1_SIGNER_DEPARTMENT_ID,
+                  p_signer_unit_id       => :P1_SIGNER_UNIT_ID
+               );
+
+  l_html := signature_access_pkg.generate_signature_html (
+               p_is_role      => l_is_role,
+               p_count_cb     => l_count_cb,
+               p_signature_id => l_signature_id,
+               p_button_text  => l_btn_text
+            );
+
+  -- Виводимо результат
+  HTP.P(l_html);
+
+  -- Якщо потрібно, оновіть лічильник
+  IF l_is_role AND l_count_cb = 0 THEN
+    l_count_cb := l_count_cb + 1;
+  ELSIF NOT l_is_role AND l_count_cb = 0 THEN
+    l_count_cb := l_count_cb + 1;
+  END IF;
+END;
+```
+
+---
+
+## 🌟 3️⃣ Переваги такого підходу
+
+✅ Весь код обробки ролей та генерації винесено в один пакет — **легко супроводжувати**.
+✅ Простий і чистий основний блок — **менше дублювання**.
+✅ Готово для додавання Групи 3 або інших логік.
+✅ Якщо згодом потрібно — **легко підключити APEX\_ACL.HAS\_USER\_ROLE** всередині `is_role_allowed`.
+
+---
+
+## 🚀 Наступний крок
+
+Якщо хочете, я можу одразу:
+
+* додати логіку для Групи 3 (зміна);
+* додати виклик APEX ACL всередині функції для гібридної перевірки;
+* підготувати SQL view або приклади виклику на APEX Server Process.
+
+Скажіть, як продовжити — і я підготую. 🚀

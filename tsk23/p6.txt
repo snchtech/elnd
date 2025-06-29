@@ -1,0 +1,113 @@
+🚀 **Давайте створимо повноцінну PL/SQL-функцію**, яка:
+✅ визначить **access\_level** користувача з `TASK_ACCESS_CONTROL`
+✅ врахує user\_id, position\_id, department\_id, unit\_id
+✅ встановить значення в item'и на global page: `P0_ACCESS_LEVEL`, `P0_ACL_POSITION_ID`, `P0_ACL_DEPARTMENT_ID`, `P0_ACL_UNIT_ID`
+
+---
+
+## ✅ **PL/SQL FUNCTION**
+
+```plsql
+CREATE OR REPLACE FUNCTION get_user_access_level (
+  p_user_id        NUMBER,
+  p_position_id    NUMBER,
+  p_department_id  NUMBER,
+  p_unit_id        NUMBER
+) RETURN NUMBER IS
+  l_access_level   NUMBER := 3; -- За замовчуванням найнижчий рівень
+BEGIN
+  -- Шукаємо найбільш привілейований рівень (min access_level)
+  SELECT MIN(access_level)
+  INTO l_access_level
+  FROM task_access_control
+  WHERE (user_id = p_user_id OR user_id IS NULL)
+    AND (position_id = p_position_id OR position_id IS NULL)
+    AND (department_id = p_department_id OR department_id IS NULL)
+    AND (unit_id = p_unit_id OR unit_id IS NULL);
+
+  -- Встановлюємо значення в item'и на глобальній сторінці
+  :P0_ACCESS_LEVEL := l_access_level;
+
+  -- Для наочності також можна зберегти останню знайдену зв'язку (для debug або UI)
+  SELECT MAX(NVL(position_id, -1)),
+         MAX(NVL(department_id, -1)),
+         MAX(NVL(unit_id, -1))
+  INTO :P0_ACL_POSITION_ID, :P0_ACL_DEPARTMENT_ID, :P0_ACL_UNIT_ID
+  FROM task_access_control
+  WHERE (user_id = p_user_id OR user_id IS NULL)
+    AND (position_id = p_position_id OR position_id IS NULL)
+    AND (department_id = p_department_id OR department_id IS NULL)
+    AND (unit_id = p_unit_id OR unit_id IS NULL)
+    AND access_level = l_access_level;
+
+  RETURN l_access_level;
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    -- Якщо доступів немає — ставимо 3 (тільки свої завдання)
+    :P0_ACCESS_LEVEL := 3;
+    :P0_ACL_POSITION_ID := NULL;
+    :P0_ACL_DEPARTMENT_ID := NULL;
+    :P0_ACL_UNIT_ID := NULL;
+    RETURN 3;
+
+  WHEN OTHERS THEN
+    -- У разі помилки — на всяк випадок теж обмежуємо доступ
+    :P0_ACCESS_LEVEL := 3;
+    :P0_ACL_POSITION_ID := NULL;
+    :P0_ACL_DEPARTMENT_ID := NULL;
+    :P0_ACL_UNIT_ID := NULL;
+    RETURN 3;
+END;
+/
+```
+
+---
+
+## ✅ **Як викликати у Before Header (на Global Page)**
+
+```plsql
+DECLARE
+  l_level NUMBER;
+BEGIN
+  l_level := get_user_access_level(
+                p_user_id       => NVL(:P0_NEW_USER_ID, :P0_USER_ID),
+                p_position_id   => NVL(:P0_NEW_POSITION_ID, :P0_POSITION_ID),
+                p_department_id => NVL(:P0_NEW_DEPARTMENT_ID, :P0_DEPARTMENT_ID),
+                p_unit_id       => NVL(:P0_NEW_UNIT_ID, :P0_UNIT_ID)
+             );
+END;
+```
+
+💡 **NVL використовується для підтримки заміщення** — якщо є заміщення, беремо нові значення, якщо ні — свої.
+
+---
+
+## ✅ **Item'и які ви зберігаєте**
+
+| Item                   | Що зберігається                                |
+| ---------------------- | ---------------------------------------------- |
+| `P0_ACCESS_LEVEL`      | визначений рівень доступу                      |
+| `P0_ACL_POSITION_ID`   | позиція з доступу (для відображення або debug) |
+| `P0_ACL_DEPARTMENT_ID` | департамент з доступу                          |
+| `P0_ACL_UNIT_ID`       | unit з доступу                                 |
+
+---
+
+## 🚀 **Як це інтегрувати в APEX**
+
+1️⃣ Додайте **Before Header** процес на Global Page (Page 0).
+2️⃣ Викличіть функцію як у прикладі вище.
+3️⃣ У звітах і логіці Where використовуйте `:P0_ACCESS_LEVEL` та інші значення.
+
+---
+
+## 💡 **Хочете?**
+
+👉 Я можу:
+
+* підготувати тестовий виклик + дані для `TASK_ACCESS_CONTROL`;
+* допомогти з шаблоном Where для вашого звіту з цим `P0_ACCESS_LEVEL`;
+* створити View для зручності.
+
+Напишіть! 😊

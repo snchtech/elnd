@@ -1,0 +1,116 @@
+Чудове запитання! Давай розберемо це акуратно.
+
+---
+
+## 🎯 **Твоя ситуація**
+
+👉 `P2_DEPARTMENT` — select list
+👉 `P2_POSITION` — теж select list з **заздалегідь визначеними static values** (тобто без SQL LOV)
+
+---
+
+## 🚩 **У чому тут проблема**
+
+Якщо `P2_POSITION` — це **static select list**, то при зміні `P2_DEPARTMENT` ти не зможеш динамічно змінювати значення цього select list стандартним APEX-рефрешем (бо він не виконує запит для static LOV).
+
+---
+
+## ✅ **Як діяти**
+
+### 🔹 Варіант 1 — Перейти на SQL LOV
+
+👉 Найкраще — зробити `P2_POSITION` **SQL Query LOV**, тоді при `Refresh` він буде запитувати значення по вибраному підрозділу:
+
+```sql
+SELECT DISTINCT p.NAME d, p.ID r
+FROM USERS u
+JOIN POSITION_TABLE p ON p.ID = u.POSITION_ID
+WHERE u.DEPARTMENT_ID = :P2_DEPARTMENT
+ORDER BY p.NAME
+```
+
+👉 Додати Dynamic Action:
+
+* Event: `Change` на `P2_DEPARTMENT`
+* Action: `Refresh` на `P2_POSITION`
+
+Це працює одразу й без зайвих JS.
+
+---
+
+### 🔹 Варіант 2 — Динамічне заповнення через AJAX + JS
+
+Якщо ти залишаєш `P2_POSITION` як звичайний select list, то треба:
+
+✅ **1. Створити AJAX Callback**
+
+```plsql
+DECLARE
+BEGIN
+  APEX_JSON.OPEN_ARRAY;
+  FOR rec IN (
+    SELECT DISTINCT p.NAME AS name, p.ID AS id
+    FROM USERS u
+    JOIN POSITION_TABLE p ON p.ID = u.POSITION_ID
+    WHERE u.DEPARTMENT_ID = :P2_DEPARTMENT
+    ORDER BY p.NAME
+  ) LOOP
+    APEX_JSON.OPEN_OBJECT;
+    APEX_JSON.WRITE('r', rec.id);
+    APEX_JSON.WRITE('d', rec.name);
+    APEX_JSON.CLOSE_OBJECT;
+  END LOOP;
+  APEX_JSON.CLOSE_ARRAY;
+END;
+```
+
+👉 Наприклад, назва процесу: `GET_POSITIONS_BY_DEPT`
+
+---
+
+✅ **2. JS при зміні P2\_DEPARTMENT**
+
+```javascript
+apex.server.process("GET_POSITIONS_BY_DEPT", {
+  pageItems: "#P2_DEPARTMENT"
+}, {
+  success: function(data) {
+    var $pos = $("#P2_POSITION");
+    $pos.empty();
+    $pos.append($('<option>', { value: "", text: "-- Виберіть посаду --" }));
+    data.forEach(function(item) {
+      $pos.append($('<option>', { value: item.r, text: item.d }));
+    });
+  }
+});
+```
+
+👉 Це динамічно оновить select list на фронтенді.
+
+---
+
+### 🔹 Варіант 3 — залишити static і просто enable/disable
+
+Якщо тобі **не критично фільтрувати** список, а просто хочеш активувати / деактивувати поле:
+
+```javascript
+var dep = $v('P2_DEPARTMENT');
+if (dep === '21' || dep === '27') {
+  apex.item('P2_POSITION').enable();
+} else {
+  apex.item('P2_POSITION').disable();
+}
+```
+
+👉 Але тут значення всередині select залишаться незмінними (тобто не фільтруватимуться).
+
+---
+
+## ✉ Висновок:
+
+👉 **Найкраще:**
+✅ Перейти на SQL LOV + refresh item
+✅ Або додати AJAX + JS для динамічного заповнення
+✅ Лише enable/disable — якщо не критично фільтрувати дані
+
+Хочеш — я підготую приклад повністю з AJAX + APEX процесом? 🚀

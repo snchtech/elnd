@@ -1,0 +1,125 @@
+Чудове завдання — давай реалізуємо його крок за кроком! 👇
+
+---
+
+## ✅ **1️⃣ Початково приховати регіони**
+
+👉 Властивості кожного регіону:
+
+* **Server-side Condition:** None
+* **Initial Display:** нормальний (щоб в DOM був)
+* Додай до `CSS Classes` щось типу `executor-group-region` (щоб легше працювати)
+* Постав **inline style:** `display:none;` або додай CSS:
+
+```css
+.executor-group-region {
+  display: none;
+}
+```
+
+---
+
+## ✅ **2️⃣ HTML структура чекбоксів**
+
+Припустимо, ти маєш у статичному регіоні або на сторінці:
+
+```html
+<div id="checkbox-group-executor">
+  <label><input type="checkbox" id="P2_GROUP1_CHECK"> Посада</label>
+  <label><input type="checkbox" id="P2_GROUP2_CHECK"> ПІБ</label>
+  <label><input type="checkbox" id="P2_GROUP3_CHECK"> Зміна</label>
+</div>
+```
+
+(Або використовуй стандартні APEX checkbox items — важливо, щоб вони мали `Static ID`)
+
+---
+
+## ✅ **3️⃣ Додати JS логіку**
+
+У розділ **Function and Global Variable Declaration** або Dynamic Action → Execute JavaScript Code:
+
+```javascript
+function toggleExecutorGroups() {
+  // Група 1 - Посада
+  if ($('#P2_GROUP1_CHECK').prop('checked')) {
+    $('#group1_confirm_form').show();
+  } else {
+    $('#group1_confirm_form').hide();
+  }
+
+  // Група 2 - ПІБ
+  if ($('#P2_GROUP2_CHECK').prop('checked')) {
+    $('#group2_confirm_form').show();
+  } else {
+    $('#group2_confirm_form').hide();
+  }
+
+  // Група 3 - Зміна
+  if ($('#P2_GROUP3_CHECK').prop('checked')) {
+    $('#group3_confirm_form').show();
+  } else {
+    $('#group3_confirm_form').hide();
+  }
+}
+```
+
+---
+
+## ✅ **4️⃣ Пов’язати з чекбоксами**
+
+👉 Створи **Dynamic Action**:
+
+* **Event:** Change
+* **Selection Type:** jQuery Selector
+* **Selector:** `#P2_GROUP1_CHECK, #P2_GROUP2_CHECK, #P2_GROUP3_CHECK`
+
+👉 True Action:
+
+* **Action:** Execute JavaScript Code
+* **Code:**
+
+```javascript
+toggleExecutorGroups();
+```
+
+---
+
+## ✅ **5️⃣ Виконати при завантаженні сторінки**
+
+👉 Щоб врахувати стан чекбоксів на старті:
+
+* Додай ще один Dynamic Action:
+
+  * **Event:** Page Load
+  * **True Action:** Execute JavaScript Code
+  * **Code:** `toggleExecutorGroups();`
+
+---
+
+## ✅ **6️⃣ Заголовок**
+
+Можеш додати прямо перед чекбоксами:
+
+```html
+<h3>Оберіть виконавця</h3>
+```
+
+або в Static Content.
+
+---
+
+## 🎨 **Результат**
+
+* Початково регіони приховані.
+* Коли користувач ставить чекбокс — відповідна форма з'являється.
+* Можеш додати плавне з’явлення:
+
+```javascript
+$('#group1_confirm_form').fadeIn();
+$('#group1_confirm_form').fadeOut();
+```
+
+---
+
+Хочеш — я підготую готовий APEX JSON export для такого рішення! 🚀

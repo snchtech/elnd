@@ -1,0 +1,86 @@
+Чудове завдання — давай я покажу повну схему для реалізації **POPOV item** в APEX для вибору користувача за ПІБ 👇
+
+---
+
+## ✅ **1️⃣ Створюємо POPOV Item**
+
+* Тип: `Popup LOV`
+* Наприклад: `P2_PIB_USER`
+* Return Value: **user\_id** (це те значення, яке ти хочеш отримати після вибору)
+
+---
+
+## ✅ **2️⃣ SQL Query для POPOV**
+
+```sql
+SELECT
+  u.USERSECONDNAME || ' ' || u.USERFIRSTNAME || ' ' || u.USERPARENTNAME AS display_value,
+  u.USER_ID AS return_value,
+  u.USERSECONDNAME,
+  u.USERFIRSTNAME,
+  u.USERPARENTNAME,
+  d.NAME AS department_name,
+  u.POSITION_NAME
+FROM USERS u
+LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+ORDER BY u.USERSECONDNAME, u.USERFIRSTNAME, u.USERPARENTNAME
+```
+
+👉 **В APEX LOV Query вставляємо таке (для відображення колонок):**
+
+```sql
+SELECT
+  u.USER_ID AS return_value,
+  u.USERSECONDNAME || ' ' || u.USERFIRSTNAME || ' ' || u.USERPARENTNAME AS display_value,
+  u.USERSECONDNAME AS "Прізвище",
+  u.USERFIRSTNAME AS "Ім'я",
+  u.USERPARENTNAME AS "По батькові",
+  d.NAME AS "Цех",
+  u.POSITION_NAME AS "Посада"
+FROM USERS u
+LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+ORDER BY u.USERSECONDNAME, u.USERFIRSTNAME, u.USERPARENTNAME
+```
+
+* **return\_value** → `USER_ID`
+* **display\_value** → ПІБ (для відображення у самому item)
+
+---
+
+## ✅ **3️⃣ Налаштування POPOV**
+
+У властивостях POPOV item:
+
+* **Return Display Value:** увімкни (якщо хочеш, щоб у полі бачити ПІБ після вибору)
+* **Return Value:** `USER_ID`
+* **Column Mapping:** APEX підставить автоматично, перевір у діалозі колонок LOV
+
+---
+
+## ✅ **4️⃣ Фільтрація по ПІБ**
+
+👉 Якщо хочеш в POPOV вбудований пошук:
+
+* По замовчуванню POPOV шукає по display value (ПІБ у твоєму випадку)
+* Але ти можеш розширити:
+
+```sql
+WHERE
+  LOWER(u.USERSECONDNAME || ' ' || u.USERFIRSTNAME || ' ' || NVL(u.USERPARENTNAME, '')) LIKE LOWER('%'||:APEX_SEARCH||'%')
+```
+
+(Якщо APEX версія підтримує bind `:APEX_SEARCH` у LOV)
+
+---
+
+## ✅ **5️⃣ Підсумок**
+
+🚀 Результат:
+
+* POPOV показує таблицю з колонками: Прізвище, Ім'я, По батькові, Цех, Посада.
+* Після вибору підставляється **USER\_ID** в item.
+* У полі видно повне ПІБ (якщо хочеш, можна підставляти окремо в display-only item).
+
+---
+
+Хочеш — я допоможу ще додати, щоб автоматично заповнювались інші item (наприклад, підрозділ, посада) після вибору? 😊

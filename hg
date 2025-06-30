@@ -1,0 +1,11 @@
+document.querySelectorAll('.single-check').forEach(cb => {
+  cb.addEventListener('change', function() {
+    if (this.checked) {
+      document.querySelectorAll('.single-check').forEach(otherCb => {
+        if (otherCb !== this) {
+          otherCb.checked = false;
+        }
+      });
+    }
+  });
+});

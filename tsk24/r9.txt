@@ -1,0 +1,118 @@
+🔹 **Чудово, ось повний готовий блок PL/SQL для вашої картки відміток з урахуванням табельного номера (C008)!**
+✅ Оптимізовано для чистоти коду.
+✅ Обробляє стандартні випадки й випадки без position/department/unit, але з `tab_no`.
+✅ Можна одразу вставляти у ваш процес.
+
+---
+
+## ⚡ **Готовий код**
+
+```plsql
+-- Додаткові змінні
+l_tab_no VARCHAR2(50);
+l_user_pos VARCHAR2(255);
+l_user_dep VARCHAR2(255);
+
+-- Відкриття курсору
+OPEN confirm_list FOR 
+    SELECT SEQ_ID, c001, c002, c003, c009, c010, c011, c008
+    FROM APEX_collections
+    WHERE collection_name = 'CONFIRM_CART_' || l_stage_id || '_' || l_substage_id
+      AND c004 = l_substage_id
+    ORDER BY TO_NUMBER(c006);
+
+LOOP
+    l_order_counter := l_order_counter + 1;
+    FETCH confirm_list INTO 
+        l_list_id, 
+        l_list_position, 
+        l_list_department, 
+        l_list_unit, 
+        l_list_position_id, 
+        l_list_department_id, 
+        l_list_unit_id,
+        l_tab_no;
+    EXIT WHEN confirm_list%NOTFOUND;
+
+    -- Формування dep/unit
+    IF l_list_department IS NOT NULL AND l_list_unit IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || '/' || l_list_unit || ')</span>';
+    ELSIF l_list_department IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || ')</span>';
+    ELSIF l_list_unit IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_unit || ')</span>';
+    ELSE
+        l_dep_unit := '';
+    END IF;
+
+    -- Якщо немає position/department/unit, але є tab_no — тягнемо з USERS
+    IF l_list_position IS NULL AND l_list_department IS NULL AND l_list_unit IS NULL AND l_tab_no IS NOT NULL THEN
+        BEGIN
+            SELECT u.POSITION_NAME, d.DEPARTMENT_NAME
+            INTO l_user_pos, l_user_dep
+            FROM USERS u
+            LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+            WHERE u.TAB_NO = l_tab_no;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                l_user_pos := 'Невідома посада';
+                l_user_dep := 'Невідомий відділ';
+        END;
+    ELSE
+        -- Використовуємо стандартні значення
+        l_user_pos := l_list_position;
+        l_user_dep := NULL; -- вже вивели через l_dep_unit
+    END IF;
+
+    -- Генерація HTML
+    HTP.P('<div class="confirm-cart-item">');
+    HTP.P('<div class="c-cart-signer">');
+
+    IF l_list_position IS NOT NULL OR l_list_department IS NOT NULL OR l_list_unit IS NOT NULL THEN
+        HTP.P('<span class="l-list-position">' || NVL(l_list_position, '') || '</span>' || NVL(l_dep_unit, ''));
+    ELSE
+        HTP.P('<span class="l-list-position">' || l_user_pos || '</span><span class="l-dep-unit">(' || l_user_dep || ')</span>');
+    END IF;
+
+    HTP.P('</div>');
+
+    -- Вивід дати та виконавця (спрощено, розширте при потребі)
+    BEGIN
+        SELECT TO_CHAR(t.SIGNER_DATE, 'dd.mm.yyyy hh24:mi')
+        INTO l_check_signer_date
+        FROM ASICS.SIGNATUREHISTORY t
+        WHERE t.SIGNRIGHT_ID = l_signature_id;
+
+        HTP.P('<div class="c-cart-date-time">' || l_check_signer_date || '</div>');
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            HTP.P('<div class="c-cart-date-time"></div>');
+    END;
+
+    -- Можна додати ПІБ, коментар, статус якщо потрібно
+    HTP.P('<div class="c-cart-pib"></div>');
+    HTP.P('<div class="c-cart-signer-comment"></div>');
+    HTP.P('<div class="c-cart-signer-mark"></div>');
+
+    HTP.P('</div>'); -- confirm-cart-item
+
+END LOOP;
+
+CLOSE confirm_list;
+```
+
+---
+
+## 📝 **Що ще можна додати**
+
+💡 Якщо потрібно, я можу розширити блок:
+
+* З генерацією кнопки підпису чи статусу очікування (на основі ролей).
+* З повним виводом `ПІБ`, `посада`, `відділ`, `коментар`.
+* З додаванням класів для активного/неактивного стану.
+
+---
+
+## 🚀 **Хочете повністю готовий код для всієї картки (з кнопками, ролями, підписами)?**
+
+Напишіть! Я підготую з урахуванням ваших вимог (ACL, статуси, кнопки). 😊

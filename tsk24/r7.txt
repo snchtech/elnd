@@ -1,0 +1,111 @@
+Чудово! Я підготував для вас повний **оновлений фрагмент PL/SQL-коду**, який можна вставити у вашу процедуру. Цей код:
+✅ Перевіряє, чи є `POSITION`, `DEPARTMENT`, `UNIT`.
+✅ Якщо їх немає, але є `TAB_NO`, підтягує дані з `USERS` і `DEPARTMENT`.
+✅ Формує коректний HTML для рядка.
+
+---
+
+## 🔹 **Готовий фрагмент**
+
+```plsql
+-- Нові змінні для tab_no даних
+l_tab_no VARCHAR2(50);
+l_user_pos VARCHAR2(255);
+l_user_dep VARCHAR2(255);
+
+-- FETCH confirm_list додати l_tab_no (якщо C008 — підставте у FETCH)
+FETCH confirm_list INTO 
+  l_list_id,
+  l_list_position,
+  l_list_department,
+  l_list_unit,
+  l_sg_history_id,
+  l_sg_lastname,
+  l_sg_firstname,
+  l_sg_fth, -- тут може бути tab_no
+  l_sg_posada,
+  l_sg_department,
+  l_sg_date,
+  l_tab_no; -- додайте C008 сюди!
+
+EXIT WHEN confirm_list%NOTFOUND;
+
+-- Обчислення l_dep_unit
+IF l_list_department IS NOT NULL AND l_list_unit IS NOT NULL THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || '/' || l_list_unit || ')</span>';
+ELSIF l_list_department IS NOT NULL THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || ')</span>';
+ELSIF l_list_unit IS NOT NULL THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_unit || ')</span>';
+ELSE
+    l_dep_unit := '';
+END IF;
+
+-- Якщо немає даних по position / dep / unit — пробуємо знайти по tab_no
+IF l_list_position IS NULL AND l_list_department IS NULL AND l_list_unit IS NULL AND l_tab_no IS NOT NULL THEN
+    BEGIN
+        SELECT u.POSITION_NAME, d.DEPARTMENT_NAME
+        INTO l_user_pos, l_user_dep
+        FROM USERS u
+        LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+        WHERE u.TAB_NO = l_tab_no;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            l_user_pos := 'Невідома посада';
+            l_user_dep := 'Невідомий відділ';
+    END;
+END IF;
+
+-- Формування HTML для рядка
+IF l_sg_history_id IS NOT NULL THEN
+  -- Підписаний
+  HTP.P('<li data-cl-order="' || l_order_counter || '" data-sq-ord="' || l_list_id || '" class="confirm-list-li__not-active">');
+  HTP.P('<span class="number"></span><span class="pos-info">');
+  
+  IF l_list_position IS NOT NULL OR l_list_department IS NOT NULL OR l_list_unit IS NOT NULL THEN
+    HTP.P('<span class="l-list-position">' || NVL(l_list_position, '') || '</span>' || NVL(l_dep_unit, ''));
+  ELSE
+    HTP.P('<span class="l-list-position">' || l_user_pos || '</span><span class="l-dep-unit">(' || l_user_dep || ')</span>');
+  END IF;
+
+  HTP.P('</span>');
+  HTP.P('<span class="list-signer-info">');
+  HTP.P('<span class="list-signer-info_pib"><strong>Підписав: </strong>' || l_sg_lastname || ' ' || l_sg_firstname || ' ' || l_sg_fth || '</span>');
+  HTP.P('<span class="list-signer-info_pos">' || l_sg_posada || ' ' || l_sg_department || '</span>');
+  HTP.P('<span class="list-signer-info_pos">' || l_sg_date || '</span>');
+  HTP.P('</span>');
+  HTP.P('</li>');
+ELSE
+  -- Не підписаний
+  HTP.P('<li data-cl-order="' || l_order_counter || '" data-sq-ord="' || l_list_id || '" class="confirm-list-li">');
+  HTP.P('<span class="number"></span><span class="pos-info">');
+
+  IF l_list_position IS NOT NULL OR l_list_department IS NOT NULL OR l_list_unit IS NOT NULL THEN
+    HTP.P('<span class="l-list-position">' || NVL(l_list_position, '') || '</span>' || NVL(l_dep_unit, ''));
+  ELSE
+    HTP.P('<span class="l-list-position">' || l_user_pos || '</span><span class="l-dep-unit">(' || l_user_dep || ')</span>');
+  END IF;
+
+  HTP.P('</span>');
+  HTP.P('<span class="confirm-list-buttons">');
+  HTP.P('<button class="confirm-list-button-up"></button>');
+  HTP.P('<button class="confirm-list-button-down"></button>');
+  HTP.P('<button data-list-id="' || l_list_id || '" data-step="' || l_substage_id || '" data-coll-name="ADD_PERMIT_' || l_stage_id || '_' || l_substage_id || '" class="confirm-list-remove-button"></button>');
+  HTP.P('</span>');
+  HTP.P('</li>');
+END IF;
+```
+
+---
+
+## 🚀 **Що важливо**
+
+✅ Обов’язково у вашому FETCH треба додати `C008` у змінну `l_tab_no`.
+✅ Перевірте наявність індексу на `USERS.TAB_NO`.
+✅ Якщо потрібно — можна кешувати результат запиту, якщо у циклі багато однакових `tab_no`.
+
+---
+
+## 💬 **Якщо хочете — я згенерую повний блок для вставки в ваш існуючий код (з відкриттям курсорів, лупами і т.д.) або намалюю схему!**
+
+Скажіть!

@@ -1,0 +1,107 @@
+💡 **Чудово, завдання повністю зрозуміле!**
+Я перепишу фрагмент так, щоб він:
+✅ Підтягував `C008` (як `l_tab_no`).
+✅ Перевіряв, якщо немає position / department / unit — робив запит в `USERS + DEPARTMENT` по `TAB_NO`.
+✅ Виводив картку з підставленими даними.
+✅ І був чистішим та без дублювання.
+
+---
+
+## 🔹 **Оновлений фрагмент коду**
+
+```plsql
+-- Додаткові змінні
+l_tab_no VARCHAR2(50);
+l_user_pos VARCHAR2(255);
+l_user_dep VARCHAR2(255);
+
+-- Відкриття курсору
+OPEN confirm_list FOR 
+    SELECT SEQ_ID, c001, c002, c003, c009, c010, c011, c008
+    FROM APEX_collections
+    WHERE collection_name = 'CONFIRM_CART_' || l_stage_id || '_' || l_substage_id
+      AND c004 = l_substage_id
+    ORDER BY TO_NUMBER(c006);
+
+LOOP
+    l_order_counter := l_order_counter + 1;
+    FETCH confirm_list INTO 
+        l_list_id, 
+        l_list_position, 
+        l_list_department, 
+        l_list_unit, 
+        l_list_position_id, 
+        l_list_department_id, 
+        l_list_unit_id,
+        l_tab_no;
+    EXIT WHEN confirm_list%NOTFOUND;
+
+    -- Формуємо dep/unit
+    IF l_list_department IS NOT NULL AND l_list_unit IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || '/' || l_list_unit || ')</span>';
+    ELSIF l_list_department IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || ')</span>';
+    ELSIF l_list_unit IS NOT NULL THEN
+        l_dep_unit := '<span class="l-dep-unit">(' || l_list_unit || ')</span>';
+    ELSE
+        l_dep_unit := '';
+    END IF;
+
+    -- Якщо немає позиції / підрозділу / юніту — шукаємо дані по tab_no
+    IF l_list_position IS NULL AND l_list_department IS NULL AND l_list_unit IS NULL AND l_tab_no IS NOT NULL THEN
+        BEGIN
+            SELECT u.POSITION_NAME, d.DEPARTMENT_NAME
+            INTO l_user_pos, l_user_dep
+            FROM USERS u
+            LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+            WHERE u.TAB_NO = l_tab_no;
+
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                l_user_pos := 'Невідома посада';
+                l_user_dep := 'Невідомий відділ';
+        END;
+    ELSE
+        l_user_pos := l_list_position;
+        l_user_dep := l_list_department; -- вже вивели через l_dep_unit
+    END IF;
+
+    -- Формування картки
+    HTP.P('<div class="confirm-cart-item">');
+    HTP.P('<div class="c-cart-signer">');
+
+    IF l_list_position IS NOT NULL OR l_list_department IS NOT NULL OR l_list_unit IS NOT NULL THEN
+        -- стандартний варіант
+        HTP.P('<span class="l-list-position">' || NVL(l_list_position, '') || '</span>' || NVL(l_dep_unit, ''));
+    ELSE
+        -- варіант по tab_no
+        HTP.P('<span class="l-list-position">' || l_user_pos || '</span><span class="l-dep-unit">(' || l_user_dep || ')</span>');
+    END IF;
+
+    HTP.P('</div>');
+
+    -- далі ваш блок для дати, ПІБ, статусу тощо
+    -- ...
+
+    HTP.P('</div>'); -- закриття confirm-cart-item
+
+END LOOP;
+
+CLOSE confirm_list;
+```
+
+---
+
+## 🔑 **Що змінилось**
+
+✅ Підтягування `C008` як `l_tab_no`.
+✅ Єдина точка генерації `l_dep_unit`.
+✅ Якщо немає позиції/підрозділу/юніту, але є `tab_no`, шукаємо у БД і виводимо.
+✅ HTML формується чітко й без повторів.
+
+---
+
+## 🚀 **Підготовити для вас повний блок (з підписами, кнопками, правами)?**
+
+Напишіть — я згенерую **повний код** для вставки без зайвого дублювання + схему роботи.
+Чи вам потрібно саме тільки ця частина? 😊

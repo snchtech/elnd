@@ -1,0 +1,96 @@
+Дуже добре, що ви так детально описали ситуацію — це допоможе точно підібрати рішення! Давайте розберемо:
+
+---
+
+## 🔎 **Проблема**
+
+➡ Зараз у вашому коді:
+
+* Дані формуються для відображення погоджувачів, якщо заповнено `P4_DEPARTMENT`, `P4_POSITION`, `P4_UNIT`.
+* Але якщо заповнено лише `P4_PIB_USER` (група 2, тобто tab\_no у `C008` в колекції) — виводиться пусто, бо відображення побудоване лише на першій логіці.
+
+---
+
+## ✅ **Що потрібно зробити**
+
+1️⃣ Перевіряти **обидва варіанти джерела даних**:
+
+* або `C001` (POSITION)
+* або `C008` (TAB\_NO)
+
+2️⃣ При відсутності `POSITION/DEPARTMENT/UNIT`, але при наявності `TAB_NO`, підставляти дані з `C008` і пов’язаних колонок (`C009`, `C010`, …).
+
+3️⃣ Оптимізувати генерацію HTML, щоб не дублювався код для двох випадків (з POSADA чи з TAB\_NO).
+
+---
+
+## 💡 **Рекомендоване доопрацування циклу FETCH confirm\_list**
+
+### Замість існуючого фрагмента з HTP.P додати логіку:
+
+```plsql
+-- Перевірка варіацій заповненості для department/unit
+IF l_list_department is not null AND l_list_unit is not null THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_department ||'/'|| l_list_unit || ')</span>';
+ELSIF l_list_department is not null AND l_list_unit is null THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || ')</span>';
+ELSIF l_list_department is null AND l_list_unit is not null THEN
+    l_dep_unit := '<span class="l-dep-unit">(' || l_list_unit || ')</span>';
+ELSE
+    l_dep_unit := '';
+END IF;
+
+-- Визначаємо текст для виводу (position або tab_no)
+DECLARE
+  l_list_main_info VARCHAR2(4000);
+BEGIN
+  IF l_list_position IS NOT NULL THEN
+    l_list_main_info := '<span class="l-list-position">' || l_list_position || '</span>' || l_dep_unit;
+  ELSIF l_list_position IS NULL AND l_list_department IS NULL AND l_list_unit IS NULL AND l_sg_history_id IS NULL AND l_sg_lastname IS NULL THEN
+    -- Тут обробка TAB_NO якщо даних по posada/dep/unit немає
+    l_list_main_info := '<span class="l-list-position">[Користувач: ' || l_sg_lastname || ' ' || l_sg_firstname || ' ' || l_sg_fth || ']</span>';
+  ELSE
+    l_list_main_info := '<span class="l-list-position">' || l_list_position || '</span>' || l_dep_unit;
+  END IF;
+  
+  -- Далі стандартний блок для підписаного / не підписаного
+  IF l_sg_history_id IS NOT NULL THEN
+    HTP.P('<li data-cl-order="' || l_order_counter || '" data-sq-ord="' || l_list_id || '" class="confirm-list-li__not-active">');
+    HTP.P('<span class="number"></span>' || '<span class="pos-info">' || l_list_main_info || '</span>');
+    HTP.P('<span class="list-signer-info">');
+    HTP.P('<span class="list-signer-info_pib"><strong>Підписав: </strong>' || l_sg_lastname || ' ' || l_sg_firstname || ' ' || l_sg_fth || '</span>');
+    HTP.P('<span class="list-signer-info_pos">' || l_sg_posada || ' ' || l_sg_department || '</span>');
+    HTP.P('<span class="list-signer-info_pos">' || l_sg_date || '</span>');
+    HTP.P('</span>');
+    HTP.P('</li>');
+  ELSE
+    HTP.P('<li data-cl-order="' || l_order_counter || '" data-sq-ord="' || l_list_id || '" class="confirm-list-li">');
+    HTP.P('<span class="number"></span>' || '<span class="pos-info">' || l_list_main_info || '</span>');
+    HTP.P('<span class="confirm-list-buttons"><button class="confirm-list-button-up"></button><button class="confirm-list-button-down"></button><button data-list-id="' || l_list_id || '" data-step="' || l_substage_id || '" data-coll-name="ADD_PERMIT_' || l_stage_id || '_' || l_substage_id || '" class="confirm-list-remove-button"></button></span>');
+    HTP.P('</li>');
+  END IF;
+END;
+```
+
+---
+
+## ⚡ **Оптимізація**
+
+💡 Основні моменти:
+
+* Формування `l_list_main_info` в окрему змінну, щоб уникнути дублювання коду.
+* Одна логіка для підписаного / непідписаного з підстановкою вже готового тексту.
+* Гнучка перевірка для випадків з `TAB_NO`.
+
+---
+
+## 📝 **Що ще можна оптимізувати**
+
+✅ Замість повторного відкриття/закриття курсорів `confirm_list`, `confirm_substage`, спробуйте винести запити в окремі в’ю або функції для чистоти PL/SQL.
+✅ Генерацію HTP.P можна перенести у власну процедуру, щоб код був коротший.
+
+---
+
+## 🚀 **Хочете, я підготую повний оновлений фрагмент блоку (зі вставкою в ваш код) чи навіть повну процедуру?**
+
+Напишіть! Це можна одразу вставити й протестувати.

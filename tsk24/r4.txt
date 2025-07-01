@@ -1,0 +1,47 @@
+Звісно! Якщо ваші чекбокси — це окремі **item-и** (наприклад, `P4_GROUP1_CHECKBOX`, `P4_GROUP2_CHECKBOX`), тоді код можна переписати ось так:
+
+---
+
+### ✅ **Варіант через перевірку checked**
+
+```javascript
+// Очистити всі поля
+apex.item("P4_DEPARTMENT").setValue("");
+apex.item("P4_POSITION").setValue("");
+apex.item("P4_UNIT").setValue("");
+apex.item("P4_PIB_USER").setValue("");
+
+// Визначаємо вибір
+if ($("#P4_GROUP1_CHECKBOX").is(":checked")) {
+    setRequired("P4_DEPARTMENT", true);
+    setRequired("P4_POSITION", true);
+    setRequired("P4_PIB_USER", false);
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+else if ($("#P4_GROUP2_CHECKBOX").is(":checked")) {
+    setRequired("P4_DEPARTMENT", false);
+    setRequired("P4_POSITION", false);
+    setRequired("P4_PIB_USER", true);
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+```
+
+---
+
+### 🔑 **Пояснення**
+
+* `$("#P4_GROUP1_CHECKBOX").is(":checked")` — перевіряє, чи вибраний чекбокс `GROUP1`.
+* `$("#P4_GROUP2_CHECKBOX").is(":checked")` — перевіряє, чи вибраний чекбокс `GROUP2`.
+
+---
+
+### 💡 **Рекомендація**
+
+✔ Переконайтесь, що вашим чекбоксам в APEX задані **Static ID**:
+
+* `P4_GROUP1_CHECKBOX`
+* `P4_GROUP2_CHECKBOX`
+
+---
+
+⚡ **Хочете — я підготую готовий блок із Dynamic Action, щоб просто вставили?** Скажіть! 🚀

@@ -1,0 +1,115 @@
+Дуже гарно описана логіка! Ось чіткий план дій із готовим прикладом коду для реалізації вашого сценарію в Oracle APEX:
+
+---
+
+## ✅ **Що ми маємо зробити**
+
+1️⃣ При зміні чекбокса:
+
+* Очистити `P4_DEPARTMENT`, `P4_POSITION`, `P4_UNIT`, `P4_PIB_USER`.
+* Змінити обов'язковість через `setRequired`.
+
+2️⃣ При заповненні відповідних полів — активувати кнопку `Додати`.
+
+---
+
+## 🔑 **Готовий код JavaScript**
+
+(наприклад, додайте у Dynamic Action → Execute JavaScript Code)
+
+```javascript
+// Очистити всі поля
+apex.item("P4_DEPARTMENT").setValue("");
+apex.item("P4_POSITION").setValue("");
+apex.item("P4_UNIT").setValue("");
+apex.item("P4_PIB_USER").setValue("");
+
+// Залежно від обраного чекбокса
+if ($v("P4_CHECKBOX_GROUP") === "GROUP1") {
+    setRequired("P4_DEPARTMENT", true);
+    setRequired("P4_POSITION", true);
+    setRequired("P4_PIB_USER", false);
+    // Початково заблокуємо кнопку
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+else if ($v("P4_CHECKBOX_GROUP") === "GROUP2") {
+    setRequired("P4_DEPARTMENT", false);
+    setRequired("P4_POSITION", false);
+    setRequired("P4_PIB_USER", true);
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+```
+
+👉 Замініть `P4_CHECKBOX_GROUP` на ваш реальний item checkbox group (або окремо обробіть по кожному чекбоксу, якщо це окремі items).
+
+---
+
+## 🟣 **Dynamic Actions для вводу**
+
+### GROUP1 (DEPARTMENT + POSITION)
+
+* Dynamic Action on `P4_DEPARTMENT` + `P4_POSITION`
+* Condition: JavaScript expression
+
+```javascript
+return $v("P4_DEPARTMENT") !== "" && $v("P4_POSITION") !== "";
+```
+
+* True Action: Enable button
+
+```javascript
+$("#ADD_EXECUTOR_BUTTON").prop("disabled", false);
+```
+
+* False Action: Disable button
+
+```javascript
+$("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+```
+
+---
+
+### GROUP2 (PIB\_USER)
+
+* Dynamic Action on `P4_PIB_USER`
+* Condition: JavaScript expression
+
+```javascript
+return $v("P4_PIB_USER") !== "";
+```
+
+* True Action: Enable button
+
+```javascript
+$("#ADD_EXECUTOR_BUTTON").prop("disabled", false);
+```
+
+* False Action: Disable button
+
+```javascript
+$("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+```
+
+---
+
+## 💡 **Рекомендації**
+
+* Якщо кнопка має статичний ID, наприклад `ADD_EXECUTOR_BUTTON` — чудово.
+* Якщо ні, задайте Static ID кнопки у властивостях і використовуйте його в коді.
+
+---
+
+## ⚡ **Підсумок**
+
+🔹 Ваш сценарій розбитий на дві частини:
+
+* Очищення + зміна обов’язковості при виборі чекбокса.
+* Перевірка полів для активації кнопки.
+
+🔹 Усе це можна зробити в **одному Dynamic Action** на зміну чекбокса + окремі Dynamic Actions на зміну полів.
+
+---
+
+💬 **Якщо хочете, я складу для вас повну інструкцію зі скрінами налаштувань Dynamic Action або підготую PL/SQL/JS код для вставки — скажіть!**
+
+Чи підготувати готовий блок? 🚀

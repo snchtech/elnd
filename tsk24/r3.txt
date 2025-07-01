@@ -1,0 +1,125 @@
+Чудово! Давайте я покажу вам **покроково**, як реалізувати цю логіку у **Oracle APEX**, використовуючи **Dynamic Actions (DA)**.
+
+---
+
+## ⚡ **1️⃣ Події та дії для чекбоксів (вибір групи)**
+
+### ➡ **Dynamic Action: Зміна чекбокса**
+
+* **Event:** Change
+* **Selection Type:** Item(s)
+* **Item:** ваш чекбокс-група або окремі чекбокси (наприклад, `P4_CHECKBOX_GROUP`, `P4_GROUP1_CHECKBOX`, `P4_GROUP2_CHECKBOX`)
+
+---
+
+### ➡ **Дії Dynamic Action**
+
+#### 1️⃣ **Execute JavaScript Code**
+
+```javascript
+// Очистити поля
+apex.item("P4_DEPARTMENT").setValue("");
+apex.item("P4_POSITION").setValue("");
+apex.item("P4_UNIT").setValue("");
+apex.item("P4_PIB_USER").setValue("");
+
+// Визначаємо вибір
+if ($v("P4_CHECKBOX_GROUP") === "GROUP1") {
+    setRequired("P4_DEPARTMENT", true);
+    setRequired("P4_POSITION", true);
+    setRequired("P4_PIB_USER", false);
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+else if ($v("P4_CHECKBOX_GROUP") === "GROUP2") {
+    setRequired("P4_DEPARTMENT", false);
+    setRequired("P4_POSITION", false);
+    setRequired("P4_PIB_USER", true);
+    $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+```
+
+✅ **Примітка:** замініть `P4_CHECKBOX_GROUP` на ваш item або обробіть кожен чекбокс окремо.
+
+---
+
+## ⚡ **2️⃣ Події для полів (для активації кнопки)**
+
+### ➡ **Dynamic Action: Зміна DEPARTMENT / POSITION**
+
+* **Event:** Change
+* **Selection Type:** Item(s)
+* **Item:** `P4_DEPARTMENT`, `P4_POSITION`
+* **Condition:** JavaScript Expression
+
+```javascript
+return ($v("P4_CHECKBOX_GROUP") === "GROUP1");
+```
+
+* **True Action:** Execute JavaScript Code
+
+```javascript
+if ($v("P4_DEPARTMENT") !== "" && $v("P4_POSITION") !== "") {
+  $("#ADD_EXECUTOR_BUTTON").prop("disabled", false);
+} else {
+  $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+```
+
+---
+
+### ➡ **Dynamic Action: Зміна PIB\_USER**
+
+* **Event:** Change
+* **Selection Type:** Item
+* **Item:** `P4_PIB_USER`
+* **Condition:** JavaScript Expression
+
+```javascript
+return ($v("P4_CHECKBOX_GROUP") === "GROUP2");
+```
+
+* **True Action:** Execute JavaScript Code
+
+```javascript
+if ($v("P4_PIB_USER") !== "") {
+  $("#ADD_EXECUTOR_BUTTON").prop("disabled", false);
+} else {
+  $("#ADD_EXECUTOR_BUTTON").prop("disabled", true);
+}
+```
+
+---
+
+## 💡 **Як додати в APEX**
+
+1️⃣ В APEX відкрийте сторінку → Dynamic Actions → Створіть новий DA для кожної події:
+
+* **1 DA** на `Change` для чекбокса.
+* **1 DA** на `Change` для `P4_DEPARTMENT`, `P4_POSITION`.
+* **1 DA** на `Change` для `P4_PIB_USER`.
+
+2️⃣ Додайте потрібні дії:
+
+* `Execute JavaScript Code`
+* Використовуйте код, як вказано вище.
+
+3️⃣ Задайте **Static ID** кнопці додати, наприклад:
+`ADD_EXECUTOR_BUTTON`
+
+---
+
+## 📝 **Підсумкова структура DA**
+
+| Event  | Item(s)                       | Action                                                      |
+| ------ | ----------------------------- | ----------------------------------------------------------- |
+| Change | P4\_CHECKBOX\_GROUP           | Execute JavaScript (очищення, setRequired, disable кнопки)  |
+| Change | P4\_DEPARTMENT + P4\_POSITION | Execute JavaScript (перевірка полів, enable/disable кнопки) |
+| Change | P4\_PIB\_USER                 | Execute JavaScript (перевірка поля, enable/disable кнопки)  |
+
+---
+
+## 🚀 **Хочете — я намалюю схему DA або підготую JSON для імпорту в APEX?**
+
+Дайте знати! Це можна одразу вставити у ваш додаток.
+
+Хочете JSON чи схему? 😊

@@ -1,0 +1,139 @@
+🔎 **Дякую за уточнений код! Давайте його оптимізуємо й перепишемо так, щоб уникнути помилок, зайвих дублювань і затримок, а також щоб створення й видалення колекцій працювало правильно в обох гілках.**
+
+---
+
+## ⚡ **ОПТИМІЗОВАНИЙ ПЕРЕПИСАНИЙ КОД**
+
+```plsql
+DECLARE
+  l_query VARCHAR2(4000);
+  confirm_stage SYS_REFCURSOR;
+  confirm_substage SYS_REFCURSOR;
+  l_source_id NUMBER;
+  l_app_id NUMBER;
+  l_stage_id NUMBER;
+  l_substage_id NUMBER;
+  l_sr_count NUMBER;
+  l_prev_source_id NUMBER;
+  l_check_refresh NUMBER;
+  l_collection_name VARCHAR2(255);
+BEGIN
+  l_source_id := v('P2_SOURCE_ID');
+  l_app_id := v('P2_APP_ID');
+  l_prev_source_id := v('P2_PREV_SOURCE_ID');
+  l_check_refresh := v('P2_CHECK_REFRESH');
+
+  -- Лог для дебагу
+  apex_debug_message.log_message(' -- >chk_refresh: ' || l_check_refresh);
+
+  -- Підрахунок підписних прав
+  SELECT COUNT(sa.ID)
+  INTO l_sr_count
+  FROM ASICS.SIGNATURERIGHTS@TO_ASICS10 sa
+  WHERE sa.SOURCE_ID = l_source_id;
+
+  -- Обхід stage
+  OPEN confirm_stage FOR 
+    SELECT t.ID
+    FROM ASICS.DICT_APP_CONFIRM_LIST_V@TO_ASICS10 t
+    WHERE t.PAGE_LIST_ID = l_app_id AND t.PARENT_STAGE_ID IS NULL
+    ORDER BY t.STAGE;
+
+  LOOP
+    FETCH confirm_stage INTO l_stage_id;
+    EXIT WHEN confirm_stage%NOTFOUND;
+
+    OPEN confirm_substage FOR 
+      SELECT sbt.ID
+      FROM ASICS.DICT_APP_CONFIRM_LIST_V@TO_ASICS10 sbt
+      WHERE sbt.PAGE_LIST_ID = l_app_id AND sbt.PARENT_STAGE_ID = l_stage_id
+      ORDER BY sbt.STAGE;
+
+    LOOP
+      FETCH confirm_substage INTO l_substage_id;
+      EXIT WHEN confirm_substage%NOTFOUND;
+
+      -- Формуємо ім'я колекції
+      l_collection_name := 'ADD_PERMIT_' || l_stage_id || '_' || l_substage_id;
+
+      -- Головна умова створення маршруту
+      IF l_prev_source_id != l_source_id AND l_check_refresh = 1 THEN
+        APEX_UTIL.SET_SESSION_STATE('P2_CHECK_LIST_CHANGE', 0);
+
+        IF l_sr_count > 0 THEN
+          -- Завжди спочатку видаляємо колекцію
+          IF APEX_COLLECTION.COLLECTION_EXISTS(l_collection_name) THEN
+            APEX_COLLECTION.DELETE_COLLECTION(l_collection_name);
+          END IF;
+
+          -- Формуємо запит відповідно до умов (можна параметризувати, якщо відмінності значні)
+          IF <умова для першого запиту> THEN
+            l_query := 'SELECT p.short_name, dp.short_name, un.name, sr.STAGES_ID, NULL, sr.SORT_ORDER, sr.SOURCE_ID, sr.USER_TABNO, sr.POSITION_ID
+                        FROM ASICS.SIGNATURERIGHTS@TO_ASICS10 sr
+                        LEFT JOIN ASICS.Dict_App_Confirm_List_v@TO_ASICS10 d ON sr.Stages_Id = d.id
+                        LEFT JOIN ASICS.POSADA_FOR_CONFIRMLIST_V@TO_ASICS10 p ON sr.Position_Id = p.kod
+                        LEFT JOIN ASICS.DEPART_CONFIRMLIST_V@TO_ASICS10 dp ON sr.department_id = dp.id
+                        LEFT JOIN ASICS.UNIT_FOR_CONFIRMLIST_V@TO_ASICS10 un ON sr.unit_id = un.id
+                        LEFT JOIN ASICS.FULL_INFO_SIGNATURER_V@TO_ASICS10 ht ON sr.ID = ht.ID_RIGHT AND ht.ACTUAL_ID = 1
+                        WHERE sr.SOURCE_ID = ' || l_source_id || ' AND d.parent_stage_id IS NOT NULL AND sr.STAGES_ID = ' || l_substage_id || '
+                        ORDER BY d.id, sr.Stages_Id, sr.sort_order';
+          ELSE
+            l_query := 'SELECT p.short_name, dp.short_name, un.name, sr.STAGES_ID, NULL, sr.SORT_ORDER, sr.SOURCE_ID, sr.USER_TABNO, sr.POSITION
+                        FROM ASICS.SIGNATURERIGHTS@TO_ASICS10 sr
+                        LEFT JOIN ASICS.Dict_App_Confirm_List_v@TO_ASICS10 d ON sr.Stages_Id = d.id
+                        LEFT JOIN ASICS.POSADA_FOR_CONFIRMLIST_V@TO_ASICS10 p ON sr.Position_Id = p.kod
+                        LEFT JOIN ASICS.DEPART_CONFIRMLIST_V@TO_ASICS10 dp ON sr.department_id = dp.id
+                        LEFT JOIN ASICS.UNIT_FOR_CONFIRMLIST_V@TO_ASICS10 un ON sr.unit_id = un.id
+                        LEFT JOIN ASICS.FULL_INFO_SIGNATURER_V@TO_ASICS10 ht ON sr.ID = ht.ID_RIGHT AND ht.ACTUAL_ID = 1
+                        WHERE sr.SOURCE_ID = ' || l_source_id || ' AND d.parent_stage_id IS NOT NULL AND sr.STAGES_ID = ' || l_substage_id || '
+                        ORDER BY d.id, sr.Stages_Id, sr.sort_order';
+          END IF;
+
+          -- Створюємо колекцію
+          APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY (
+            p_collection_name => l_collection_name,
+            p_query => l_query,
+            p_generate_md5 => 'YES'
+          );
+
+        ELSE
+          -- Якщо маршрут не потрібен — видалити існуючу колекцію
+          IF APEX_COLLECTION.COLLECTION_EXISTS(l_collection_name) THEN
+            APEX_COLLECTION.DELETE_COLLECTION(l_collection_name);
+          END IF;
+        END IF;
+
+        -- Оновлюємо попередній SOURCE_ID
+        APEX_UTIL.SET_SESSION_STATE('P2_PREV_SOURCE_ID', l_source_id);
+      END IF;
+
+    END LOOP;
+    CLOSE confirm_substage;
+  END LOOP;
+  CLOSE confirm_stage;
+
+  -- Скидаємо флаг оновлення
+  APEX_UTIL.SET_SESSION_STATE('P2_CHECK_REFRESH', 0);
+
+END;
+```
+
+---
+
+## 🔑 **Що змінилось**
+
+✅ Видалення колекції перед створенням **завжди** в обох гілках.
+✅ Запити об’єднані в логічну структуру — легко контролювати відмінності (ви можете вставити свою умову для вибору запиту).
+✅ Виключено дублювання `OPEN confirm_stage`.
+✅ Виключено ризик `ORA-20104` і `ORA-20102`.
+✅ Код компактніший і легший для підтримки.
+
+---
+
+## 🚀 **Рекомендація**
+
+💡 Щоб ще більше полегшити супровід, винесіть запит в окрему функцію PL/SQL, яка повертає текст запиту залежно від ваших умов.
+
+---
+
+💬 **Хочете, я додам конкретну вашу умову вибору запиту (яку ви планували для IF)?** Напишіть її — я додам у готовий код! 🚀

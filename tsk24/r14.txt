@@ -1,0 +1,98 @@
+💡 **Чудово! Якщо вам потрібна реалізація тільки для `P4_TASK_MODE = 0` (тобто без роботи з шаблонами), ось повністю адаптоване рішення.**
+
+---
+
+## 🚀 **1️⃣ Налаштування P4\_SUBTASK\_EXECUTOR**
+
+### ➡ Властивості item:
+
+* **Type:** Popup LOV
+* **Visible:** No (прихований на старті)
+* **Static ID:** `P4_SUBTASK_EXECUTOR`
+* **(Опціонально)** CSS Class: `subtask-executor-hidden`
+
+---
+
+## 🚀 **2️⃣ LOV для P4\_SUBTASK\_EXECUTOR**
+
+### ➡ SQL Query LOV:
+
+```sql
+SELECT subtask_content || ' (' || id || ')' AS display_value,
+       id AS return_value
+FROM TASK_SUBTASKS
+WHERE TASK_ID = :P4_TASK_ID
+ORDER BY subtask_content
+```
+
+✅ Повертає `ID` підзавдання, показує зміст + ID у списку.
+
+---
+
+## 🚀 **3️⃣ Dynamic Action для кнопки**
+
+### ➡ Створюємо DA:
+
+* **Event:** Click
+* **Selection Type:** jQuery Selector
+* **jQuery Selector:** `.add-confirm-person`
+
+---
+
+### ➡ Дія: Execute JavaScript Code
+
+```javascript
+var stage = $(this.triggeringElement).data('current-stage');
+
+if (stage == 4) {
+  $('#P4_SUBTASK_EXECUTOR').closest('.t-Form-fieldContainer').show();
+  apex.item('P4_SUBTASK_EXECUTOR').refresh(); // оновити LOV
+} else {
+  $('#P4_SUBTASK_EXECUTOR').closest('.t-Form-fieldContainer').hide();
+}
+```
+
+✅ Тут ми перевіряємо stage і показуємо/ховаємо поле.
+
+---
+
+## 🚀 **4️⃣ Dynamic Action на Page Load (приховати на старті)**
+
+* **Event:** Page Load
+* **Action:** Execute JavaScript Code
+
+```javascript
+$('#P4_SUBTASK_EXECUTOR').closest('.t-Form-fieldContainer').hide();
+```
+
+---
+
+## ⚡ **Схема роботи**
+
+1️⃣ Кнопка:
+
+```html
+<button data-current-stage="4" data-current-substage="..." class="add-confirm-person"></button>
+```
+
+2️⃣ При кліку:
+
+* Якщо stage = 4 → поле показується і оновлюється LOV.
+* В іншому випадку залишається прихованим.
+
+---
+
+## ✅ **Підсумковий SQL для LOV**
+
+```sql
+SELECT subtask_content || ' (' || id || ')', id
+FROM TASK_SUBTASKS
+WHERE TASK_ID = :P4_TASK_ID
+ORDER BY subtask_content
+```
+
+---
+
+## 💬 **Хочете, щоб я підготував JSON для імпорту DA або код готового процесу?**
+
+Напишіть — я підготую! 🚀

@@ -1,0 +1,137 @@
+💡 **Чудове завдання! Я допоможу розкласти його по кроках і дам готові фрагменти для реалізації. Ми поєднаємо динаміку (JS + DA) і налаштування APEX.**
+
+---
+
+## 🚀 **1️⃣ Налаштування P4\_SUBTASK\_EXECUTOR**
+
+### ➡ Властивості item:
+
+* **Type:** Popup LOV
+* **Default Value:** NULL
+* **Visible:** No (прихований на старті)
+* **CSS Classes:** `subtask-executor-hidden` (або нічого, за бажанням)
+
+---
+
+## 🚀 **2️⃣ LOV для P4\_SUBTASK\_EXECUTOR**
+
+### ➡ SQL Query LOV:
+
+```sql
+SELECT
+  CASE
+    WHEN :P4_TASK_MODE = 0 THEN
+      (SELECT subtask_content || ' (' || id || ')' FROM TASK_SUBTASKS WHERE TASK_ID = :P4_TASK_ID)
+    WHEN :P4_TASK_MODE = 1 THEN
+      (SELECT subtask_content || ' (' || id || ')' FROM TASK_SUBTASK_TEMPLATES WHERE TEMPLATE_ID = :P4_TASK_ID)
+  END AS display_value,
+  CASE
+    WHEN :P4_TASK_MODE = 0 THEN
+      (SELECT id FROM TASK_SUBTASKS WHERE TASK_ID = :P4_TASK_ID)
+    WHEN :P4_TASK_MODE = 1 THEN
+      (SELECT id FROM TASK_SUBTASK_TEMPLATES WHERE TEMPLATE_ID = :P4_TASK_ID)
+  END AS return_value
+FROM dual
+```
+
+✅ **Рекомендація:** кращий варіант — створити два LOV (один на TASK\_SUBTASKS, другий на TASK\_SUBTASK\_TEMPLATES) і перемикати їх через DA або використовувати вивід з UNION:
+
+```sql
+SELECT subtask_content || ' (' || id || ')', id
+FROM TASK_SUBTASKS
+WHERE TASK_ID = :P4_TASK_ID
+AND :P4_TASK_MODE = 0
+UNION ALL
+SELECT subtask_content || ' (' || id || ')', id
+FROM TASK_SUBTASK_TEMPLATES
+WHERE TEMPLATE_ID = :P4_TASK_ID
+AND :P4_TASK_MODE = 1
+```
+
+---
+
+## 🚀 **3️⃣ JS/Dynamic Action для показу P4\_SUBTASK\_EXECUTOR**
+
+### ➡ Створюємо **Dynamic Action**
+
+* **Event:** Click
+* **Selection Type:** jQuery Selector
+* **jQuery Selector:** `.add-confirm-person`
+
+---
+
+### ➡ Дії в DA:
+
+#### 🔹 True Action: Execute JavaScript Code
+
+```javascript
+var stage = $(this.triggeringElement).data('current-stage');
+
+if (stage == 4) {
+  $('#P4_SUBTASK_EXECUTOR_CONTAINER').show(); // контейнер item
+  // або, якщо без контейнера:
+  $('#P4_SUBTASK_EXECUTOR').closest('.t-Form-fieldContainer').show();
+} else {
+  $('#P4_SUBTASK_EXECUTOR_CONTAINER').hide();
+}
+```
+
+✅ **Примітка:** у APEX можна задати Static ID для wrapper елемента або використовувати `.t-Form-fieldContainer`.
+
+#### 🔹 Додатково можна оновити LOV (якщо потрібна актуалізація)
+
+```javascript
+apex.item('P4_SUBTASK_EXECUTOR').refresh();
+```
+
+---
+
+## 🚀 **4️⃣ На старті сторінки приховати**
+
+✅ Створіть DA на **Page Load**:
+
+```javascript
+$('#P4_SUBTASK_EXECUTOR').closest('.t-Form-fieldContainer').hide();
+```
+
+або:
+
+```javascript
+$('#P4_SUBTASK_EXECUTOR_CONTAINER').hide();
+```
+
+---
+
+## ⚡ **Схема роботи**
+
+1️⃣ Кнопка додається:
+
+```html
+<button data-current-stage="4" ... class="add-confirm-person"></button>
+```
+
+2️⃣ Клік по кнопці → DA перевіряє stage і показує LOV.
+3️⃣ LOV будується по UNION (або окремих LOV).
+4️⃣ Після вибору зберігається ID підзавдання/шаблону.
+
+---
+
+## ✅ **Приклад SQL для LOV (готовий для вставки)**
+
+```sql
+SELECT subtask_content || ' (' || id || ')' AS display_value, id AS return_value
+FROM TASK_SUBTASKS
+WHERE TASK_ID = :P4_TASK_ID
+AND :P4_TASK_MODE = 0
+UNION ALL
+SELECT subtask_content || ' (' || id || ')', id
+FROM TASK_SUBTASK_TEMPLATES
+WHERE TEMPLATE_ID = :P4_TASK_ID
+AND :P4_TASK_MODE = 1
+```
+
+---
+
+## 💬 **Хочете готовий JSON для імпорту DA чи код для вставки в DA?**
+
+Напишіть — я підготую повністю готове рішення! 🚀

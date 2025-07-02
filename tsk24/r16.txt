@@ -1,0 +1,137 @@
+💡 **Чудове завдання — цілком реально зробити в Oracle APEX, і при цьому ефективно! Давай розпишемо повний підхід і дам готовий SQL + приклад HTML/JS для інтерактивності.**
+
+---
+
+## 🚀 **План реалізації**
+
+✅ Все можна зробити **одним SQL-запитом**, який одразу дасть список підзавдань + статус (підписано/не підписано).
+✅ Цей запит можна використати як джерело для:
+
+* **Classic Report**
+* **Region Display Selector**
+* **PL/SQL Dynamic Content**
+
+✅ Вивід буде в HTML: квадратики (div або span з CSS), які будуть мати класи на основі статусу.
+
+---
+
+## ⚡ **Запит**
+
+```sql
+SELECT
+  sr.SUBTASK_ID,
+  MAX(CASE WHEN sh.ID IS NOT NULL THEN 1 ELSE 0 END) AS IS_SIGNED
+FROM
+  TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+LEFT JOIN
+  TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 sh
+  ON sr.ID = sh.SIGNRIGHT_ID
+WHERE
+  sr.TASK_ID = :P_TASK_ID
+  AND sr.SUBTASK_ID IS NOT NULL
+GROUP BY
+  sr.SUBTASK_ID
+ORDER BY
+  sr.SUBTASK_ID
+```
+
+✅ Тут:
+
+* `IS_SIGNED = 1` → підзавдання підписано
+* `IS_SIGNED = 0` → підзавдання не підписано
+
+---
+
+## 🚀 **PL/SQL Dynamic Content приклад**
+
+Створіть регіон типу **PL/SQL Dynamic Content**, код:
+
+```plsql
+DECLARE
+  CURSOR c_subtasks IS
+    SELECT
+      sr.SUBTASK_ID,
+      MAX(CASE WHEN sh.ID IS NOT NULL THEN 1 ELSE 0 END) AS IS_SIGNED
+    FROM
+      TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+    LEFT JOIN
+      TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 sh
+      ON sr.ID = sh.SIGNRIGHT_ID
+    WHERE
+      sr.TASK_ID = :P_TASK_ID
+      AND sr.SUBTASK_ID IS NOT NULL
+    GROUP BY
+      sr.SUBTASK_ID
+    ORDER BY
+      sr.SUBTASK_ID;
+  
+  l_html CLOB := '';
+BEGIN
+  FOR rec IN c_subtasks LOOP
+    IF rec.IS_SIGNED = 1 THEN
+      l_html := l_html || '<span class="subtask-box filled"></span>';
+    ELSE
+      l_html := l_html || '<span class="subtask-box empty"></span>';
+    END IF;
+  END LOOP;
+
+  -- Вивід
+  HTP.P('<div class="subtask-progress">' || l_html || '</div>');
+END;
+```
+
+---
+
+## 🚀 **CSS (додайте на сторінку / до теми)**
+
+```css
+.subtask-progress {
+  display: flex;
+  gap: 4px;
+}
+
+.subtask-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #555;
+  display: inline-block;
+}
+
+.subtask-box.filled {
+  background-color: #28a745; /* зелений або колір за вашим вибором */
+}
+
+.subtask-box.empty {
+  background-color: transparent;
+}
+```
+
+---
+
+## ⚡ **Логіка показу**
+
+✅ Цей блок відображається **тільки якщо `P_TASK_MODE = 0`** (додайте це у умову PL/SQL Dynamic Content):
+
+```plsql
+IF :P_TASK_MODE = 0 THEN
+  -- генеруємо квадратики
+ELSE
+  -- нічого не виводимо
+END IF;
+```
+
+---
+
+## 📝 **Підсумок**
+
+👉 Ви отримаєте компактний **progress bar**, який:
+
+* будується одним запитом;
+* показує статус кожного підзавдання;
+* не вимагає окремих запитів під час рендеру.
+
+---
+
+## 💬 **Хочете готовий шаблон регіону (для імпорту в APEX) або приклад з інтеграцією в конкретну тему APEX?**
+
+Напишіть — я згенерую! 🚀

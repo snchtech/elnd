@@ -1,0 +1,134 @@
+💡 **Чудово пояснено завдання! Я підготував для вас чіткий план реалізації + оптимізований фрагмент PL/SQL-коду, щоб усе працювало коректно.**
+
+---
+
+## 🚀 **Що треба зробити**
+
+✅ В курсор `confirm_list` додати:
+
+* `l_subtask_id`
+* `l_task_mode`
+
+✅ При побудові HTML:
+
+* Якщо `stage = 4` → додаємо блок з підзавданням (якщо воно є).
+
+✅ Отримати текст підзавдання:
+
+* Якщо `l_task_mode = 0` → з `TASK_SUBTASKS`
+* Якщо `l_task_mode = 1` → з `TASK_SUBTASK_TEMPLATES`
+
+---
+
+## ⚡ **Переписаний фрагмент для вставки**
+
+```plsql
+-- FETCH з додатковими полями
+FETCH confirm_list INTO 
+  l_list_id, 
+  l_list_position, 
+  l_list_department, 
+  l_list_unit,
+  l_sg_history_id, 
+  l_sg_lastname, 
+  l_sg_firstname, 
+  l_sg_fth, 
+  l_sg_posada, 
+  l_sg_department, 
+  l_sg_date,
+  l_subtask_id,     -- додайте у SELECT курсора
+  l_task_mode;      -- додайте у SELECT курсора
+
+EXIT WHEN confirm_list%NOTFOUND;
+
+-- Формування dep/unit
+IF l_list_department IS NOT NULL AND l_list_unit IS NOT NULL THEN
+  l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || '/' || l_list_unit || ')</span>';
+ELSIF l_list_department IS NOT NULL THEN
+  l_dep_unit := '<span class="l-dep-unit">(' || l_list_department || ')</span>';
+ELSIF l_list_unit IS NOT NULL THEN
+  l_dep_unit := '<span class="l-dep-unit">(' || l_list_unit || ')</span>';
+ELSE
+  l_dep_unit := '';
+END IF;
+
+-- Якщо немає position/department/unit, але є tab_no — тягнемо з USERS
+IF l_list_position IS NULL AND l_list_department IS NULL AND l_list_unit IS NULL AND l_tab_no IS NOT NULL THEN
+  BEGIN
+    SELECT u.POSITION_NAME, d.DEPARTMENT_NAME
+    INTO l_user_pos, l_user_dep
+    FROM USERS u
+    LEFT JOIN DEPARTMENT d ON d.ID = u.DEPARTMENT_ID
+    WHERE u.TAB_NO = l_tab_no;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      l_user_pos := 'Невідома посада';
+      l_user_dep := 'Невідомий відділ';
+  END;
+ELSE
+  l_user_pos := l_list_position;
+  l_user_dep := NULL; -- вже вивели через l_dep_unit
+END IF;
+
+-- Готуємо текст підзавдання (якщо потрібно)
+DECLARE
+  l_subtask_content VARCHAR2(4000);
+BEGIN
+  l_subtask_content := '';
+  IF l_current_stage = 4 AND l_subtask_id IS NOT NULL THEN
+    IF l_task_mode = 0 THEN
+      SELECT subtask_content INTO l_subtask_content 
+      FROM TASK_SUBTASKS 
+      WHERE id = l_subtask_id;
+    ELSIF l_task_mode = 1 THEN
+      SELECT subtask_content INTO l_subtask_content 
+      FROM TASK_SUBTASK_TEMPLATES 
+      WHERE id = l_subtask_id;
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    l_subtask_content := '';
+END;
+
+-- Генерація HTML
+HTP.P('<div class="confirm-cart-item">');
+HTP.P('<div class="c-cart-signer">');
+
+IF l_list_position IS NOT NULL OR l_list_department IS NOT NULL OR l_list_unit IS NOT NULL THEN
+  HTP.P('<span class="l-list-position">' || NVL(l_list_position, '') || '</span>' || NVL(l_dep_unit, ''));
+ELSE
+  HTP.P('<span class="l-list-position">' || l_user_pos || '</span><span class="l-dep-unit">(' || l_user_dep || ')</span>');
+END IF;
+
+-- Додаємо блок підзавдання якщо потрібно
+IF l_current_stage = 4 AND l_subtask_content IS NOT NULL THEN
+  HTP.P('<span class="sbtsk-ttl">До виконання:</span> <span class="sbtsk-txt">' || l_subtask_content || '</span>');
+END IF;
+
+HTP.P('</div>'); -- закриття c-cart-signer
+```
+
+---
+
+## ✅ **Що змінилось**
+
+✅ Додано `l_subtask_id`, `l_task_mode` у курсор + FETCH.
+✅ Реалізовано окремий блок для підзавдання (якщо stage = 4 і є підзавдання).
+✅ Блок підзавдання безпечний (винятки оброблені).
+✅ HTML чітко додає рядок підзавдання лише там, де потрібно.
+
+---
+
+## 💡 **Рекомендація**
+
+📌 Не забудьте:
+
+* У курсорі `confirm_list` додати відповідно `c`-поля з APEX\_COLLECTION у `FETCH`.
+* Перевірити, що дані про підзавдання є в колекції або доповнити їх при формуванні колекції.
+
+---
+
+## 💬 **Хочете, я згенерую повний блок із SELECT для курсора й готовим HTML для вставки?**
+
+Напишіть — підготую для копіювання у ваш код! 🚀

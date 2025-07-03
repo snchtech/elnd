@@ -1,0 +1,135 @@
+💡 **Чудово! Я підготував для тебе чистий, оптимізований код із побудовою колекції через попередню вибірку з `TASKS` або `TASK_TEMPLATES`. Це рішення:**
+✅ Легко масштабується.
+✅ Гнучко підлаштовується під `TASK_MODE`.
+✅ Зручно для подальшого обслуговування.
+
+---
+
+## 🚀 **PL/SQL код**
+
+```plsql
+DECLARE
+  l_task_id NUMBER := :P6_TASK_ID;
+  l_task_mode NUMBER := :P6_TASK_MODE;
+  l_stage_id NUMBER;
+  l_substage_id NUMBER;
+  l_page_list_id NUMBER := :P_PAGE_LIST_ID;
+  l_collection_name VARCHAR2(255);
+BEGIN
+  -- Очистка існуючих колекцій (якщо треба очистити всі CONFIRM_CART_*)
+  FOR rec IN (SELECT collection_name FROM apex_collections WHERE collection_name LIKE 'CONFIRM_CART_%') LOOP
+    APEX_COLLECTION.DELETE_COLLECTION(rec.collection_name);
+  END LOOP;
+
+  -- Обхід етапів
+  FOR stage_rec IN (
+    SELECT t.ID AS stage_id
+    FROM TaskTracker.DICT_APP_CONFIRM_LIST@TO_TASKTRACKER10 t
+    WHERE t.PAGE_LIST_ID = l_page_list_id AND t.PARENT_STAGE_ID IS NULL
+    ORDER BY t.STAGE
+  ) LOOP
+    l_stage_id := stage_rec.stage_id;
+
+    -- Обхід підетапів
+    FOR substage_rec IN (
+      SELECT sbt.ID AS substage_id
+      FROM TaskTracker.DICT_APP_CONFIRM_LIST@TO_TASKTRACKER10 sbt
+      WHERE sbt.PAGE_LIST_ID = l_page_list_id AND sbt.PARENT_STAGE_ID = l_stage_id
+      ORDER BY sbt.STAGE
+    ) LOOP
+      l_substage_id := substage_rec.substage_id;
+      l_collection_name := 'CONFIRM_CART_' || l_stage_id || '_' || l_substage_id;
+
+      -- Створюємо колекцію
+      APEX_COLLECTION.CREATE_COLLECTION(l_collection_name);
+
+      -- Для кожного завдання/шаблону шукаємо підписантів
+      FOR r IN (
+        SELECT
+          sr.STAGES_ID,
+          sr.SORT_ORDER,
+          sr.TASK_ID,
+          sr.USER_TABNO,
+          sr.POSITION_ID,
+          sr.DEPARTMENT_ID,
+          sr.UNIT_ID,
+          sr.ID AS sr_id,
+          ht.ID AS ht_id,
+          p.FAMILIA AS l_name,
+          p.IMYA AS f_name,
+          p.OTCHESTVO AS m_name,
+          p.SPR_DOLZNOST AS posada,
+          p.TSEH_SHORT AS depart,
+          TO_CHAR(ht.SDATE, 'dd.mm.yyyy hh24:mi:ss') AS sign_date,
+          sr.SUBTASK_ID,
+          sr.SR_TASK_MODE
+        FROM
+          (SELECT ID FROM TASKS WHERE ID = l_task_id AND l_task_mode = 0
+           UNION ALL
+           SELECT ID FROM TASK_TEMPLATES WHERE ID = l_task_id AND l_task_mode = 1) t
+        JOIN TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+          ON sr.TASK_ID = t.ID
+        LEFT JOIN TaskTracker.Dict_App_Confirm_List@TO_TASKTRACKER10 d
+          ON sr.Stages_Id = d.ID
+        LEFT JOIN TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 ht
+          ON sr.ID = ht.SIGNRIGHT_ID
+        LEFT JOIN kbs.PERSONAL@TO_TASKTRACKER10 p
+          ON p.TAB_NO = ht.SIGNER_BY
+        WHERE
+          sr.STAGES_ID = l_substage_id
+          AND d.PARENT_STAGE_ID IS NOT NULL
+        ORDER BY
+          d.ID, sr.STAGES_ID, sr.SORT_ORDER
+      ) LOOP
+        APEX_COLLECTION.ADD_MEMBER(
+          p_collection_name => l_collection_name,
+          p_c001 => r.STAGES_ID,
+          p_c002 => r.SORT_ORDER,
+          p_c003 => r.TASK_ID,
+          p_c004 => r.USER_TABNO,
+          p_c005 => r.POSITION_ID,
+          p_c006 => r.DEPARTMENT_ID,
+          p_c007 => r.UNIT_ID,
+          p_c008 => r.sr_id,
+          p_c009 => r.ht_id,
+          p_c010 => r.l_name,
+          p_c011 => r.f_name,
+          p_c012 => r.m_name,
+          p_c013 => r.posada,
+          p_c014 => r.depart,
+          p_c015 => r.sign_date,
+          p_c016 => r.SUBTASK_ID,
+          p_n001 => r.SR_TASK_MODE
+        );
+      END LOOP;
+
+    END LOOP;
+  END LOOP;
+END;
+```
+
+---
+
+## ✅ **Що робить код**
+
+✅ Спочатку очищає старі колекції (CONFIRM\_CART\_\*).
+✅ Обходить етапи й підетапи для вказаного PAGE\_LIST\_ID.
+✅ Формує колекцію для кожного підетапу.
+✅ Для кожного підетапу:
+
+* Вибирає підписантів через JOIN із завданням / шаблоном.
+* Додає їх у колекцію через `ADD_MEMBER`.
+
+---
+
+## ⚡ **Переваги цього підходу**
+
+✅ Початкова вибірка з `TASKS` або `TASK_TEMPLATES` → обмежує обсяг даних одразу.
+✅ Один запит із union для TASK/TEMPLATE → менше коду, більше гнучкості.
+✅ Легко підтримувати (потрібно додати поле — додаєш в одне місце).
+
+---
+
+## 💬 **Хочеш, щоб я підготував цей код із повним explain plan або адаптував під твою APEX-структуру (наприклад, як PL/SQL процес)?**
+
+Напиши — я підготую! 🚀

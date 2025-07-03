@@ -1,0 +1,95 @@
+💡 **Добре! Я підготував для тебе оновлений запит, який:**
+✅ Дістає `TASK_CONTENT` (підзавдання/підшаблони) відповідно до `SR_TASK_MODE`.
+✅ Акуратно вбудований у твою вибірку.
+✅ Працює з `sr.SUBTASK_ID`.
+
+---
+
+## 🚀 **Оновлений SQL**
+
+```sql
+SELECT 
+  p1.SPR_DOLZNOST,
+  sd.SHORT_NAME,
+  un.NAME,
+  sr.STAGES_ID,
+  sr.SORT_ORDER,
+  sr.TASK_ID,
+  sr.USER_TABNO,
+  sr.POSITION_ID,
+  sr.DEPARTMENT_ID,
+  sr.UNIT_ID,
+  sr.ID AS SRID,
+  ht.ID AS HTID,
+  p.FAMILIA AS L_NAME,
+  p.IMYA AS F_NAME,
+  p.OTCHESTVO AS M_NAME,
+  p.SPR_DOLZNOST AS POSADA,
+  p.TSEH_SHORT AS DEPART,
+  TO_CHAR(ht.SDATE, 'dd.mm.yyyy hh24:mi:ss') AS SIGN_DATE,
+  sr.SUBTASK_ID,
+  sr.SR_TASK_MODE,
+  -- Витяг TASK_CONTENT
+  CASE 
+    WHEN sr.SR_TASK_MODE = 0 THEN 
+      (SELECT t.SUBTASK_CONTENT 
+       FROM TASK_SUBTASKS t 
+       WHERE t.ID = sr.SUBTASK_ID)
+    WHEN sr.SR_TASK_MODE = 1 THEN 
+      (SELECT t.SUBTASK_CONTENT 
+       FROM TASK_SUBTASK_TEMPLATES t 
+       WHERE t.ID = sr.SUBTASK_ID)
+    ELSE NULL
+  END AS TASK_CONTENT
+FROM 
+  TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+LEFT JOIN 
+  TaskTracker.Dict_App_Confirm_List@TO_TASKTRACKER10 d
+  ON sr.Stages_Id = d.ID
+LEFT JOIN 
+  kbs.PERSONAL@TO_TASKTRACKER10 p1
+  ON p1.DOLZNOST = sr.Position_Id
+LEFT JOIN 
+  kbs.SPR_DEPARTMENT@TO_TASKTRACKER10 sd
+  ON sd.ID = sr.DEPARTMENT_ID
+LEFT JOIN 
+  TaskTracker.DICT_UNIT@TO_TASKTRACKER10 un
+  ON sr.UNIT_ID = un.ID
+LEFT JOIN 
+  TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 ht
+  ON sr.ID = ht.SIGNRIGHT_ID
+LEFT JOIN 
+  kbs.PERSONAL@TO_TASKTRACKER10 p
+  ON p.TAB_NO = ht.SIGNER_BY
+WHERE 
+  sr.TASK_ID = :l_source_id
+  AND d.PARENT_STAGE_ID IS NOT NULL
+  AND sr.STAGES_ID = :l_substage_id
+  AND p.PRIZNAK IS NULL
+  AND p1.PRIZNAK IS NULL
+  AND sd.DATE_END IS NULL
+  AND sd.SPRDEPARTMENT_ID IS NULL
+ORDER BY 
+  d.ID, sr.STAGES_ID, sr.SORT_ORDER
+```
+
+---
+
+## ⚡ **Ключові зміни**
+
+✅ Додано поле `TASK_CONTENT`, яке визначається через `CASE`.
+✅ Умовно підтягується з `TASK_SUBTASKS` або `TASK_SUBTASK_TEMPLATES`.
+✅ Акуратно інтегровано у твій запит — без зайвих групувань (бо тепер `GROUP BY` не потрібен, якщо немає агрегацій).
+
+---
+
+## 💡 **Примітки**
+
+⚠ **Якщо у тебе були агрегації (SUM, COUNT) — треба повернути `GROUP BY` і врахувати `TASK_CONTENT` в агрегації (наприклад, через MAX).**
+⚠ **Перевір, чи є індекси на `TASK_SUBTASKS.ID` та `TASK_SUBTASK_TEMPLATES.ID` для швидкої роботи підзапитів.**
+
+---
+
+## 💬 **Хочеш, щоб я підготував цей запит у вигляді коду для APEX Collection або PL/SQL блоку?**
+
+Напиши — я згенерую повністю готовий фрагмент! 🚀

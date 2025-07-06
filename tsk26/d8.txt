@@ -1,0 +1,87 @@
+💡 **Дуже чітко сформульоване завдання! Давай я одразу дам готове рішення, яке дозволить тобі максимально зберегти існуючу логіку без переписування запиту, і буде гнучко враховувати режим заміщення.**
+
+---
+
+## 🚀 **Ключова ідея**
+
+👉 Ти маєш перемикати джерело даних (оригінал чи заміщення) на рівні item-перемінних у запиті.
+👉 Це можна зробити прямо у SQL за допомогою `CASE` або `DECODE`, або ще краще — через `WITH` блок (CTE).
+
+---
+
+## ⚡ **Приклад з WITH блоком**
+
+```sql
+WITH user_ctx AS (
+  SELECT
+    CASE WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_USER_ID ELSE :P0_USER_ID END AS user_id,
+    CASE WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_POSITION_ID ELSE :P0_POSITION_ID END AS position_id,
+    CASE WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_DEPARTMENT_ID ELSE :P0_DEPARTMENT_ID END AS department_id,
+    CASE WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_UNIT_ID ELSE :P0_UNIT_ID END AS unit_id
+  FROM dual
+)
+SELECT t.*
+FROM tasks t, user_ctx uc
+WHERE EXISTS (
+  SELECT 1
+  FROM task_access_control ac
+  WHERE (
+          -- Access Level 1
+          ac.access_level = 1
+          AND (
+              ac.user_id = uc.user_id
+              OR (ac.position_id IS NOT NULL AND ac.position_id = uc.position_id)
+          )
+        )
+     OR (
+          -- Access Level 2
+          ac.access_level = 2
+          AND (
+            (ac.position_id IS NULL OR ac.position_id = uc.position_id)
+            AND (ac.department_id IS NULL OR ac.department_id = uc.department_id)
+            AND (ac.unit_id IS NULL OR ac.unit_id = uc.unit_id)
+          )
+          AND (
+            ac.user_id IS NULL OR ac.user_id = uc.user_id
+          )
+        )
+     OR (
+          -- Access Level 3
+          ac.access_level = 3
+          AND ac.user_id = uc.user_id
+        )
+  AND ROWNUM = 1
+)
+OR EXISTS (
+  SELECT 1
+  FROM signaturerights sr, user_ctx uc2
+  WHERE sr.task_id = t.id
+    AND sr.user_id = uc2.user_id
+    AND sr.status <> 11
+);
+```
+
+---
+
+## 🔑 **Що відбувається**
+
+✅ `WITH user_ctx` визначає “актуальні” дані для цього запиту:
+
+* якщо `:P0_SUBSTITUTION_MODE = 1` → береться заміщення
+* якщо `:P0_SUBSTITUTION_MODE = 0` → береться дані поточного користувача
+
+✅ Потім усі порівняння йдуть через ці значення (`uc.user_id`, `uc.position_id`, …).
+
+---
+
+## ⚡ **Чому це зручно**
+
+✅ Не потрібно міняти багато коду в запиті.
+✅ Підтримується будь-яка логіка заміщення, що налаштована через item.
+✅ Швидко масштабується (потрібно лише змінити `WITH` при потребі додати ще дані).
+
+---
+
+## 💬 **Хочеш, щоб я підготував готовий шаблон для APEX View з цим запитом чи варіант із bind-перемінними для PL/SQL процедури?**
+
+Напиши — я згенерую! 🚀

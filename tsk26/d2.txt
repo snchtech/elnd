@@ -1,0 +1,158 @@
+💡 **Чудова ідея та грамотна постановка завдання! Я підготую для тебе концепцію + кроки створення такої сторінки в APEX на базі best practices. Це буде гнучке й стабільне рішення.**
+
+---
+
+## 🚀 **Концепція рішення**
+
+Ми створимо **Oracle APEX Interactive Grid (IG)**, який:
+✅ Показує заміщення для користувача або доступні йому записи за роллю.
+✅ Дозволяє редагувати заміщення (хто заміщає, дати від/до).
+✅ Має кнопку для збереження (Submit / Save).
+✅ Контролює права доступу безпосередньо у запиті або через dynamic action.
+
+---
+
+## ⚡ **Архітектура сторінки**
+
+### 🔹 **Основна сторінка**
+
+* **REGION 1:** Interactive Grid → `User Substitution`
+* **SOURCE:** SQL query з урахуванням ролей та логіки доступу
+
+---
+
+### 🔹 **SQL джерело IG**
+
+```sql
+SELECT
+  us.id,
+  us.tab_no_original,
+  uo.pib AS pib_original,
+  uo.position_name AS position_original,
+  uo.department_name AS department_original,
+  uo.unit_name AS unit_original,
+  us.tab_no_replacer,
+  ur.pib AS pib_replacer,
+  ur.position_name AS position_replacer,
+  ur.department_name AS department_replacer,
+  ur.unit_name AS unit_replacer,
+  us.date_start AS start_date_substitution,
+  us.date_end AS end_date_substitution
+FROM
+  user_substitution us
+LEFT JOIN
+  users uo ON us.tab_no_original = uo.tab_no
+LEFT JOIN
+  users ur ON us.tab_no_replacer = ur.tab_no
+WHERE
+  (
+    us.tab_no_original = :APP_USER_TABNO
+    OR
+    (
+      :IS_SUBSTITUTION_MANAGER = 'Y'
+      AND us.department_id = :APP_USER_DEPARTMENT
+    )
+    OR
+    (
+      :IS_SUPER_SUBSTITUTION_MANAGER = 'Y'
+    )
+  )
+  AND (us.date_end IS NULL OR us.date_end >= SYSDATE)
+```
+
+✅ Додай **:APP\_USER\_TABNO, \:APP\_USER\_DEPARTMENT** у session state при логіні.
+✅ \:IS\_SUBSTITUTION\_MANAGER і \:IS\_SUPER\_SUBSTITUTION\_MANAGER — прапори за ACL або APEX\_ROLE.
+
+---
+
+### 🔹 **Редаговані поля IG**
+
+✅ `tab_no_replacer` → Pop-up LOV (users табельний + ПІБ)
+✅ `date_start` → date picker
+✅ `date_end` → date picker
+
+---
+
+### 🔹 **Інші налаштування IG**
+
+* Edit mode → **Always editable**
+* Enable: Single Row View (для зручного редагування)
+* Toolbar → Custom Save Button
+* Validation (на рівні IG + dynamic actions)
+
+---
+
+## 🔑 **Як реалізувати логіку активного/неактивного заміщення**
+
+👉 **Before Header PL/SQL Process**
+
+```plsql
+DECLARE
+  l_count_active NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO l_count_active
+  FROM user_substitution
+  WHERE tab_no_original = :APP_USER_TABNO
+    AND (date_end IS NULL OR date_end >= SYSDATE);
+
+  IF l_count_active = 0 THEN
+    INSERT INTO user_substitution (
+      tab_no_original,
+      created_by
+    ) VALUES (
+      :APP_USER_TABNO,
+      :APP_USER
+    );
+    COMMIT;
+  END IF;
+END;
+```
+
+✅ Якщо активного запису немає → створюємо з порожніми полями заміщення.
+
+---
+
+## ⚡ **Save/Submit**
+
+👉 **При натисканні Save (Submit Page):**
+
+* IG автоматично відправляє дані на збереження (якщо увімкнено DML для IG).
+* Встановити `Row Processing Mode = Insert / Update`.
+
+👉 **Валідація на сервері**
+
+* Додай процес перед збереженням:
+
+```plsql
+IF :P_TAB_NO_REPLACER IS NULL OR :P_DATE_START IS NULL OR :P_DATE_END IS NULL THEN
+  raise_application_error(-20001, 'Заповніть всі обовʼязкові поля заміщення.');
+END IF;
+```
+
+або
+👉 додай IG Validations (SQL Expression).
+
+---
+
+## 💡 **Best Practice**
+
+✅ Використовуй **Single Row View** для кращої UX при редагуванні заміщення.
+✅ Забезпеч контроль на рівні SQL (а не лише у браузері), щоб обмежити видимість рядків за ролями.
+✅ Роби Insert нового запису в Before Header Process → це простіше, ніж робити insert через IG.
+✅ Додай Index на `(tab_no_original, date_start, date_end)` для швидкої перевірки активності.
+
+---
+
+## 🚀 **Підсумок**
+
+✅ IG → дані заміщення, гнучке редагування.
+✅ Before Header Process → автододавання порожнього запису для редагування.
+✅ Control Access → через SQL + session flags.
+✅ Валідації → на рівні IG і PL/SQL process перед збереженням.
+
+---
+
+## 💬 **Хочеш, щоб я згенерував готовий SQL для IG, dynamic actions або приклад export/import сторінки для APEX?**
+
+Напиши — я підготую! 🚀

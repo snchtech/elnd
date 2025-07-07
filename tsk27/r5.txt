@@ -1,0 +1,92 @@
+Дякую за уточнення. У твоєму запиті є дві проблеми, які викликають помилки в Oracle APEX:
+
+---
+
+### ❌ **1. Не бачить `t.id` в підзапиті EXISTS:**
+
+> Це класична помилка у SQL: в другому `EXISTS` ти використовуєш `t.id`, але **не підключаєш основну таблицю `tasks` до підзапиту явно**, як це зроблено в першому EXISTS через `FROM tasks t`.
+
+### ❌ **2. Поля `status` немає в `signaturerights`:**
+
+> Якщо `status` є в `signaturehistory`, тоді потрібно або:
+
+* приєднувати `signaturehistory` (наприклад, через `JOIN` або `EXISTS`)
+* або прибрати умову `sr.status <> 11`, якщо вона неактуальна
+
+---
+
+## ✅ **Виправлений варіант запиту:**
+
+```sql
+SELECT t.*
+FROM tasks t
+WHERE EXISTS (
+  SELECT 1
+  FROM task_access_control ac
+  WHERE 
+    (
+      -- Access Level 1
+      ac.access_level = 1
+      AND (
+        ac.user_id = :P0_USER_ID
+        OR ac.position_id = :P0_POSITION_ID
+      )
+    )
+    OR
+    (
+      -- Access Level 2
+      ac.access_level = 2
+      AND (
+        (ac.position_id IS NULL OR ac.position_id = :P0_POSITION_ID)
+        AND (ac.department_id IS NULL OR ac.department_id = :P0_DEPARTMENT_ID)
+        AND (ac.unit_id IS NULL OR ac.unit_id = :P0_UNIT_ID)
+      )
+      AND (
+        ac.user_id IS NULL OR ac.user_id = :P0_USER_ID
+      )
+    )
+    OR
+    (
+      -- Access Level 3
+      ac.access_level = 3
+      AND ac.user_id = :P0_USER_ID
+    )
+    AND ac.task_id = t.id  -- переконайся, що в task_access_control є task_id
+    AND ROWNUM = 1
+)
+OR EXISTS (
+  -- Доступ через SIGNATUREHISTORY (не signaturerights!)
+  SELECT 1
+  FROM signaturehistory sh
+  WHERE sh.task_id = t.id
+    AND sh.signer_by = :P0_USER_ID
+    AND sh.status <> 11
+);
+```
+
+---
+
+## 🔧 Якщо `signaturehistory` не містить `task_id`, а має лише `signright_id` → потрібно приєднати `signaturerights`:
+
+```sql
+OR EXISTS (
+  SELECT 1
+  FROM signaturehistory sh
+  JOIN signaturerights sr ON sr.id = sh.signright_id
+  WHERE sr.task_id = t.id
+    AND sh.signer_by = :P0_USER_ID
+    AND sh.status <> 11
+)
+```
+
+---
+
+## 📝 Резюме:
+
+| Проблема                    | Виправлення                                                  |
+| --------------------------- | ------------------------------------------------------------ |
+| `t.id` не видно в підзапиті | Використовуй `EXISTS` з `tasks t` або зроби JOIN у підзапиті |
+| `sr.status` не існує        | Перенеси перевірку `status` в `signaturehistory`             |
+| Зв'язок між таблицями       | `sr.id = sh.signright_id` якщо `status` в `signaturehistory` |
+
+Хочеш — допоможу з побудовою адаптивного SQL під заміщення (user\_ctx) з урахуванням access level.

@@ -1,0 +1,96 @@
+Щоб **поєднати логіку доступу** (`task_access_control` + `signaturerights`) з уже наявними фільтрами `:PXX_TAB_MODE` у твоєму SQL для Interactive Report — потрібно **згрупувати умови в `WHERE`** так, щоб було:
+
+> **(Доступ дозволено)** І **(Фільтри по табуляції: planned/shift/problem/archive)**
+
+---
+
+## ✅ Як правильно вставити умову доступу
+
+Оберни поточні умови табуляції в дужки та додай `AND (...умова доступу...)` після них.
+
+### 🔧 Оновлений `WHERE`-блок:
+
+```sql
+WHERE
+(
+  (:PXX_TAB_MODE = 'PLANNED')
+
+  OR (:PXX_TAB_MODE = 'SHIFT'
+      AND (
+        (t.PLANNING_DATE_START < :PXX_SHIFT_END AND (t.ACTUAL_DATE_END IS NULL OR t.ACTUAL_DATE_END > :PXX_SHIFT_START)) OR
+        (t.PLANNING_DATE_END BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END)
+      )
+     )
+
+  OR (:PXX_TAB_MODE = 'PROBLEM'
+      AND (
+        (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+        OR EXISTS (
+          SELECT 1
+          FROM DICT_APP_CONFIRM_LIST d
+          WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+            AND NOT EXISTS (
+              SELECT 1
+              FROM SIGNATURERIGHTS r
+              WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+            )
+        )
+      )
+     )
+
+  OR (:PXX_TAB_MODE = 'ARCHIVE' AND t.STATUS_ID = 14)
+)
+
+AND (
+  EXISTS (
+    SELECT 1
+    FROM task_access_control ac
+    WHERE 
+      (
+        ac.access_level = 1
+        AND (
+          ac.user_id = :P0_USER_ID
+          OR ac.position_id = :P0_POSITION_ID
+        )
+      )
+      OR
+      (
+        ac.access_level = 2
+        AND (
+          (ac.position_id IS NULL OR ac.position_id = :P0_POSITION_ID)
+          AND (ac.department_id IS NULL OR ac.department_id = :P0_DEPARTMENT_ID)
+          AND (ac.unit_id IS NULL OR ac.unit_id = :P0_UNIT_ID)
+        )
+        AND (
+          ac.user_id IS NULL OR ac.user_id = :P0_USER_ID
+        )
+      )
+      OR
+      (
+        ac.access_level = 3
+        AND ac.user_id = :P0_USER_ID
+      )
+      AND ac.task_id = t.id
+      AND ROWNUM = 1
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM signaturerights sr
+    WHERE sr.task_id = t.id
+      AND sr.user_id = :P0_USER_ID
+      -- видалено умову sr.status, якщо її не існує
+  )
+)
+```
+
+---
+
+## 📝 Поради:
+
+1. **Пам’ятай**: `WHERE (...) AND (...)` — це логічне `І`, тому доступ — це обов’язкова умова.
+2. **Обов’язково обгорни** всі `OR` фільтри в дужки, щоб логіка не порушилась.
+3. Якщо ти використовуєш **заміщення**, заміни `:P0_USER_ID`, `:P0_POSITION_ID` тощо на відповідні значення з `user_ctx` або `NVL()`-підходом (як ми раніше обговорювали).
+
+---
+
+Якщо треба — покажу варіант через `WITH user_ctx` для врахування заміщення прямо в цьому запиті.

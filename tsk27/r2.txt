@@ -1,0 +1,107 @@
+Ти хочеш створити **select item у вигляді перемикача між поточним користувачем і заміщуваним**, з динамічним джерелом даних та логікою read-only залежно від наявності заміщення.
+
+---
+
+## ✅ Очікувана поведінка:
+
+| Умова                              | Значення select'а                           | Доступність |
+| ---------------------------------- | ------------------------------------------- | ----------- |
+| Немає запису в `user_substitution` | `USERNAME (ПОСАДА)` поточного користувача   | Read-only   |
+| Є заміщення                        | Вибір між:                                  | Editable    |
+|                                    | - `USERNAME (ПОСАДА)` поточного користувача |             |
+|                                    | - `USERNAME (ПОСАДА)` заміщуваного          |             |
+
+---
+
+## 📌 Реалізація в Oracle APEX
+
+### 1. **Item:** `P0_SELECT_USER_ROLE`
+
+* Тип: **Select List**
+* Display Null: **No**
+* Save Session State: **Yes**
+
+---
+
+### 2. **SQL Query (dynamic LOV):**
+
+```sql
+SELECT 
+  u.username || ' (' || p.name || ')' AS display_value,
+  u.id AS return_value
+FROM users u
+JOIN positions p ON u.position_id = p.id
+WHERE u.id = :P0_USER_ID
+
+UNION
+
+SELECT 
+  us.username_original || ' (' || p.name || ')' AS display_value,
+  uo.id AS return_value
+FROM user_substitution us
+JOIN users uo ON uo.tab_no = us.tab_no_original
+JOIN positions p ON uo.position_id = p.id
+WHERE us.tab_no_replacer = :P0_USER_ID
+  AND SYSDATE BETWEEN us.date_start AND NVL(us.date_end, SYSDATE + 1)
+```
+
+🔎 Пояснення:
+
+* Перший `SELECT` – поточний користувач.
+* `UNION` – додає заміщеного користувача, якщо такий є.
+* `return_value` – `user.id`, який буде збережено.
+* `display_value` – форматований текст.
+
+---
+
+### 3. **Default значення:**
+
+У `Default Value`:
+
+```plsql
+RETURN :P0_USER_ID;
+```
+
+---
+
+### 4. **Read-only логіка:**
+
+Додаємо **Dynamic Action (DA)**:
+
+* **Event:** Page Load
+* **True Condition:**
+
+  ```sql
+  SELECT 1 FROM user_substitution
+  WHERE tab_no_replacer = :P0_USER_ID
+    AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1)
+  ```
+
+  (тип = SQL Expression)
+* **True Action:** Enable `P0_SELECT_USER_ROLE`
+* **False Action:** Disable (Read-Only)
+
+---
+
+### 🔄 Альтернатива (Client-Side Logic):
+
+У `DA → JavaScript Expression` (якщо не хочеш SQL-виразу):
+
+```javascript
+return $v('P0_NEW_USER_ID') !== '';
+```
+
+---
+
+### 🧠 Важливо:
+
+* Усі item'и типу `user_id`, `username`, `position_id` тощо повинні бути **заповнені в `Before Header` на Global Page**, як ми реалізували раніше.
+* Якщо хочеш зберігати вибір користувача, то `P0_SELECT_USER_ROLE` має бути частиною логіки усіх запитів (`WITH user_ctx AS (...)`).
+
+---
+
+### 🔚 Після вибору:
+
+Можна змінити значення в `P0_USER_ID` на `:P0_SELECT_USER_ROLE`, або використовувати цей item для подальшої логіки.
+
+Хочеш — підкажу як перебудувати `user_ctx` під цей item.

@@ -1,0 +1,71 @@
+✅ **Тобі потрібно зробити легку перевірку перед основною логікою** — чи є взагалі заміщення для `:P0_USER_ID` у `tab_no_replacer`. Якщо немає — **взагалі нічого не виконувати** (щоб не витрачати ресурси).
+
+---
+
+### 🔧 **Оновлений PL/SQL-код (Server-Side DA або Before Header)**
+
+```plsql
+DECLARE
+  l_tab_no_original   NUMBER;
+  l_username_original VARCHAR2(100);
+  l_position_id       NUMBER;
+  l_department_id     NUMBER;
+  l_unit_id           NUMBER;
+  l_exists            BOOLEAN := FALSE;
+BEGIN
+  -- Спочатку перевірка: чи існує запис заміщення для цього користувача
+  SELECT CASE WHEN COUNT(*) > 0 THEN TRUE ELSE FALSE END
+  INTO l_exists
+  FROM user_substitution
+  WHERE tab_no_replacer = :P0_USER_ID
+    AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1);
+
+  IF l_exists THEN
+    -- Якщо існує активне заміщення — дістаємо дані
+    SELECT tab_no_original, username_original
+    INTO l_tab_no_original, l_username_original
+    FROM user_substitution
+    WHERE tab_no_replacer = :P0_USER_ID
+      AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1)
+      AND ROWNUM = 1;
+
+    :P0_NEW_USER_ID := l_tab_no_original;
+    :P0_NEW_USERNAME := l_username_original;
+
+    -- Додаткові дані з USERS
+    SELECT position_id, department_id, unit_id
+    INTO :P0_NEW_POSITION_ID, :P0_NEW_DEPARTMENT_ID, :P0_NEW_UNIT_ID
+    FROM users
+    WHERE tab_no = l_tab_no_original;
+  ELSE
+    -- Якщо заміщення нема — очищаємо item'и
+    :P0_NEW_USER_ID := NULL;
+    :P0_NEW_USERNAME := NULL;
+    :P0_NEW_POSITION_ID := NULL;
+    :P0_NEW_DEPARTMENT_ID := NULL;
+    :P0_NEW_UNIT_ID := NULL;
+  END IF;
+END;
+```
+
+---
+
+### 💡 Що змінилось:
+
+1. ✅ Додано окрему перевірку через `COUNT(*)` → `l_exists`.
+2. ✅ Основна логіка виконується лише **якщо запис є**.
+3. ✅ Якщо записів немає — нічого не виконується (і не навантажується).
+
+---
+
+### ⚠️ Альтернатива (тільки одна перевірка)
+
+Можеш уникнути `COUNT(*)`, і відразу пробувати `SELECT ... INTO` з `NO_DATA_FOUND`, як ти вже маєш. Але цей варіант із `l_exists`:
+
+* Зрозуміліший.
+* Легше розширювати (наприклад, логувати події, виводити повідомлення тощо).
+* Не запускає другий SELECT, якщо немає потреби.
+
+---
+
+Якщо хочеш — можу винести це в `Application Process` або `Initialization PL/SQL Code` на рівні всього додатку.

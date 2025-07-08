@@ -1,0 +1,62 @@
+Чудово! Якщо в таблиці `signaturerights` **немає колонки `status`**, але ти ведеш **факт підпису** через `signaturehistory`, тоді правильною логікою буде:
+
+* взяти **усі записи з `signaturerights`**, які **ще не підписані** (`немає запису в `signaturehistory`за цим`signright\_id\`)
+* серед них відібрати **найближчий (мінімальний) `stages_order`** для кожного `task_id` — це буде **поточна черга на підпис**
+* далі — перевірити, чи цей запис належить **саме тобі** (`user_id` або `position+department+unit`)
+
+---
+
+### ✅ Запит для вкладки “До виконання” (через `signaturerights` + `signaturehistory`):
+
+```sql
+-- вкладка TODO (До виконання)
+(:PXX_TAB_MODE = 'TODO'
+ AND EXISTS (
+   SELECT 1
+   FROM signaturerights sr
+   WHERE sr.task_id = t.id
+     AND NOT EXISTS (
+       SELECT 1
+       FROM signaturehistory sh
+       WHERE sh.signright_id = sr.id
+     )
+     AND sr.stages_order = (
+       SELECT MIN(sr2.stages_order)
+       FROM signaturerights sr2
+       WHERE sr2.task_id = sr.task_id
+         AND NOT EXISTS (
+           SELECT 1
+           FROM signaturehistory sh2
+           WHERE sh2.signright_id = sr2.id
+         )
+     )
+     AND (
+       sr.user_id = :P0_USER_ID
+       OR (
+         sr.user_id IS NULL
+         AND sr.position_id = :P0_POSITION_ID
+         AND sr.department_id = :P0_DEPARTMENT_ID
+         AND sr.unit_id = :P0_UNIT_ID
+       )
+     )
+ ))
+```
+
+---
+
+### 🧠 Що тут відбувається:
+
+* `NOT EXISTS (...)` — означає, що **запис у `signaturerights` ще не підписаний** (відсутній у `signaturehistory`).
+* `MIN(stages_order)` — ми беремо **найперший непідписаний етап** у завданні.
+* Перевірка, що саме **поточний користувач** має підписати (по `user_id` або по `position+department+unit`).
+
+---
+
+### 📌 Порада:
+
+* Якщо `signaturehistory` іноді не містить `signright_id`, а лише `task_id + stage_id` — можна приєднувати через ці поля.
+* Якщо ти використовуєш **заміну (substitution)** — варто додати CTE `user_ctx` (можу допомогти реалізувати).
+
+---
+
+🔔 Хочеш — перероблю цей запит з урахуванням `substitution_mode` і `user_ctx`, як у твоїх попередніх запитах.

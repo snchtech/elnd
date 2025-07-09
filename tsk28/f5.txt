@@ -1,0 +1,81 @@
+Щоб реалізувати описану логіку:
+
+> **Якщо для користувача немає жодного запису в `task_access_control` (ні по `user_id`, ні по `position_id` + `department_id` + `unit_id`) — тоді відпрацьовує логіка як для `access_level = 3`, тобто показуються тільки ті завдання, де користувач є у `signaturerights`.**
+
+---
+
+### ✅ Рішення:
+
+1. Додай окрему перевірку `NOT EXISTS` для `task_access_control` — **немає жодного запису** для користувача.
+2. Додай `OR EXISTS (signaturerights...)` у разі цього `NOT EXISTS`.
+
+---
+
+### 🔧 ОНОВЛЕНИЙ `AND (...)` БЛОК:
+
+```sql
+AND (
+  -- Якщо доступ є в task_access_control
+  EXISTS (
+    SELECT 1
+    FROM task_access_control ac
+    WHERE 
+      (
+        ac.access_level = 1
+        AND (
+          ac.user_id = :P0_USER_ID
+          OR ac.position_id = :P0_POSITION_ID
+        )
+      )
+      OR
+      (
+        ac.access_level = 2
+        AND (
+          (ac.position_id IS NULL OR ac.position_id = :P0_POSITION_ID)
+          AND (ac.department_id IS NULL OR ac.department_id = :P0_DEPARTMENT_ID)
+          AND (ac.unit_id IS NULL OR ac.unit_id = :P0_UNIT_ID)
+        )
+        AND (
+          ac.user_id IS NULL OR ac.user_id = :P0_USER_ID
+        )
+      )
+      OR
+      (
+        ac.access_level = 3
+        AND ac.user_id = :P0_USER_ID
+      )
+      AND ac.task_id = t.id
+      AND ROWNUM = 1
+  )
+
+  -- АБО якщо доступів немає взагалі — тоді тільки ті задачі, де є в signaturerights
+  OR (
+    NOT EXISTS (
+      SELECT 1
+      FROM task_access_control ac
+      WHERE 
+        (ac.user_id = :P0_USER_ID OR ac.position_id = :P0_POSITION_ID)
+        AND ac.task_id = t.id
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM signaturerights sr
+      WHERE sr.task_id = t.id
+        AND sr.user_id = :P0_USER_ID
+    )
+  )
+)
+```
+
+---
+
+### 📝 Пояснення:
+
+* **`EXISTS (...)`** — якщо є запис в `task_access_control` — працює звичайна логіка доступу.
+* **`NOT EXISTS (...) AND EXISTS (...)`** — якщо немає жодного запису по доступу — тоді дивимось, чи користувач є в `signaturerights`.
+
+---
+
+### ✅ Альтернатива (коротша версія):
+
+Якщо `task_access_control` не містить взагалі `user_id` або `position_id`, можна винести `user_has_access` у CTE і працювати далі з ним. Якщо потрібно — підкажу цей варіант.

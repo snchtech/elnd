@@ -1,0 +1,83 @@
+Так, ти правильно описав ситуацію: коли `tab_no_original IS NULL OR = 1`, тобто заміщення відбувається не для конкретного користувача, а для певної **посади + підрозділу + юніту**, то `:P0_NEW_USER_ID` та `:P0_NEW_USERNAME` залишаються `NULL`, а от `:P0_NEW_POSITION_ID`, `:P0_NEW_DEPARTMENT_ID`, `:P0_NEW_UNIT_ID` потрібно заповнити **на основі запису в `user_substitution`**.
+
+---
+
+### ✅ ОНОВЛЕНИЙ КОД:
+
+```plsql
+DECLARE
+  l_tab_no_original   NUMBER;
+  l_username_original VARCHAR2(100);
+  l_position_id       NUMBER;
+  l_department_id     NUMBER;
+  l_unit_id           NUMBER;
+  l_exists            BOOLEAN := FALSE;
+BEGIN
+  -- Перевірка: чи є заміщення
+  SELECT CASE WHEN COUNT(*) > 0 THEN TRUE ELSE FALSE END
+  INTO l_exists
+  FROM user_substitution
+  WHERE tab_no_replacer = :P0_USER_ID
+    AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1);
+
+  IF l_exists THEN
+    -- Основна вибірка (може бути або по user, або по посаді)
+    SELECT 
+      tab_no_original,
+      username_original,
+      position_id,
+      department_id,
+      unit_id
+    INTO 
+      l_tab_no_original,
+      l_username_original,
+      l_position_id,
+      l_department_id,
+      l_unit_id
+    FROM user_substitution
+    WHERE tab_no_replacer = :P0_USER_ID
+      AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1)
+      AND ROWNUM = 1;
+
+    -- Якщо таб. номер є (заміщення користувача)
+    IF l_tab_no_original IS NOT NULL AND l_tab_no_original != 1 THEN
+      :P0_NEW_USER_ID := l_tab_no_original;
+      :P0_NEW_USERNAME := l_username_original;
+
+      -- Витягуємо позицію, відділ, юніт з USERS
+      SELECT position_id, department_id, unit_id
+      INTO :P0_NEW_POSITION_ID, :P0_NEW_DEPARTMENT_ID, :P0_NEW_UNIT_ID
+      FROM users
+      WHERE tab_no = l_tab_no_original;
+
+    ELSE
+      -- Заміщення по посаді/відділу/юніту
+      :P0_NEW_USER_ID := NULL;
+      :P0_NEW_USERNAME := NULL;
+      :P0_NEW_POSITION_ID := l_position_id;
+      :P0_NEW_DEPARTMENT_ID := l_department_id;
+      :P0_NEW_UNIT_ID := l_unit_id;
+    END IF;
+
+  ELSE
+    -- Немає активного заміщення
+    :P0_NEW_USER_ID := NULL;
+    :P0_NEW_USERNAME := NULL;
+    :P0_NEW_POSITION_ID := NULL;
+    :P0_NEW_DEPARTMENT_ID := NULL;
+    :P0_NEW_UNIT_ID := NULL;
+  END IF;
+END;
+```
+
+---
+
+### 🟢 Що враховано:
+
+* Якщо заміщення **по користувачу** (тобто `tab_no_original IS NOT NULL AND != 1`) — отримуємо всі дані з таблиці `USERS`.
+* Якщо заміщення **по посаді / департаменту / юніту** — ці значення беремо з таблиці `user_substitution`.
+* Якщо немає запису — всі поля обнуляються.
+
+---
+
+🔔 **Примітка:** Якщо ти хочеш у майбутньому дозволити декілька заміщень одночасно (наприклад, по користувачу + по посаді), треба буде враховувати пріоритет або реалізовувати як `FOR LOOP` з приорітетами. Але для поточного завдання все реалізовано правильно.

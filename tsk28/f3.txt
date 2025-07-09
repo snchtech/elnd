@@ -1,0 +1,67 @@
+Ось оновлений PL/SQL-код для `Page Load` (або динамічної дії), який враховує ситуацію:
+
+* якщо в `user_substitution` `tab_no_original IS NULL` → тоді встановлюємо `:P0_NEW_USER_ID := 1` (для заміщення за **позицією/департаментом/юнітом**);
+* якщо `tab_no_original IS NOT NULL` → встановлюємо `:P0_NEW_USER_ID := tab_no_original` (тобто заміщення конкретного користувача);
+* якщо запису взагалі немає → обнуляємо всі item.
+
+---
+
+### ✅ Оновлений PL/SQL-код:
+
+```plsql
+DECLARE
+  l_tab_no_original   NUMBER;
+  l_username_original VARCHAR2(100);
+  l_position_id       NUMBER;
+  l_department_id     NUMBER;
+  l_unit_id           NUMBER;
+BEGIN
+  -- Шукаємо активне заміщення для користувача (replacer)
+  SELECT 
+    NVL(tab_no_original, 1),  -- якщо NULL, то заміщення по посаді
+    username_original
+  INTO 
+    l_tab_no_original,
+    l_username_original
+  FROM user_substitution
+  WHERE tab_no_replacer = :P0_USER_ID
+    AND SYSDATE BETWEEN date_start AND NVL(date_end, SYSDATE + 1)
+    AND ROWNUM = 1;
+
+  -- Встановлюємо item
+  :P0_NEW_USER_ID := l_tab_no_original;
+  :P0_NEW_USERNAME := l_username_original;
+
+  -- Якщо tab_no_original не null → витягуємо додаткові дані з USERS
+  IF l_tab_no_original != 1 THEN
+    SELECT position_id, department_id, unit_id
+    INTO :P0_NEW_POSITION_ID, :P0_NEW_DEPARTMENT_ID, :P0_NEW_UNIT_ID
+    FROM users
+    WHERE tab_no = l_tab_no_original;
+  ELSE
+    -- Інакше — це заміщення по посаді, підрозділу, unit — беремо як у заміщувача
+    :P0_NEW_POSITION_ID := :P0_CUR_POSITION_ID;
+    :P0_NEW_DEPARTMENT_ID := :P0_CUR_DEPARTMENT_ID;
+    :P0_NEW_UNIT_ID := :P0_CUR_UNIT_ID;
+  END IF;
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    -- Немає активного заміщення — обнуляємо всі item
+    :P0_NEW_USER_ID := NULL;
+    :P0_NEW_USERNAME := NULL;
+    :P0_NEW_POSITION_ID := NULL;
+    :P0_NEW_DEPARTMENT_ID := NULL;
+    :P0_NEW_UNIT_ID := NULL;
+END;
+```
+
+---
+
+### 🔎 Пояснення:
+
+* `NVL(tab_no_original, 1)` дозволяє виявити заміщення навіть коли `tab_no_original` не вказано.
+* Значення `1` ти можеш умовно вважати "service constant" для заміщення по полях, не по user.
+* `:P0_NEW_*` item використовуються лише коли `:P0_SUBSTITUTION_MODE = 1`.
+
+Якщо потрібно, можу також підготувати відповідний `DA` для зміни `P0_SUBSTITUTION_MODE` автоматично при виборі з `select`.

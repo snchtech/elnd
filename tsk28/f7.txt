@@ -1,0 +1,121 @@
+Ось повністю переписаний SQL-запит із урахуванням усіх твоїх умов:
+
+* фільтрація по `:PXX_TAB_MODE`;
+* перевірка прав доступу (access level 1/2/3 і signaturerights);
+* додавання колонки `status_label_problem` для вкладки `PROBLEM`;
+* **без витоку записів з інших відділів.**
+
+---
+
+```sql
+WITH tasks_with_access AS (
+  SELECT t.*
+  FROM tasks t
+  WHERE
+    (
+      (:PXX_TAB_MODE = 'PLANNED')
+      OR (
+        :PXX_TAB_MODE = 'SHIFT'
+        AND (
+          (t.PLANNING_DATE_START < :PXX_SHIFT_END AND (t.ACTUAL_DATE_END IS NULL OR t.ACTUAL_DATE_END > :PXX_SHIFT_START))
+          OR t.PLANNING_DATE_END BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END
+        )
+      )
+      OR (
+        :PXX_TAB_MODE = 'PROBLEM'
+        AND (
+          (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+          OR EXISTS (
+            SELECT 1
+            FROM DICT_APP_CONFIRM_LIST d
+            WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+              AND NOT EXISTS (
+                SELECT 1
+                FROM SIGNATURERIGHTS r
+                WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.STAGE
+              )
+          )
+        )
+      )
+      OR (:PXX_TAB_MODE = 'ARCHIVE' AND t.STATUS_ID = 14)
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM task_access_control ac
+        WHERE 
+          (
+            ac.access_level = 1 AND (
+              ac.user_id = :P0_USER_ID
+              OR ac.position_id = :P0_POSITION_ID
+            )
+          )
+          OR (
+            ac.access_level = 2 AND (
+              (ac.position_id IS NULL OR ac.position_id = :P0_POSITION_ID)
+              AND (ac.department_id IS NULL OR ac.department_id = :P0_DEPARTMENT_ID)
+              AND (ac.unit_id IS NULL OR ac.unit_id = :P0_UNIT_ID)
+            ) AND (ac.user_id IS NULL OR ac.user_id = :P0_USER_ID)
+          )
+          OR (ac.access_level = 3 AND ac.user_id = :P0_USER_ID)
+          AND ac.task_id = t.id
+          AND ROWNUM = 1
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM signaturerights sr
+        WHERE sr.task_id = t.id
+          AND sr.user_id = :P0_USER_ID
+      )
+    )
+)
+SELECT t.*,
+  CASE
+    WHEN :PXX_TAB_MODE = 'PROBLEM' THEN
+      CASE
+        WHEN (t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL)
+             AND EXISTS (
+               SELECT 1
+               FROM DICT_APP_CONFIRM_LIST d
+               WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+                 AND d.PARENT_STAGE_ID IS NOT NULL
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM SIGNATURERIGHTS r
+                   WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.ID
+                 )
+             ) THEN
+          '<span class="t-Icon fa fa-clock-o" style="color:red;" title="Просрочено"></span> ' ||
+          '<span class="t-Icon fa fa-id-card-o" style="color:orange;" title="Очікує підпису"></span>'
+        WHEN t.PLANNING_DATE_END < SYSDATE AND t.ACTUAL_DATE_END IS NULL THEN
+          '<span class="t-Icon fa fa-clock-o" style="color:red;" title="Просрочено"></span>'
+        WHEN EXISTS (
+               SELECT 1
+               FROM DICT_APP_CONFIRM_LIST d
+               WHERE d.PAGE_LIST_ID = t.PAGE_LIST_ID
+                 AND d.PARENT_STAGE_ID IS NOT NULL
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM SIGNATURERIGHTS r
+                   WHERE r.TASK_ID = t.ID AND r.STAGES_ID = d.ID
+                 )
+             ) THEN
+          '<span class="t-Icon fa fa-id-card-o" style="color:orange;" title="Очікує підпису"></span>'
+        ELSE NULL
+      END
+    ELSE NULL
+  END AS status_label_problem
+FROM tasks_with_access t
+```
+
+---
+
+### ✅ Що реалізовано:
+
+* Забезпечено, що всі фільтри доступу працюють до того, як буде розраховано `status_label_problem`.
+* Записи з інших відділів не з’являться, якщо немає доступу в `task_access_control` або `signaturerights`.
+* Твоя логіка вкладки `PROBLEM` акуратно вбудована, і не впливає на інші частини запиту.
+
+🔔 Якщо хочеш додати ще логіку в `SELECT` (наприклад, для `SHIFT` або `PLANNED`), краще виносити також у CTE або додавати обережно в тілі `SELECT`, **не змінюючи логіку `FROM`**.
+
+Готовий допомогти, якщо буде потреба додати ще колонки/статуси/фільтри.

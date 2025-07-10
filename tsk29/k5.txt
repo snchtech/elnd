@@ -1,0 +1,111 @@
+Щоб реалізувати описаний функціонал з роллю `EXTEND_SIGN`, чекбоксом "Від імені" та діалоговим вікном — потрібно внести наступні доповнення до вашої PL/SQL-картки:
+
+---
+
+### ✅ **1. Додати перевірку на роль `EXTEND_SIGN`**
+
+```plsql
+l_extend_sign BOOLEAN;
+...
+l_extend_sign := APEX_ACL.HAS_USER_ROLE (
+  p_application_id => l_application_id,
+  p_user_name => v('APP_USER'),
+  p_role_static_id => 'EXTEND_SIGN'
+);
+```
+
+---
+
+### ✅ **2. Додати умову, чи може користувач ставити "Від імені"**
+
+**В умові, де формується `IF NOT l_is_role THEN`**, додай перевірку:
+
+```plsql
+IF NOT l_is_role 
+   AND l_extend_sign 
+   AND l_list_department_id = :P0_DEPARTMENT_ID 
+   AND l_list_position_id NOT IN (2206, 2246)
+   AND l_count_cb = 0 THEN
+
+   -- Чекбокс "Від імені"
+   HTP.P('<div class="confirm-proxy-sign">');
+   HTP.P('<input type="checkbox" id="proxy-sign_' || l_signature_id || '" class="proxy-sign-checkbox" data-signature-id="' || l_signature_id || '" />');
+   HTP.P('<label for="proxy-sign_' || l_signature_id || '">Від імені</label>');
+   HTP.P('</div>');
+
+   -- Текст очікує відмітки
+   HTP.P('<span class="wait-confirm-signature-text wait-confirm-signature-text-current">Розглядає</span>');
+   l_count_cb := l_count_cb + 1;
+
+ELSIF NOT l_is_role AND l_count_cb = 0 THEN
+   -- Стандартна логіка
+   HTP.P('<span class="wait-confirm-signature-text wait-confirm-signature-text-current">Розглядає</span>');
+   l_count_cb := l_count_cb + 1;
+```
+
+---
+
+### ✅ **3. JavaScript для відкриття діалогу при натисканні на checkbox**
+
+**На сторінці APEX: додай Dynamic Action на клас `proxy-sign-checkbox`, що викликає JS:**
+
+```javascript
+$('.proxy-sign-checkbox').on('change', function() {
+  if (this.checked) {
+    let signId = $(this).data('signature-id');
+    apex.server.process("OPEN_PROXY_DIALOG", {
+      x01: signId
+    }, {
+      success: function(pData) {
+        // Відкриваємо діалог вручну або через APEX dialog
+        apex.navigation.dialog(pData.dialog_url);
+      }
+    });
+  }
+});
+```
+
+---
+
+### ✅ **4. Діалогова сторінка**
+
+**Має містити:**
+
+* **Radio group**:
+
+  * `r1` = виконавець, якого підписуємо (автоматично)
+  * `r2` = вибір зі списку (pop LOV з USERS)
+* **На зміну radio** → активувати/дезактивувати інший блок.
+* **Кнопка ОК** → запише в `SIGNATUREHISTORY`:
+
+```plsql
+INSERT INTO SIGNATUREHISTORY (
+  SIGNRIGHT_ID,
+  SIGNER_BY,
+  SIGNER_DATE,
+  BYNAME_USER_ID
+) VALUES (
+  :PXX_SIGNATURE_ID,
+  :PXX_SELECTED_USER,
+  SYSDATE,
+  1
+);
+```
+
+---
+
+### ✅ **5. Додай нову колонку в таблицю `SIGNATUREHISTORY`**
+
+```sql
+ALTER TABLE SIGNATUREHISTORY ADD BYNAME_USER_ID NUMBER;
+```
+
+---
+
+### ❗ Порада
+
+Всю логіку, що стосується діалогу (запуск, збереження, перевірка прав), тримай окремо на сторінці діалогу з перевірками на сервері (чи справді користувач має право підписати "від імені").
+
+---
+
+Готовий допомогти створити SQL/PLSQL процес або шаблон сторінки діалогу, якщо потрібно.

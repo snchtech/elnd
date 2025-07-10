@@ -1,0 +1,105 @@
+Причина, чому ти отримуєш `"POSITION, DEPARTMENT . ."` — це те, що ти завжди додаєш три частини (позиція, департамент, юзернейм/ПІБ) незалежно від того, чи вони NULL чи ні:
+
+```sql
+NVL(pos.NAME, '') || ', ' || NVL(dep.NAME, '') || ', ' || ...
+```
+
+Коли `u2.USERFIRSTNAME` і `u2.LASTNAME` = NULL, то після `SUBSTR(...)` це порожні рядки, і результат — `", , "`.
+
+---
+
+## ✅ Рішення: Формувати блок ПІБ лише якщо USER\_ID існує, і склеювати тільки непорожні частини
+
+Ось **оновлений блок**, який:
+
+* Формує ПІБ лише коли `sr.USER_ID IS NOT NULL`
+* Уникає зайвих `, ,`
+* Формат: **"ПІБ / посада / департамент"**, або просто "посада / департамент", якщо нема юзера
+
+---
+
+### 🔧 ОНОВЛЕНИЙ КОД `CREATOR_INFO`:
+
+```sql
+(
+  SELECT 
+    '<span class="task_creator">' ||
+      RTRIM(
+        -- Якщо є USER_ID – прізвище + ініціали
+        CASE 
+          WHEN sr.USER_ID IS NOT NULL THEN 
+            SUBSTR(u2.LASTNAME, 1, 1) || LOWER(SUBSTR(u2.LASTNAME, 2)) || ' ' ||
+            SUBSTR(u2.USERFIRSTNAME, 1, 1) || '. ' ||
+            SUBSTR(u2.USERLASTNAME, 1, 1) || '.'
+          ELSE ''
+        END ||
+        CASE WHEN sr.USER_ID IS NOT NULL AND (pos.NAME IS NOT NULL OR dep.NAME IS NOT NULL) THEN ', ' ELSE '' END ||
+        -- Посада
+        NVL(pos.NAME, '') ||
+        CASE WHEN pos.NAME IS NOT NULL AND dep.NAME IS NOT NULL THEN ', ' END ||
+        -- Департамент
+        NVL(dep.NAME, '')
+      , ', ') ||  -- Прибрати зайву кому
+    '</span>' ||
+
+    -- SIGNATURE INFO
+    CASE 
+      WHEN sr.USER_ID IS NOT NULL THEN
+        (
+          SELECT 
+            CASE 
+              WHEN h.SIGNER_BY = sr.USER_ID THEN 
+                '<span class="signer_info">' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+              ELSE 
+                '<span class="signer_info">Видано: ' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+            END
+          FROM SIGNATUREHISTORY h
+          JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+          WHERE h.SIGNRIGHT_ID = sr.ID
+          FETCH FIRST ROW ONLY
+        )
+      ELSE
+        (
+          SELECT '<span class="signer_info">' || us.USERNAME || ', ' || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') || '</span>'
+          FROM SIGNATUREHISTORY h
+          JOIN USER_TABLE us ON us.ID = h.SIGNER_BY
+          WHERE h.SIGNRIGHT_ID = sr.ID
+          FETCH FIRST ROW ONLY
+        )
+    END
+  FROM SIGNATURERIGHTS sr
+  LEFT JOIN POSITION_TABLE pos ON pos.ID = sr.POSITION_ID
+  LEFT JOIN DEPARTMENT_TABLE dep ON dep.ID = sr.DEPARTMENT_ID
+  LEFT JOIN USER_TABLE u2 ON u2.ID = sr.USER_ID
+  WHERE sr.TASK_ID = t.ID AND sr.STAGES_ID = 1
+  FETCH FIRST ROW ONLY
+) AS CREATOR_INFO
+```
+
+---
+
+### 🧪 Приклади результатів:
+
+1. Якщо є юзер:
+
+```
+Іванов А.А., Інженер, Відділ продажів
+```
+
+2. Якщо юзера немає:
+
+```
+Інженер, Відділ продажів
+```
+
+3. Якщо лише позиція:
+
+```
+Інженер
+```
+
+4. Якщо нічого немає — буде порожній блок без зайвих ком.
+
+---
+
+Хочеш — можемо ще додати стилізацію під формат `Іванов А.А. / Інженер / Відділ`.

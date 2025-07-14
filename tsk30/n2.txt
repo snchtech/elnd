@@ -1,0 +1,119 @@
+Добре! Розпишу детально, як реалізувати повний функціонал ознайомлення з завданням у Oracle APEX.
+
+---
+
+## 🔧 **1. Роль у APEX Access Control: `shift_personal`**
+
+У **Shared Components → Access Control → Roles**, додайте нову роль:
+
+* Static ID: `SHIFT_PERSONAL`
+* Name: `shift_personal`
+
+---
+
+## 🟦 **2. Створіть item на глобальній сторінці для визначення ролі**
+
+**Item:** `P0_HAS_SHIFT_ROLE`
+**Тип:** `Hidden`
+**Початкове значення (Before Header):**
+
+```plsql
+:P0_HAS_SHIFT_ROLE := CASE
+  WHEN APEX_ACL.HAS_ROLE(:APP_ID, 'SHIFT_PERSONAL') = 'Y' THEN 'Y'
+  ELSE 'N'
+END;
+```
+
+---
+
+## 🟩 **3. Кнопка “Ознайомлений” на сторінці завдання**
+
+**Кнопка:**
+
+* Назва: `Ознайомлений`
+* Static ID: `btn_task_viewed`
+* Action: **Submit Page**
+* Server Condition → PL/SQL Expression:
+
+```plsql
+(
+  :P0_HAS_SHIFT_ROLE = 'N'
+  AND NOT EXISTS (
+    SELECT 1 FROM TASK_VIEWED
+     WHERE TASK_ID = :P6_TASK_ID AND USER_ID = :P0_USER_ID
+  )
+)
+OR
+(
+  :P0_HAS_SHIFT_ROLE = 'Y'
+  AND NOT EXISTS (
+    SELECT 1 FROM TASK_VIEWED
+     WHERE TASK_ID = :P6_TASK_ID
+       AND USER_ID = :P0_USER_ID
+       AND DATE_VIEWED BETWEEN :P6_SHIFT_START_DATE AND :P6_SHIFT_END_DATE
+  )
+)
+```
+
+---
+
+## ✅ **4. Процес запису `TASK_VIEWED`**
+
+**Створіть APEX Process** після сабміту сторінки (або на кнопку):
+
+* Назва: `Insert Task View`
+* Тип: PL/SQL
+* Умови запуску: When Button Pressed = `btn_task_viewed`
+
+```plsql
+BEGIN
+  INSERT INTO TASK_VIEWED (USER_ID, TASK_ID, DATE_VIEWED)
+  VALUES (:P0_USER_ID, :P6_TASK_ID, SYSDATE);
+END;
+```
+
+---
+
+## 🟨 **5. Виведення інформації "Ознайомлений..."**
+
+### Створіть HTML-вираз або динамічний PL/SQL регіон:
+
+```plsql
+DECLARE
+  l_viewed_date DATE;
+  l_user_name   VARCHAR2(100);
+BEGIN
+  SELECT tv.DATE_VIEWED, u.USERNAME
+  INTO l_viewed_date, l_user_name
+  FROM TASK_VIEWED tv
+  JOIN USERS u ON u.ID = tv.USER_ID
+  WHERE tv.TASK_ID = :P6_TASK_ID
+    AND tv.USER_ID = :P0_USER_ID
+    AND (
+      (:P0_HAS_SHIFT_ROLE = 'Y' AND tv.DATE_VIEWED BETWEEN :P6_SHIFT_START_DATE AND :P6_SHIFT_END_DATE)
+      OR :P0_HAS_SHIFT_ROLE = 'N'
+    )
+    FETCH FIRST ROW ONLY;
+
+  HTP.P('<div class="task-viewed-info">Ознайомлений ' || l_user_name || ', ' || TO_CHAR(l_viewed_date, 'DD.MM.YYYY HH24:MI') || '</div>');
+
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    NULL;
+END;
+```
+
+---
+
+## 🧪 **6. Як протестувати:**
+
+1. Додайте користувачу роль `SHIFT_PERSONAL` у Access Control.
+2. Встановіть `P0_USER_ID` (наприклад, через Login Process або у `Before Header`).
+3. Встановіть `P6_TASK_ID`, `P6_SHIFT_START_DATE`, `P6_SHIFT_END_DATE` (наприклад, в `Before Header` завантажте поточну зміну).
+4. Натисніть кнопку “Ознайомлений”.
+5. Перевірте запис у таблиці `TASK_VIEWED`.
+6. Перевірте, що кнопка зникає згідно з логікою.
+
+---
+
+Готовий додати JavaScript або зробити це через AJAX, якщо хочеш без сабміту сторінки. Скажи, якщо потрібно!

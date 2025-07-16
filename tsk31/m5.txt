@@ -1,0 +1,113 @@
+Щоб врахувати `UCHASTOK` із таблиці `SIGNATURERIGHTS` при перевірці, чи відображати кнопку **"Відмітки"**, потрібно:
+
+---
+
+### 🔧 **1. Додати поле `l_list_uchastok` до курсора `confirm_list`**
+
+Оскільки поле `UCHASTOK` зберігається в `c017`, додай до `OPEN confirm_list`:
+
+```sql
+OPEN confirm_list FOR 
+  SELECT SEQ_ID, c001, c002, c003, c009, c010, c011, c012, c008, c014, c015, c016, c017
+  FROM APEX_collections
+  WHERE collection_name = 'CONFIRM_CART_' || l_stage_id || '_' || l_substage_id
+    AND c004 = l_substage_id
+  ORDER BY TO_NUMBER(c006);
+```
+
+І відповідно до `FETCH` додай:
+
+```plsql
+FETCH confirm_list INTO 
+  l_list_id, l_list_position, l_list_department, l_list_unit,
+  l_list_position_id, l_list_department_id, l_list_unit_id,
+  l_signature_id, l_list_tab_no, l_task_mode, l_subtask_content,
+  l_subtask_id, l_list_uchastok;
+```
+
+---
+
+### 🔧 **2. Додати змінну для `UCHASTOK` поточного користувача:**
+
+```plsql
+l_current_user_uchastok_g1 VARCHAR2(255);
+```
+
+І ініціалізуй її:
+
+```plsql
+l_current_user_uchastok_g1 := CASE 
+  WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_UCHASTOK
+  ELSE :P0_CUR_USER_UCHASTOK 
+END;
+```
+
+---
+
+### 🔧 **3. Додати перевірку `UCHASTOK` до блоку `IF` з `l_is_role`**
+
+Наприклад, у блоці з **позиція + департамент** заміни:
+
+```plsql
+l_is_role := l_is_position AND l_is_department;
+```
+
+На:
+
+```plsql
+IF l_list_uchastok IS NULL THEN
+  l_is_role := l_is_position AND l_is_department;
+ELSE
+  l_is_role := l_is_position AND l_is_department AND (l_list_uchastok = l_current_user_uchastok_g1);
+END IF;
+```
+
+Так само для інших комбінацій (позиція + департамент + блок, позиція тільки і т.д.), де враховується `UCHASTOK`.
+
+---
+
+### ✅ Приклад: доповнений фрагмент для `position_id + department_id`
+
+```plsql
+IF l_list_position_id IS NOT NULL AND l_list_department_id IS NOT NULL AND l_list_unit_id IS NULL THEN
+  IF l_list_position_id = l_current_user_position_g1 THEN
+    l_is_position := true;
+  ELSE
+    l_is_position := false;
+  END IF;
+
+  IF l_list_department_id = l_current_user_department_g1 THEN
+    l_is_department := true;
+  ELSE
+    l_is_department := false;
+  END IF;
+
+  IF l_list_uchastok IS NULL THEN
+    l_is_role := l_is_position AND l_is_department;
+  ELSE
+    l_is_role := l_is_position AND l_is_department AND (l_list_uchastok = l_current_user_uchastok_g1);
+  END IF;
+```
+
+---
+
+### 📌 Порада
+
+Щоб зменшити дублікат коду, можеш винести логіку порівняння `uchastok` у функцію:
+
+```plsql
+FUNCTION is_uchastok_match(p_val VARCHAR2, p_user_val VARCHAR2) RETURN BOOLEAN IS
+BEGIN
+  RETURN (p_val IS NULL OR p_val = p_user_val);
+END;
+```
+
+І використовувати:
+
+```plsql
+l_is_role := l_is_position AND l_is_department AND is_uchastok_match(l_list_uchastok, l_current_user_uchastok_g1);
+```
+
+---
+
+Готовий допомогти адаптувати інші блоки (з unit, з tab\_no) за потребою.

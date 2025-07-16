@@ -1,0 +1,59 @@
+Щоб відфільтрувати `POPUP LOV` у Oracle APEX на основі значення `DEPARTMENT`, яке залежить від **режиму заміщення** (тобто `P0_SUBSTITUTION_MODE = 1` чи `0`), ти можеш зробити наступне:
+
+---
+
+### 🔧 **1. SQL-запит для LOV на основі таблиці `USERS`**
+
+```sql
+SELECT
+  u.UCHASTOK_SHORT_NAME AS DISPLAY_VALUE,
+  u.UCHASTOK AS RETURN_VALUE
+FROM
+  USERS u
+WHERE
+  u.SPR_DEPARTMENT_ID = CASE
+    WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_DEPARTMENT_ID
+    ELSE :P0_CUR_USER_DEPARTMENT
+  END
+```
+
+---
+
+### 🧩 **2. Як це застосувати:**
+
+У полі `List of Values` в APEX:
+
+* **Type**: `SQL Query`
+* **Return value**: `UCHASTOK`
+* **Display value**: `UCHASTOK_SHORT_NAME` або `UCHASTOK` (що потрібно)
+
+---
+
+### ✅ **3. Додаткові поради**
+
+* Переконайся, що `P0_SUBSTITUTION_MODE`, `P0_NEW_DEPARTMENT_ID`, `P0_CUR_USER_DEPARTMENT` доступні на сторінці (мають бути `Session State`).
+* Якщо використовуєш таблицю `STRUCTR` замість `USERS` для LOV, заміни у SQL `FROM USERS` на `FROM STRUCTR`.
+
+---
+
+### 📌 Альтернатива: з `TSEH_ID` (якщо фільтр іде по `TSEH_ID`, а не `SPR_DEPARTMENT_ID`)
+
+```sql
+SELECT
+  s.UCHASTOK_SHORT_NAME AS DISPLAY_VALUE,
+  s.UCHASTOK AS RETURN_VALUE
+FROM
+  STRUCTR s
+WHERE
+  s.TSEH_ID = CASE
+    WHEN :P0_SUBSTITUTION_MODE = 1 THEN :P0_NEW_DEPARTMENT_ID
+    ELSE :P0_CUR_USER_DEPARTMENT
+  END
+  AND s.DATE_END IS NULL
+```
+
+---
+
+🔔 Якщо треба показати лише значення `UCHASTOK`, яке вже обране користувачем, і не давати можливість змінити — краще використовуй **Display Only** item з `Display as Text`.
+
+Готовий допомогти реалізувати це в APEX-інтерфейсі чи з Dynamic Action.

@@ -1,0 +1,85 @@
+Щоб додати функціонал перевірки й відображення кнопки **«Відмітка від імені»** в основний PL/SQL-код (де будується картка відмітки), найкраще вбудувати перевірку **після побудови основної кнопки "Відмітка"**, у частині, де `l_is_role = true`, тобто в межах кожної гілки `IF`.
+
+### ✅ Що потрібно:
+
+1. Перевірка, чи поточний користувач має **роль `EXTEND_SIGN`**.
+2. Якщо має, і його `DEPARTMENT_ID = SIGNATURERIGHTS.DEPARTMENT_ID` та `POSITION_ID ≠ 2206 AND ≠ 2246` — викликаємо `PL/SQL`-блок для генерації кнопки **"Відмітка від імені"**.
+
+---
+
+### 🔧 Як вставити:
+
+Вставляємо нижче кожного місця, де будується основна кнопка `confirm-signature-button`, наприклад:
+
+```plsql
+IF l_is_role AND l_count_cb = 0 THEN
+    HTP.P('<button id="signature-btn" data-signature-id="'|| l_signature_id || '" class="confirm-signature-button">' || l_substage_btn_text || '</button>');
+    l_count_cb := l_count_cb + 1;
+
+    -- 🔹 Додаємо кнопку "Відмітка від імені"
+    DECLARE
+        v_dolznost        NUMBER;
+        v_tseh_id         NUMBER;
+        v_uchastok        VARCHAR2(100);
+        v_kategoria_otiz  NUMBER;
+
+        v_user_id         NUMBER := l_list_tab_no; -- SIGNATURERIGHTS.USER_ID
+        v_position_id     NUMBER := l_list_position_id;
+        v_department_id   NUMBER := l_list_department_id;
+        v_uchastok_cond   VARCHAR2(100); -- якщо є в SIGNATURERIGHTS
+
+        v_cur_position_id   NUMBER := l_current_user_position_g1;
+        v_cur_department_id NUMBER := l_current_user_department_g1;
+        v_cur_uchastok      VARCHAR2(100) := NVL(:P0_NEW_UCHASTOK, :P0_CURRENT_UCHASTOK);
+        v_cur_kategoria     NUMBER := NVL(:P0_NEW_KATEGORIYA_OTIZ, :P0_CURRENT_KATEGORIYA_OTIZ);
+
+        v_show_button BOOLEAN := FALSE;
+    BEGIN
+        IF v_user_id IS NOT NULL THEN
+            SELECT t.DOLZNOST, t.TSEH_ID, t.UCHASTOK, t.KATEGORIA_OTIZ
+            INTO v_dolznost, v_tseh_id, v_uchastok, v_kategoria_otiz
+            FROM USERS t
+            WHERE t.TAB_NO = v_user_id
+              AND t.PRIZNAK IS NULL;
+        ELSE
+            SELECT t.DOLZNOST, t.TSEH_ID, t.UCHASTOK, t.KATEGORIA_OTIZ
+            INTO v_dolznost, v_tseh_id, v_uchastok, v_kategoria_otiz
+            FROM USERS t
+            WHERE t.PRIZNAK IS NULL
+              AND t.DOLZNOST = v_position_id
+              AND t.TSEH_ID = v_department_id
+              AND (v_uchastok_cond IS NULL OR t.UCHASTOK = v_uchastok_cond)
+              AND ROWNUM = 1;
+        END IF;
+
+        IF v_cur_department_id = v_tseh_id
+           AND v_cur_position_id = v_dolznost
+           AND (v_uchastok_cond IS NULL OR v_cur_uchastok = v_uchastok)
+           AND v_kategoria_otiz = 1
+           AND APEX_ACL.HAS_USER_ROLE(:APP_ID, :APP_USER, 'EXTEND_SIGN')
+           AND v_cur_position_id NOT IN (2206, 2246) THEN
+
+            v_show_button := TRUE;
+        END IF;
+
+        IF v_show_button THEN
+            HTP.P('<button id="sign-byname-btn" data-signature-id="'|| l_signature_id || '" class="byname-signature-button">Відмітка від імені</button>');
+        END IF;
+
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN NULL;
+        WHEN OTHERS THEN
+            HTP.P('<span class="error">Помилка: ' || SQLERRM || '</span>');
+    END;
+```
+
+---
+
+### ✅ Рекомендації
+
+* Після вставки цього коду — бажано **уніфікувати його в окрему функцію**, якщо повторюється.
+* Врахуй, що `:P0_NEW_UCHASTOK` і `:P0_CURRENT_UCHASTOK` мають бути обов’язково ініціалізовані в `Global Page`.
+
+---
+
+Якщо потрібно — я можу окремо виділити цей код у функцію типу `RETURN VARCHAR2` або PL/SQL-процедуру, яку потім вставиш через `htp.p`. Напиши, якщо хочеш оформити компактно.

@@ -1,0 +1,110 @@
+Чудово! Розділимо реалізацію на дві частини:
+
+---
+
+## ✅ 1. **PL/SQL-функція `can_sign_by_name`**
+
+Функція перевіряє, чи користувач **має право підписати "від імені"**, і повертає `TRUE/FALSE`.
+
+```sql
+CREATE OR REPLACE FUNCTION can_sign_by_name (
+    p_signature_user_id     IN NUMBER,  -- SIGNATURERIGHTS.USER_ID
+    p_signature_position_id IN NUMBER,  -- SIGNATURERIGHTS.POSITION_ID
+    p_signature_department  IN NUMBER,  -- SIGNATURERIGHTS.DEPARTMENT_ID
+    p_signature_uchastok    IN VARCHAR2, -- SIGNATURERIGHTS.UCHASTOK
+    p_signature_kategoria   IN NUMBER,  -- SIGNATURERIGHTS.KATEGORIA_OTIZ
+    p_cur_position_id       IN NUMBER,  -- P0_CURRENT_POSITION_ID або NEW
+    p_cur_department_id     IN NUMBER,  -- P0_CURRENT_DEPARTMENT_ID або NEW
+    p_cur_uchastok          IN VARCHAR2, -- P0_CURRENT_UCHASTOK або NEW
+    p_cur_kategoria         IN NUMBER   -- P0_CURRENT_KATEGORIYA_OTIZ або NEW
+) RETURN BOOLEAN
+IS
+    v_sign_pos   NUMBER;
+    v_sign_dep   NUMBER;
+    v_sign_uch   VARCHAR2(100);
+    v_sign_kat   NUMBER;
+BEGIN
+    -- Якщо є USER_ID → витягуємо по ньому
+    IF p_signature_user_id IS NOT NULL THEN
+        SELECT DOLZNOST, TSEH_ID, UCHASTOK, KATEGORIA_OTIZ
+        INTO v_sign_pos, v_sign_dep, v_sign_uch, v_sign_kat
+        FROM USERS
+        WHERE TAB_NO = p_signature_user_id
+          AND PRIZNAK IS NULL;
+
+    -- Якщо немає USER_ID → витягуємо по position/department/uchastok
+    ELSIF p_signature_position_id IS NOT NULL AND p_signature_department IS NOT NULL THEN
+        SELECT DOLZNOST, TSEH_ID, UCHASTOK, KATEGORIA_OTIZ
+        INTO v_sign_pos, v_sign_dep, v_sign_uch, v_sign_kat
+        FROM USERS
+        WHERE PRIZNAK IS NULL
+          AND DOLZNOST = p_signature_position_id
+          AND TSEH_ID = p_signature_department
+          AND (p_signature_uchastok IS NULL OR UCHASTOK = p_signature_uchastok)
+          AND ROWNUM = 1;
+
+    ELSE
+        RETURN FALSE; -- Недостатньо даних
+    END IF;
+
+    -- Перевірка умов
+    IF v_sign_dep = p_cur_department_id
+       AND v_sign_pos = p_cur_position_id
+       AND (p_signature_uchastok IS NULL OR v_sign_uch = p_cur_uchastok)
+       AND v_sign_kat = 1
+       AND APEX_ACL.HAS_USER_ROLE(APEX_APPLICATION.G_FLOW_ID, APEX_CUSTOM_AUTH.GET_USERNAME, 'EXTEND_SIGN') = 'Y'
+       AND p_cur_position_id NOT IN (2206, 2246)
+    THEN
+        RETURN TRUE;
+    ELSE
+        RETURN FALSE;
+    END IF;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN RETURN FALSE;
+    WHEN OTHERS THEN RETURN FALSE;
+END can_sign_by_name;
+/
+```
+
+---
+
+## ✅ 2. **Вставка виклику функції у код у відповідному місці**
+
+У твоєму основному `PL/SQL`-блоці (який будує картку підпису), знайди блок, де `l_count_cb = 0` — саме там **формується перший запис на підпис**, тобто **той, хто має право зробити відмітку**.
+
+### Встав приклад після перевірки `l_count_cb = 0`, але **до `END IF;` цього блоку:**
+
+```plsql
+IF l_count_cb = 0 THEN
+  -- Вивід інформації про поточного підписанта (можливо, кнопка підпису)
+
+  IF can_sign_by_name(
+      p_signature_user_id     => l_list_tab_no, -- SIGNATURERIGHTS.USER_ID
+      p_signature_position_id => l_list_position_id,
+      p_signature_department  => l_list_department_id,
+      p_signature_uchastok    => l_list_uchastok,
+      p_signature_kategoria   => l_list_kategoria_otiz,
+      p_cur_position_id       => NVL(:P0_NEW_POSITION_ID, :P0_CURRENT_POSITION_ID),
+      p_cur_department_id     => NVL(:P0_NEW_DEPARTMENT_ID, :P0_CURRENT_DEPARTMENT_ID),
+      p_cur_uchastok          => NVL(:P0_NEW_UCHASTOK, :P0_CURRENT_UCHASTOK),
+      p_cur_kategoria         => NVL(:P0_NEW_KATEGORIYA_OTIZ, :P0_CURRENT_KATEGORIYA_OTIZ)
+  ) THEN
+    HTP.P('<button class="byname-signature-button" data-signature-id="'|| l_signature_id || '">Відмітка від імені</button>');
+  END IF;
+END IF;
+```
+
+---
+
+## 🔎 Пояснення:
+
+* Функція `can_sign_by_name(...)` бере на вхід всі потрібні значення з `SIGNATURERIGHTS` і поточного (чи заміщеного) користувача.
+* У головному коді вона **викликається тільки тоді**, коли `l_count_cb = 0` (тобто **для першого доступного запису на підпис**).
+* Кнопка **відображається лише тоді**, коли умови співпадають (посада + цех + участок \[за потреби] + категорія + роль + ≠ службових ID).
+
+---
+
+🔔 Якщо хочеш — можна також налаштувати **LOV для вибору користувача**, який буде в модальному вікні для підпису "від імені", але це вже інша частина логіки.
+
+Хочеш — покажу.

@@ -1,0 +1,92 @@
+Ось робочий **PL/SQL код**, який виконує логіку в два етапи:
+
+1. Визначає, **чи є запис user\_id** в `SIGNATURERIGHTS`, і виконує відповідний `SELECT`:
+
+   * Якщо `user_id` є → шукає дані в `USERS`
+   * Якщо `user_id` немає → шукає збіг по `position`, `department`, і **опціонально по `uchastok`**
+
+2. Після вибірки значень з таблиці `USERS`, **порівнює їх з даними зі сторінки (з урахуванням заміщення)**
+
+---
+
+### ✅ Робочий PL/SQL код
+
+```plsql
+DECLARE
+    v_dolznost        USERS.DOLZNOST%TYPE;
+    v_tseh_id         USERS.TSEH_ID%TYPE;
+    v_uchastok        USERS.UCHASTOK%TYPE;
+    v_kategoria_otiz  USERS.KATEGORIA_OTIZ%TYPE;
+
+    v_user_id         SIGNATURERIGHTS.USER_ID%TYPE := :P6_USER_ID; -- SIGNATURERIGHTS.USER_ID
+    v_position_id     SIGNATURERIGHTS.POSITION_ID%TYPE := :P6_POSITION_ID;
+    v_department_id   SIGNATURERIGHTS.DEPARTMENT_ID%TYPE := :P6_DEPARTMENT_ID;
+    v_uchastok_cond   SIGNATURERIGHTS.UCHASTOK%TYPE := :P6_UCHASTOK;
+
+    -- Параметри поточного користувача (з урахуванням заміщення)
+    v_cur_position_id   NUMBER := NVL(:P0_NEW_POSITION_ID, :P0_CURRENT_POSITION_ID);
+    v_cur_department_id NUMBER := NVL(:P0_NEW_DEPARTMENT_ID, :P0_CURRENT_DEPARTMENT_ID);
+    v_cur_uchastok      VARCHAR2(100) := NVL(:P0_NEW_UCHASTOK, :P0_CURRENT_UCHASTOK);
+    v_cur_kategoria     NUMBER := NVL(:P0_NEW_KATEGORIYA_OTIZ, :P0_CURRENT_KATEGORIYA_OTIZ);
+
+    v_show_button BOOLEAN := FALSE;
+BEGIN
+    IF v_user_id IS NOT NULL THEN
+        -- 🔹 Випадок 1: user_id заданий — пряме зіставлення
+        SELECT t.DOLZNOST, t.TSEH_ID, t.UCHASTOK, t.KATEGORIA_OTIZ
+        INTO v_dolznost, v_tseh_id, v_uchastok, v_kategoria_otiz
+        FROM USERS t
+        WHERE t.ID = v_user_id
+          AND t.PRIZNAK IS NULL;
+
+    ELSE
+        -- 🔹 Випадок 2: немає user_id → перевірка по посаді + департаменту + optional uchastok
+        SELECT t.DOLZNOST, t.TSEH_ID, t.UCHASTOK, t.KATEGORIA_OTIZ
+        INTO v_dolznost, v_tseh_id, v_uchastok, v_kategoria_otiz
+        FROM USERS t
+        WHERE t.PRIZNAK IS NULL
+          AND t.DOLZNOST = v_position_id
+          AND t.TSEH_ID = v_department_id
+          AND (
+                v_uchastok_cond IS NULL OR t.UCHASTOK = v_uchastok_cond
+              )
+          AND ROWNUM = 1;
+    END IF;
+
+    -- 🔹 Перевірка на співпадіння з поточним/заміщеним користувачем
+    IF v_cur_department_id = v_tseh_id
+       AND v_cur_position_id = v_dolznost
+       AND (v_uchastok_cond IS NULL OR v_cur_uchastok = v_uchastok)
+       AND v_kategoria_otiz = 1 THEN
+
+        v_show_button := TRUE;
+
+    END IF;
+
+    -- 🔹 Рендеримо кнопку
+    IF v_show_button THEN
+        HTP.P('<button id="sign-byname-btn" class="byname-signature-button">Відмітка від імені</button>');
+    END IF;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        NULL; -- нічого не робимо
+    WHEN OTHERS THEN
+        HTP.P('<span class="error">Помилка: ' || SQLERRM || '</span>');
+END;
+```
+
+---
+
+### ✅ Що робить цей код:
+
+| Крок | Дія                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------- |
+| 1️⃣  | Перевіряє: `SIGNATURERIGHTS.USER_ID` є → пряме зіставлення з `USERS`                                |
+| 2️⃣  | Якщо `USER_ID` відсутній → підбирає `USERS` по `POSITION_ID`, `DEPARTMENT_ID`, `UCHASTOK` (опційно) |
+| 3️⃣  | Порівнює вибрані дані з `P0_CURRENT_*` або `P0_NEW_*`                                               |
+| 4️⃣  | Якщо всі умови виконуються → виводить кнопку “Відмітка від імені”                                   |
+
+---
+
+🔔 **За потреби можу винести цей код у `FUNCTION`, яка повертає `BOOLEAN`, або навіть окрему `procedure`, що рендерить кнопку, якщо потрібно.**

@@ -1,0 +1,74 @@
+Для реалізації цього функціоналу на сторінці `P0` в Oracle APEX, ти можеш використати **PL/SQL Dynamic Action** або **Before Header Process**, який встановлює значення item'ів залежно від наявності заміщення.
+
+---
+
+## 🔶 Припущення про item'и:
+
+* `P0_UCHASTOK` — для поточного користувача
+* `P0_KATEGORIA_OTIZ` — для поточного користувача
+* `P0_NEW_UCHASTOK` — для заміщеного
+* `P0_NEW_KATEGORIA_OTIZ` — для заміщеного
+* `P0_SUBSTITUTION_MODE` — 1, якщо є заміщення
+* `P0_SUBSTITUTION_USER_ID` — ID користувача, якого заміщають
+* `P0_USER_ID` — ID поточного користувача
+
+---
+
+## ✅ PL/SQL код (в процесі або динамічній дії):
+
+```plsql
+DECLARE
+    l_uchastok          USERS.UCHASTOK%TYPE;
+    l_kategoria_otiz    USERS.KATEGORIA_OTIZ%TYPE;
+BEGIN
+    -- Дані для поточного користувача
+    SELECT UCHASTOK, KATEGORIA_OTIZ
+    INTO l_uchastok, l_kategoria_otiz
+    FROM USERS
+    WHERE ID = :P0_USER_ID;
+
+    :P0_UCHASTOK := l_uchastok;
+    :P0_KATEGORIA_OTIZ := l_kategoria_otiz;
+
+    -- Якщо є заміщення
+    IF :P0_SUBSTITUTION_MODE = '1' AND :P0_SUBSTITUTION_USER_ID IS NOT NULL THEN
+        BEGIN
+            SELECT UCHASTOK, KATEGORIA_OTIZ
+            INTO l_uchastok, l_kategoria_otiz
+            FROM USERS
+            WHERE ID = :P0_SUBSTITUTION_USER_ID;
+
+            -- Перевіряємо, чи є USER_ID (тобто, чи вказано uchastok)
+            IF :P0_SUBSTITUTION_USER_ID IS NOT NULL THEN
+                :P0_NEW_UCHASTOK := l_uchastok;
+            END IF;
+
+            :P0_NEW_KATEGORIA_OTIZ := l_kategoria_otiz;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                NULL; -- нічого не оновлюємо
+        END;
+    END IF;
+END;
+```
+
+---
+
+## 🔄 Де виконувати:
+
+* 🔹 **Before Header** → для автоматичного заповнення при завантаженні
+* 🔹 або Dynamic Action → `Page Load → Execute PL/SQL Code`
+
+---
+
+## 🔍 Додатково:
+
+Якщо ти хочеш динамічно оновлювати значення при зміні `P0_SUBSTITUTION_MODE`, зроби **Dynamic Action:**
+
+* Event: `Change` on `P0_SUBSTITUTION_MODE`
+* True Action: `Execute PL/SQL` (цей же код)
+* Affected Items: `P0_NEW_UCHASTOK`, `P0_NEW_KATEGORIA_OTIZ`
+
+---
+
+Хочеш — можу написати окремі `SELECT` для кожного значення або використати `APEX_UTIL.SET_SESSION_STATE`, якщо треба зберігати значення довше.

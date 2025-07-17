@@ -1,0 +1,113 @@
+Ось як реалізувати **створення колекції через AJAX** замість `Before Header`, щоб уникнути блокування сесії:
+
+---
+
+## ✅ **Приклад: Створення колекції через AJAX Process**
+
+---
+
+### 🔹 1. **Створи AJAX-процес**
+
+1. У **Shared Components → Processes** (або прямо на сторінці)
+2. Тип: `PL/SQL`
+3. Назва: `CREATE_CONFIRM_CART_COLLECTION`
+4. Код:
+
+```plsql
+DECLARE
+    l_query VARCHAR2(4000);
+BEGIN
+    -- Підставляємо значення з елементів сторінки (ITEMS)
+    -- Наприклад: P5_TASK_ID, P5_STAGE_ID, P5_SUBSTAGE_ID
+    l_query := '
+        SELECT p.short_name,
+               dp.short_name,
+               un.name,
+               sr.STAGES_ID,
+               NULL,
+               sr.SORT_ORDER,
+               sr.TASK_ID,
+               sr.USER_TABNO,
+               sr.POSITION_ID,
+               sr.DEPARTMENT_ID,
+               sr.UNIT_ID,
+               sr.ID
+          FROM TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+          LEFT JOIN TaskTracker.Dict_App_Confirm_List@TO_TASKTRACKER10 d
+            ON sr.Stages_Id = d.id
+          LEFT JOIN TaskTracker.POSADA_FOR_CONFIRMLIST_V@TO_TASKTRACKER10 p
+            ON sr.Position_Id = p.kod
+          LEFT JOIN TaskTracker.DEPART_CONFIRMLIST_V@TO_TASKTRACKER10 dp
+            ON sr.department_id = dp.id
+          LEFT JOIN TaskTracker.DICT_UNIT@TO_TASKTRACKER10 un
+            ON sr.unit_id = un.id
+         WHERE sr.TASK_ID = ' || TO_NUMBER(:P5_TASK_ID) || '
+           AND d.parent_stage_id IS NOT NULL
+           AND sr.STAGES_ID = ' || TO_NUMBER(:P5_SUBSTAGE_ID) || '
+         ORDER BY d.id, sr.Stages_Id, sr.sort_order';
+
+    -- Створення колекції
+    IF APEX_COLLECTION.COLLECTION_EXISTS(p_collection_name => 'CONFIRM_CART_' || :P5_STAGE_ID || '_' || :P5_SUBSTAGE_ID) THEN
+        APEX_COLLECTION.DELETE_COLLECTION(p_collection_name => 'CONFIRM_CART_' || :P5_STAGE_ID || '_' || :P5_SUBSTAGE_ID);
+    END IF;
+
+    APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY(
+        p_collection_name => 'CONFIRM_CART_' || :P5_STAGE_ID || '_' || :P5_SUBSTAGE_ID,
+        p_query           => l_query,
+        p_generate_md5    => 'YES'
+    );
+END;
+```
+
+> ⚠️ Замініть `:P5_TASK_ID`, `:P5_STAGE_ID`, `:P5_SUBSTAGE_ID` на свої item-и, якщо вони інші
+
+---
+
+### 🔹 2. **Додай Dynamic Action на Page Load або кнопку**
+
+* **Event**: `Page Load` (або `Click` кнопки)
+* **True Action**: `Execute PL/SQL Code (AJAX Callback)`
+
+  * **PL/SQL Code**:
+
+    ```plsql
+    NULL;
+    ```
+  * **AJAX Identifier**: `CREATE_CONFIRM_CART_COLLECTION`
+  * **Page Items to Submit**: `P5_TASK_ID, P5_STAGE_ID, P5_SUBSTAGE_ID`
+  * **Items to Return**: нічого
+
+---
+
+### 🔹 3. **Після виклику – онови регіон**
+
+* Додай другу дію до цього ж DA:
+
+  * **Action**: `Refresh`
+  * **Selection Type**: `Region`
+  * **Region**: обери той, що побудований на колекції `CONFIRM_CART_*`
+
+---
+
+### 🔹 4. **Прибери створення колекції з Before Header**
+
+* Видали або вимкни старий `Before Header` PL/SQL
+
+---
+
+## 🔁 Результат:
+
+* Колекція створюється **через AJAX** лише коли ти явно її викликаєш
+* Завантаження не блокує сесію
+* Можеш викликати її навіть пізніше, після того як основна сторінка повністю завантажилась
+
+---
+
+## 🔧 Бонус: Якщо колекцій багато
+
+* Зроби AJAX-процес універсальним: передавай `STAGE_ID`, `SUBSTAGE_ID` як параметри
+* Викликай його у циклі через JavaScript або окремо на кліки
+
+---
+
+Якщо скажеш, яка саме у тебе структура `TASK_ID`, `STAGE_ID`, `SUBSTAGE_ID` або блоків — я можу адаптувати цей приклад до твого коду.

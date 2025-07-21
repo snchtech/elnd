@@ -1,0 +1,133 @@
+Чудово, зараз покажу повну реалізацію варіанту з тимчасовою таблицею `TMP_SUBTASKS`, яку ти можеш використовувати для **швидкого масового завантаження даних** у APEX Collection через `APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY`.
+
+---
+
+## ✅ **Крок 1: Створення тимчасової таблиці**
+
+### 🔹 Створюємо Global Temporary Table (GTT):
+
+```sql
+CREATE GLOBAL TEMPORARY TABLE TMP_SUBTASKS (
+  TASK_ID           NUMBER,
+  SUBTASK_CONTENT   VARCHAR2(4000),
+  PLANNING_DATE_END DATE,
+  PARENT_ID         NUMBER,
+  SUBTASK_ORDER     NUMBER,
+  STATUS_ID         NUMBER,
+  SUBTASK_ID        NUMBER,
+  MODE_ID           NUMBER
+)
+ON COMMIT DELETE ROWS;
+```
+
+> 🔄 `ON COMMIT DELETE ROWS` — дані очищаються після `COMMIT`. Якщо хочеш вручну — заміни на `PRESERVE ROWS`.
+
+---
+
+## ✅ **Крок 2: Наповнення тимчасової таблиці**
+
+### 🔹 PL/SQL блок:
+
+```plsql
+BEGIN
+  -- Очищення перед вставкою (не обов’язково, якщо ON COMMIT DELETE ROWS)
+  DELETE FROM TMP_SUBTASKS;
+
+  -- Масове завантаження підзавдань
+  INSERT /*+ APPEND */ INTO TMP_SUBTASKS (
+    TASK_ID,
+    SUBTASK_CONTENT,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID,
+    SUBTASK_ID,
+    MODE_ID
+  )
+  SELECT
+    TASK_ID,
+    SUBTASK_CONTENT,
+    PLANNING_DATE_END,
+    PARENT_ID,
+    SUBTASK_ORDER,
+    STATUS_ID,
+    ID AS SUBTASK_ID,
+    0 AS MODE_ID -- або 1 для шаблону
+  FROM TaskTracker.TASK_SUBTASKS@TO_TASKTRACKER10
+  WHERE TASK_ID = :P6_TASK_ID;
+END;
+```
+
+> ⚠️ `/*+ APPEND */` пришвидшує вставку, але працює лише з **DIRECT PATH** і потребує `COMMIT` після вставки.
+
+---
+
+## ✅ **Крок 3: Створення APEX\_COLLECTION із таблиці**
+
+### 🔹 PL/SQL для створення колекції:
+
+```plsql
+BEGIN
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+  END IF;
+
+  APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY(
+    p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+    p_query => '
+      SELECT
+        TASK_ID        AS c001,
+        SUBTASK_CONTENT AS c002,
+        PLANNING_DATE_END AS d001,
+        PARENT_ID      AS c003,
+        SUBTASK_ORDER  AS c004,
+        STATUS_ID      AS c005,
+        SYSDATE        AS d002,
+        NULL           AS d003,
+        :P0_CUR_USER_TABNO AS c006,
+        NULL           AS c007,
+        SUBTASK_ID     AS c009,
+        MODE_ID        AS n001
+      FROM TMP_SUBTASKS
+    ',
+    p_generate_md5 => 'YES'
+  );
+END;
+```
+
+> 🔁 Параметри, які є в запиті (`:P0_CUR_USER_TABNO`), повинні бути **в `Page Items to Submit`** якщо це робиться з AJAX або DA.
+
+---
+
+## ✅ **Крок 4: Очистка тимчасової таблиці (опціонально)**
+
+* Якщо створено з `ON COMMIT DELETE ROWS` — очищається автоматично
+* Якщо `PRESERVE ROWS` — тоді очищай вручну:
+
+```plsql
+DELETE FROM TMP_SUBTASKS;
+COMMIT;
+```
+
+---
+
+## 🔍 Коли це дає вигоду?
+
+| Обсяг записів | `FOR LOOP` + `ADD_MEMBER` | GTT + `CREATE_COLLECTION_FROM_QUERY` |
+| ------------- | ------------------------- | ------------------------------------ |
+| < 100         | швидко                    | складніше, без виграшу               |
+| 100–1000      | норм                      | швидше                               |
+| > 1000        | може бути повільно        | значно швидше                        |
+
+---
+
+## 📌 Підсумок:
+
+* ✅ Тимчасова таблиця зберігає масив даних, отриманих швидко через SQL
+* ✅ `CREATE_COLLECTION_FROM_QUERY` дозволяє імпортувати все одразу
+* ✅ Виключає необхідність `FOR LOOP` і викликів `ADD_MEMBER` у циклі
+* ✅ Очистка GTT відбувається автоматично (якщо `ON COMMIT DELETE ROWS`)
+
+---
+
+🔔 Хочеш — я можу створити пакет (PL/SQL procedure) або AJAX-процес, який все це об’єднує.

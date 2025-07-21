@@ -1,0 +1,134 @@
+Щоб **після `refresh` Interactive Grid (IG)** автоматично оновлювався **progress bar**, який формується через **Dynamic Action (DA) + AJAX Callback Process**, потрібно реалізувати правильну послідовність:
+
+---
+
+## ✅ Загальна схема:
+
+1. ✅ **IG оновлюється (Refresh)**
+2. ✅ Після оновлення → викликається **AJAX-процес** для оновлення прогрес-бара
+3. ✅ Результат вставляється у контейнер, наприклад `#progressBarContainer`
+
+---
+
+## 🔧 Приклад покрокової реалізації:
+
+---
+
+### 🔹 1. Контейнер для прогрес-бара (у HTML)
+
+У регіоні Static Content або під IG додай контейнер:
+
+```html
+<div id="progressBarContainer"></div>
+```
+
+---
+
+### 🔹 2. Створи **AJAX Callback Process**
+
+* Назва: `LOAD_PROGRESS_BAR`
+* Тип: PL/SQL
+* Код:
+
+```plsql
+DECLARE
+  l_html CLOB := '';
+BEGIN
+  -- Тут твій код побудови прогрес-бара, наприклад:
+  l_html := '<div class="subtask-progress">';
+
+  FOR rec IN (
+    SELECT MAX(CASE WHEN sh.ID IS NOT NULL THEN 1 ELSE 0 END) AS IS_SIGNED
+    FROM TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+    LEFT JOIN TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 sh
+      ON sr.ID = sh.SIGNRIGHT_ID
+    WHERE sr.TASK_ID = :P5_TASK_ID
+    GROUP BY sr.SUBTASK_ID
+    ORDER BY 1 DESC
+  ) LOOP
+    IF rec.IS_SIGNED = 1 THEN
+      l_html := l_html || '<span class="subtask-box filled"></span>';
+    ELSE
+      l_html := l_html || '<span class="subtask-box empty"></span>';
+    END IF;
+  END LOOP;
+
+  l_html := l_html || '</div>';
+
+  -- Повертаємо HTML
+  HTP.P(l_html);
+END;
+```
+
+> 🔁 Не забудь вказати `P5_TASK_ID` у “Page Items to Submit” у JavaScript (нижче).
+
+---
+
+### 🔹 3. Додай JavaScript-функцію, яка викликає AJAX і вставляє прогрес-бар:
+
+```javascript
+function refreshProgressBar() {
+  apex.server.process("LOAD_PROGRESS_BAR", {
+    pageItems: "#P5_TASK_ID"
+  }, {
+    success: function (pData) {
+      $("#progressBarContainer").html(pData);
+    },
+    error: function (jqXHR, textStatus, errorThrown) {
+      console.error("Progress bar error:", textStatus);
+    }
+  });
+}
+```
+
+---
+
+### 🔹 4. Додай Dynamic Action:
+
+* **Name**: `Refresh Progress Bar After IG Refresh`
+* **Event**: `Custom`
+
+  * **Event Name**: `refresh_progress_bar`
+* **Action**: `Execute JavaScript Code`
+
+  ```javascript
+  refreshProgressBar();
+  ```
+
+---
+
+### 🔹 5. Додай JS у подію `After Refresh` IG:
+
+* Відкрий IG → вкладка **Advanced** → **Events**
+* Додай:
+
+  * **Event**: `After Refresh`
+  * **Action**: `Execute JavaScript Code`:
+
+    ```javascript
+    apex.event.trigger(document, 'refresh_progress_bar');
+    ```
+
+---
+
+## ✅ Результат:
+
+* Коли ти викликаєш `apex.region("myIG").refresh();`
+* Після завершення оновлення IG → викликається AJAX → оновлюється блок `#progressBarContainer`
+
+---
+
+## 📌 Альтернатива без Custom Event
+
+Якщо не хочеш створювати окрему подію, просто додай `refreshProgressBar();` прямо після `IG refresh`:
+
+```javascript
+apex.region("myIG").refresh();
+refreshProgressBar();
+```
+
+Але тоді є ризик, що прогрес-бар оновиться **до** завершення реального оновлення IG.
+
+---
+
+Хочеш — надішли точну назву IG, ID прогрес-блоку, і я згенерую конкретний код під тебе.

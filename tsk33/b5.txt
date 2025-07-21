@@ -1,0 +1,106 @@
+Ти правильно помітив, що проблема не в логіці побудови HTML, а в тому, **в якому порядку перебираються записи курсора** `c_subtasks`. Навіть якщо `ORDER BY` в `PL/SQL Developer` працює, в `PL/SQL CURSOR` Oracle не гарантує порядок, **поки явно не вказано `ORDER BY` всередині `CURSOR`**.
+
+---
+
+## ✅ Рішення: змінити `ORDER BY` у курсорі, щоб спочатку йшли `IS_SIGNED = 1`, а потім `= 0`.
+
+---
+
+### 🔧 Оновлений курсор:
+
+```plsql
+CURSOR c_subtasks IS
+  SELECT
+    sr.SUBTASK_ID,
+    MAX(CASE WHEN sh.ID IS NOT NULL THEN 1 ELSE 0 END) AS IS_SIGNED
+  FROM
+    TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+  LEFT JOIN
+    TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 sh
+    ON sr.ID = sh.SIGNRIGHT_ID
+  WHERE
+    sr.TASK_ID = :P_TASK_ID
+    AND sr.SUBTASK_ID IS NOT NULL
+  GROUP BY
+    sr.SUBTASK_ID
+  ORDER BY
+    MAX(CASE WHEN sh.ID IS NOT NULL THEN 0 ELSE 1 END), -- signed first
+    sr.SUBTASK_ID;
+```
+
+> 🔄 Умова `MAX(CASE WHEN sh.ID IS NOT NULL THEN 0 ELSE 1 END)` дозволяє:
+>
+> * Сортувати спочатку **підписані** (IS\_SIGNED = 1)
+> * Потім **непідписані** (IS\_SIGNED = 0)
+
+---
+
+### 🔁 Або ще коротше:
+
+```sql
+ORDER BY MAX(CASE WHEN sh.ID IS NOT NULL THEN 1 ELSE 0 END) DESC, sr.SUBTASK_ID
+```
+
+---
+
+## 🎨 Стилі для прогрес-бару (якщо потрібно):
+
+```css
+.subtask-progress {
+  display: flex;
+  gap: 4px;
+}
+
+.subtask-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.subtask-box.filled {
+  background-color: green;
+}
+
+.subtask-box.empty {
+  background-color: white;
+}
+```
+
+---
+
+## 🧪 Результат:
+
+* Прогрес-бар виглядає як послідовність прямокутників:
+
+  * `🟩🟩🟩⬜⬜` — якщо 3 з 5 підписані
+* Підписані (`IS_SIGNED = 1`) завжди йдуть зліва → схоже на прогрес
+
+---
+
+## 📌 Бонус — рахунок підписаних / всіх:
+
+Якщо ти хочеш ще додати текст або відсоток, то можна:
+
+```plsql
+DECLARE
+  ...
+  l_total PLS_INTEGER := 0;
+  l_signed PLS_INTEGER := 0;
+BEGIN
+  FOR rec IN c_subtasks LOOP
+    l_total := l_total + 1;
+    IF rec.IS_SIGNED = 1 THEN
+      l_signed := l_signed + 1;
+    END IF;
+    ...
+  END LOOP;
+
+  HTP.P('<div class="progress-label">' || l_signed || '/' || l_total || ' підписано</div>');
+  ...
+END;
+```
+
+---
+
+🔔 Якщо хочеш, я можу переробити під SVG-версію або анімований прогрес-бар.

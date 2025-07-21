@@ -1,0 +1,141 @@
+Чудове запитання — ти чітко підмітив суть: запит до `SIGNATURERIGHTS@TO_TASKTRACKER10` з кількома `LEFT JOIN` + `dblink` виконується **0.250–0.300 секунд**, що для APEX (особливо якщо колекція створюється в `Before Header`) — **може спричиняти зависання сторінки або дублювання блокувань**.
+
+---
+
+## ❓ Чи допоможе проміжна вставка в тимчасову таблицю?
+
+### ✅ **ТАК, допоможе у 2 важливих випадках:**
+
+---
+
+### 🔹 **1. Якщо ти виконує один і той самий складний запит кілька разів у рамках одного `PL/SQL` блоку**
+
+> Наприклад:
+
+* 1 раз викликаєш у `CREATE_COLLECTION_FROM_QUERY`
+* 2 раз перевіряєш дані на рівні логіки
+
+➡️ **У такому випадку вигідно** спочатку вставити результат у `GTT`, а потім читати з неї.
+
+---
+
+### 🔹 **2. Якщо APEX "чекає" на виконання довгого SQL в момент рендеру сторінки**
+
+> Наприклад: `APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY` виконується в `Before Header`, і цей запит довгий
+
+➡️ **Якщо замінити це на попередню вставку `INSERT INTO TMP_SIGNRIGHTS` + читання з `GTT`,** то:
+
+* 🔁 можна виконати `INSERT /*+ APPEND */` у окремому AJAX-процесі
+* ✅ у `CREATE_COLLECTION_FROM_QUERY` вже швидко читається з локальної тимчасової таблиці
+* ⏱ загальне враження "сторінка вантажиться швидше"
+
+---
+
+## 🚀 Порівняння:
+
+| Підхід                                                        | Очікування при рендері | Блокування APEX  | Придатний для оптимізації |
+| ------------------------------------------------------------- | ---------------------- | ---------------- | ------------------------- |
+| `CREATE_COLLECTION_FROM_QUERY (довгий SQL)`                   | ❌ Чекає довго          | ⚠️ Можливі       | Ні                        |
+| `INSERT INTO TMP` → `CREATE_FROM_QUERY`                       | ✅ Менше                | ✅ Менше ризику   | Так                       |
+| AJAX: спочатку `INSERT`, потім `CREATE_COLLECTION_FROM_QUERY` | ✅ Плавне завантаження  | ✅ Без блокування | ✅ Рекомендовано           |
+
+---
+
+## 🔧 Що робити у твоєму випадку:
+
+### ✅ **1. Створи TMP-таблицю:**
+
+```sql
+CREATE GLOBAL TEMPORARY TABLE TMP_SIGNRIGHTS (
+  POSADA_SHORT_NAME VARCHAR2(255),
+  DEPART_SHORT_NAME VARCHAR2(255),
+  UNIT_NAME          VARCHAR2(255),
+  STAGES_ID          NUMBER,
+  SORT_ORDER         NUMBER,
+  TASK_ID            NUMBER,
+  USER_TABNO         VARCHAR2(100),
+  POSITION_ID        NUMBER,
+  DEPARTMENT_ID      NUMBER,
+  UNIT_ID            NUMBER,
+  SIGNRIGHT_ID       NUMBER
+)
+ON COMMIT DELETE ROWS;
+```
+
+---
+
+### ✅ **2. Встав дані туди через `INSERT /*+ APPEND */ SELECT ...`**
+
+```plsql
+INSERT /*+ APPEND */ INTO TMP_SIGNRIGHTS
+SELECT
+  p.short_name,
+  dp.short_name,
+  un.name,
+  sr.STAGES_ID,
+  sr.SORT_ORDER,
+  sr.TASK_ID,
+  sr.USER_TABNO,
+  sr.POSITION_ID,
+  sr.DEPARTMENT_ID,
+  sr.UNIT_ID,
+  sr.ID
+FROM TaskTracker.SIGNATURERIGHTS@TO_TASKTRACKER10 sr
+LEFT JOIN TaskTracker.Dict_App_Confirm_List@TO_TASKTRACKER10 d
+  ON sr.Stages_Id = d.id
+LEFT JOIN TaskTracker.POSADA_FOR_CONFIRMLIST_V@TO_TASKTRACKER10 p
+  ON sr.Position_Id = p.kod
+LEFT JOIN TaskTracker.DEPART_CONFIRMLIST_V@TO_TASKTRACKER10 dp
+  ON sr.department_id = dp.id
+LEFT JOIN TaskTracker.DICT_UNIT@TO_TASKTRACKER10 un
+  ON sr.unit_id = un.id
+WHERE sr.TASK_ID = :P_TASK_ID
+  AND d.parent_stage_id IS NOT NULL
+  AND sr.STAGES_ID = :P_SUBSTAGE_ID;
+```
+
+---
+
+### ✅ **3. Створи колекцію на основі TMP:**
+
+```plsql
+BEGIN
+  IF APEX_COLLECTION.COLLECTION_EXISTS('CONFIRM_CART') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('CONFIRM_CART');
+  END IF;
+
+  APEX_COLLECTION.CREATE_COLLECTION_FROM_QUERY(
+    p_collection_name => 'CONFIRM_CART',
+    p_query => '
+      SELECT
+        POSADA_SHORT_NAME   AS c001,
+        DEPART_SHORT_NAME   AS c002,
+        UNIT_NAME           AS c003,
+        STAGES_ID           AS c004,
+        NULL                AS c005,
+        SORT_ORDER          AS c006,
+        TASK_ID             AS c007,
+        USER_TABNO          AS c008,
+        POSITION_ID         AS c009,
+        DEPARTMENT_ID       AS c010,
+        UNIT_ID             AS c011,
+        SIGNRIGHT_ID        AS c012
+      FROM TMP_SIGNRIGHTS',
+    p_generate_md5 => 'YES'
+  );
+END;
+```
+
+---
+
+## 🧠 Висновок:
+
+| Якщо...                                             | То...                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------- |
+| Твій запит **повільний**, складний, через `@dblink` | ✅ Розумно розділити на `INSERT INTO TMP` + `CREATE_COLLECTION` |
+| Створення колекції виконується **при рендері**      | 🔁 Можна винести в AJAX або пізній виклик                      |
+| Дані будуть використані кілька разів                | ✅ TMP-таблиця дозволяє уникнути дублювання запитів             |
+
+---
+
+🔔 Хочеш — можу згенерувати повний пакет (вставка в TMP + створення колекції + повернення JSON/HTML) або зробити це у вигляді AJAX-виклику для асинхронного завантаження.

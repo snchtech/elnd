@@ -1,0 +1,79 @@
+Ось приклад компактного, сучасного та стилістично узгодженого дизайну для кнопки з класом `extend-sign` у стилі Oracle APEX:
+
+---
+
+## ✅ **CSS для кнопки `.extend-sign`**
+
+```css
+button.extend-sign {
+  background-color: #005cbf;         /* APEX primary blue */
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, box-shadow 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.extend-sign:hover {
+  background-color: #004999;         /* darker on hover */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+button.extend-sign:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+button.extend-sign i {
+  font-size: 14px;
+}
+```
+
+---
+
+## ✅ **HTML-приклад (з іконкою)**
+
+```html
+<button class="extend-sign">
+  <i class="fa fa-signature"></i> Від імені
+</button>
+```
+
+> 🔔 Для іконок можеш використовувати **Font Awesome**, якщо підключено (`fa fa-signature` — умовна іконка для підпису)
+
+---
+
+## 🎨 Альтернативний варіант — "link-style" кнопка:
+
+```css
+button.extend-sign {
+  background: none;
+  border: none;
+  color: #005cbf;
+  text-decoration: underline;
+  padding: 4px 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button.extend-sign:hover {
+  color: #003f88;
+}
+```
+
+---
+
+## 🔚 Порада:
+
+* Використовуй `display: inline-flex` якщо додаєш іконки.
+* Можеш задати `Static ID` або APEX class (`t-Button`) для підтримки Oracle стилів.
+* Якщо хочеш вписати кнопку в **APEX region toolbar**, задай додатково `t-Button--small t-Button--primary`.
+
+---
+
+🔔 Якщо хочеш — можу адаптувати кнопку під твою тему APEX (наприклад, Theme 42) або вставити її в регіон з вирівнюванням.

@@ -1,0 +1,91 @@
+Ось переписаний і виправлений фрагмент коду для формування `EXECUTOR_INFO`, який:
+
+1. Виправляє всі синтаксичні помилки зі скану.
+2. Реалізує нову логіку: якщо в `SIGNATUREHISTORY` заповнені `BY_CHIEF_MARK` та `CHIEF_POSITION`, то виводиться `"Виконано: Користувач (посада) від імені..."`, і далі звичайна інформація про підписанта (`SIGNER_BY`).
+
+---
+
+### ✅ Оптимізований фрагмент:
+
+```sql
+(
+  SELECT LISTAGG(
+    '<span class="task-creator exctr-ttl-delim">'
+    || '<span class="tak-creator-number">' || sr2.SORT_ORDER || '.</span> '
+    || RTRIM(
+      CASE
+        WHEN sr2.USER_TABNO IS NOT NULL THEN
+          u3.FAMILIA || ' ' || SUBSTR(u3.IMYA, 1, 1) || '. ' || SUBSTR(u3.OTCHESTVO, 1, 1) || '.'
+          || ', ' || u3.SPR_DOLZNOST || ', ' || u3.TSEH_SHORT
+        ELSE ''
+      END
+      || CASE 
+           WHEN sr2.USER_TABNO IS NOT NULL AND (pos2.NAME IS NOT NULL OR dep.SHORT_NAME IS NOT NULL) THEN ', ' 
+         END
+      || NVL(pos2.NAME, '')
+      || CASE 
+           WHEN pos2.NAME IS NOT NULL AND dep.SHORT_NAME IS NOT NULL THEN ', ' 
+         END
+      || NVL(dep.SHORT_NAME, ''),
+      ', '
+    )
+    || '</span>' ||
+    
+    -- Підпис / виконання
+    (
+      SELECT 
+        CASE 
+          WHEN h.BY_CHIEF_MARK IS NOT NULL AND h.CHIEF_POSITION IS NOT NULL THEN
+            '<span class="signer_info">'
+            || '<span class="exctr-ttl">Виконано: </span><br />'
+            || (uc.FAMILIA || ' ' || SUBSTR(uc.IMYA, 1, 1) || '. ' || SUBSTR(uc.OTCHESTVO, 1, 1) || '.') 
+            || ', ' || uc.SPR_DOLZNOST || ' (' || h.CHIEF_POSITION || ')' 
+            || ' — від імені<br />'
+            || us.FAMILIA || ' ' || SUBSTR(us.IMYA, 1, 1) || '. ' || SUBSTR(us.OTCHESTVO, 1, 1) || '.' 
+            || ', ' || us.SPR_DOLZNOST || ', ' || us.TSEH_SHORT || ', '
+            || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') 
+            || '</span>'
+
+          WHEN h.SIGNER_BY = sr2.USER_TABNO THEN
+            '<span class="signer_info">'
+            || '<span class="exctr-ttl">Виконано: </span><br />'
+            || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') 
+            || '</span>'
+
+          ELSE
+            '<span class="signer_info">'
+            || '<span class="exctr-ttl">Виконано: </span><br />'
+            || us.FAMILIA || ' ' || SUBSTR(us.IMYA, 1, 1) || '. ' || SUBSTR(us.OTCHESTVO, 1, 1) || '.' 
+            || ', ' || us.SPR_DOLZNOST || ', ' || us.TSEH_SHORT || ', '
+            || TO_CHAR(h.SIGNER_DATE, 'DD.MM.YYYY HH24:MI') 
+            || '</span>'
+        END
+      FROM TaskTracker.SIGNATUREHISTORY@To_Tasktracker10 h
+      LEFT JOIN KBS.Personal@To_Tasktracker10 us ON h.SIGNER_BY = us.TAB_NO AND us.PRIZNAK IS NULL
+      LEFT JOIN KBS.Personal@To_Tasktracker10 uc ON h.BY_CHIEF_MARK = uc.TAB_NO AND uc.PRIZNAK IS NULL
+      WHERE h.SIGNRIGHT_ID = sr2.ID
+      FETCH FIRST ROW ONLY
+    ),
+  ' ' ON OVERFLOW TRUNCATE)
+  WITHIN GROUP (ORDER BY sr2.ID)
+
+FROM TaskTracker.SIGNATURERIGHTS@To_Tasktracker10 sr2
+LEFT JOIN kbs.spr_dolznost@To_Tasktracker10 pos2 ON sr2.POSITION_ID = pos2.KOD
+LEFT JOIN kbs.spr_department@to_tasktracker10 dep ON dep.ID = sr2.DEPARTMENT_ID
+LEFT JOIN KBS.Personal@To_Tasktracker10 u3 ON sr2.USER_TABNO = u3.TAB_NO AND u3.PRIZNAK IS NULL
+WHERE sr2.TASK_ID = t.ID AND sr2.STAGES_ID = 4
+```
+
+---
+
+## ✅ Що враховано:
+
+| Умова                                                      | Результат                                                 |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| `BY_CHIEF_MARK IS NOT NULL AND CHIEF_POSITION IS NOT NULL` | Додається: “Виконано: Користувач (посада) — від імені...” |
+| `SIGNER_BY = USER_TABNO`                                   | Додається просто дата підпису                             |
+| Інший випадок                                              | Показується повне ПІБ підписанта, посада, цех, дата       |
+
+---
+
+🔔 Якщо хочеш винести цей блок у вьюху або функцію — можу допомогти структурувати ще краще для повторного використання.

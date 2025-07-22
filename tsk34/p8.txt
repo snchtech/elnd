@@ -1,0 +1,146 @@
+Окей! Перепишемо твою логіку так, щоб **побудова дерева підзавдань (або підшаблонів)**, включно з `level`, `full_number`, `path_b`, `display_content` та `drag_handle`, виконувалась **у PL/SQL при створенні колекції**, а не в SQL через рекурсивний `WITH`.
+
+---
+
+## 🔧 **Загальна ідея**
+
+* Спочатку читаємо всі підзавдання в PL/SQL-таблицю.
+* Далі будуємо ієрархію в пам’яті.
+* Для кожного підзавдання обчислюємо:
+
+  * `LEVEL`
+  * `FULL_NUMBER` (1, 1.1, 1.1.1 тощо)
+  * `PATH_B` (для сортування)
+  * `DISPLAY_CONTENT`
+  * `DRAG_HANDLE`
+* Потім додаємо в `APEX_COLLECTION`.
+
+---
+
+## ✅ **Код PL/SQL (приклад для TASK\_SUBTASKS\_COLLECTION)**
+
+```plsql
+DECLARE
+  TYPE t_subtask IS RECORD (
+    id             NUMBER,
+    task_id        NUMBER,
+    parent_id      NUMBER,
+    content        VARCHAR2(4000),
+    order_num      NUMBER,
+    date_end       DATE
+  );
+
+  TYPE t_subtask_table IS TABLE OF t_subtask INDEX BY BINARY_INTEGER;
+  v_subtasks t_subtask_table;
+
+  TYPE t_index_map IS TABLE OF PLS_INTEGER INDEX BY NUMBER; -- key: ID → index in v_subtasks
+  v_index_by_id t_index_map;
+
+  v_level          NUMBER;
+  v_full_number    VARCHAR2(1000);
+  v_path_b         VARCHAR2(1000);
+  v_display_text   VARCHAR2(4000);
+  v_drag_handle    VARCHAR2(100);
+  v_counter        NUMBER := 0;
+
+  -- Recursively process subtasks
+  PROCEDURE process_subtasks(p_parent_id IN NUMBER, p_level IN NUMBER, p_path IN VARCHAR2, p_prefix IN VARCHAR2) IS
+  BEGIN
+    FOR i IN 1 .. v_subtasks.COUNT LOOP
+      IF v_subtasks(i).parent_id = p_parent_id THEN
+        v_counter := v_counter + 1;
+        v_level := p_level;
+        v_full_number := p_prefix || TO_CHAR(v_counter);
+        v_path_b := p_path || LPAD(v_counter, 5, '0');
+
+        -- Визначаємо drag handle
+        v_drag_handle := CASE WHEN v_subtasks(i).parent_id IS NULL THEN '<span class="drag-handle">☰</span>' ELSE NULL END;
+
+        v_display_text := LPAD(' ', (v_level - 1) * 4, ' ') || v_full_number || '. ' || v_subtasks(i).content;
+
+        -- Додаємо до колекції
+        APEX_COLLECTION.ADD_MEMBER(
+          p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+          p_c001 => v_subtasks(i).task_id,
+          p_c002 => v_subtasks(i).content,
+          p_d001 => v_subtasks(i).date_end,
+          p_c003 => v_subtasks(i).parent_id,
+          p_c004 => v_subtasks(i).order_num,
+          p_c005 => NULL,
+          p_c006 => :P0_CUR_USER_TABNO,
+          p_c007 => NULL,
+          p_c009 => v_subtasks(i).id,
+          p_n001 => 0, -- TASK_MODE
+          p_c008 => v_path_b,
+          p_c010 => v_full_number,
+          p_c011 => v_display_text,
+          p_c012 => v_drag_handle
+        );
+
+        -- Рекурсивно обробляємо дочірні
+        process_subtasks(v_subtasks(i).id, p_level + 1, v_path_b || '.', v_full_number || '.');
+      END IF;
+    END LOOP;
+  END;
+BEGIN
+  -- Очистка
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+  END IF;
+
+  APEX_COLLECTION.CREATE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+  -- Завантаження з таблиці
+  SELECT 
+    ID,
+    TASK_ID,
+    PARENT_ID,
+    SUBTASK_CONTENT,
+    SUBTASK_ORDER,
+    PLANNING_DATE_END
+  BULK COLLECT INTO v_subtasks
+  FROM TASK_SUBTASKS@TO_TASKTRACKER10
+  WHERE TASK_ID = :P6_TASK_ID;
+
+  -- Побудова індексу ID → порядковий індекс
+  FOR i IN 1 .. v_subtasks.COUNT LOOP
+    v_index_by_id(v_subtasks(i).id) := i;
+  END LOOP;
+
+  -- Старт з кореневих елементів
+  v_counter := 0;
+  process_subtasks(NULL, 1, '', '');
+END;
+```
+
+---
+
+## 💡 Пояснення ключових полів
+
+| Поле (колекція) | Значення                        |
+| --------------- | ------------------------------- |
+| `C001`          | TASK\_ID                        |
+| `C002`          | SUBTASK\_CONTENT                |
+| `D001`          | PLANNING\_DATE\_END             |
+| `C003`          | PARENT\_ID                      |
+| `C004`          | SUBTASK\_ORDER                  |
+| `C009`          | ID підзавдання                  |
+| `C008`          | PATH\_B (LPAD для сортування)   |
+| `C010`          | FULL\_NUMBER (1, 1.1, 1.2.1...) |
+| `C011`          | DISPLAY\_CONTENT                |
+| `C012`          | DRAG\_HANDLE                    |
+
+---
+
+## ✅ Переваги такого підходу
+
+* ❌ **Жодної рекурсії в SQL** — усе в пам’яті.
+* ⚡ **Сторінка вантажиться швидше**.
+* 💯 **Повний контроль** над форматуванням дерева, нумерацією, drag-handles тощо.
+* 📦 Дані легко адаптувати для APEX IG з підсвічуванням або сортуванням.
+
+---
+
+## 🔜 Хочеш — можу адаптувати такий же код для підшаблонів.
+
+Скажи — і я зроблю версію для `TASK_TEMPLATE_SUBTASKS_COLLECTION`.

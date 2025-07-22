@@ -1,0 +1,104 @@
+Ок, давай реалізуємо **переведення логіки створення APEX\_COLLECTION у AJAX** після завантаження сторінки, з автоматичним `refresh` відповідного регіону.
+
+---
+
+## ✅ **Кроки: AJAX + Dynamic Action + Refresh**
+
+### 🔹 **1. Створи серверний процес**
+
+**Назва:** `LOAD_SUBTASKS_COLLECTION`
+**Тип:** PL/SQL
+**Execution Scope:** AJAX Callback
+
+```plsql
+DECLARE
+  CURSOR c_subtasks IS
+    SELECT
+      TASK_ID,
+      SUBTASK_CONTENT,
+      PLANNING_DATE_END,
+      PARENT_ID,
+      SUBTASK_ORDER,
+      STATUS_ID,
+      ID
+    FROM TaskTracker.TASK_SUBTASKS@TO_TASKTRACKER10
+    WHERE TASK_ID = :P6_TASK_ID;
+
+BEGIN
+  IF APEX_COLLECTION.COLLECTION_EXISTS('TASK_SUBTASKS_COLLECTION') THEN
+    APEX_COLLECTION.DELETE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+  END IF;
+
+  APEX_COLLECTION.CREATE_COLLECTION('TASK_SUBTASKS_COLLECTION');
+
+  FOR r IN c_subtasks LOOP
+    APEX_COLLECTION.ADD_MEMBER(
+      p_collection_name => 'TASK_SUBTASKS_COLLECTION',
+      p_c001 => r.TASK_ID,
+      p_c002 => r.SUBTASK_CONTENT,
+      p_d001 => r.PLANNING_DATE_END,
+      p_c003 => r.PARENT_ID,
+      p_c004 => r.SUBTASK_ORDER,
+      p_c005 => r.STATUS_ID,
+      p_d002 => SYSDATE,
+      p_d003 => NULL,
+      p_c006 => :P0_CUR_USER_TABNO,
+      p_c009 => r.ID,
+      p_n001 => 0
+    );
+  END LOOP;
+END;
+```
+
+---
+
+### 🔹 **2. Додай Dynamic Action на Page Load**
+
+* **Event:** Page Load
+* **True Action 1: Execute JavaScript Code**
+
+```js
+apex.server.process('LOAD_SUBTASKS_COLLECTION', {
+  x01: $v('P6_TASK_ID') // якщо потрібно
+}, {
+  success: function () {
+    // після виконання — оновлюємо IG регіон
+    apex.region("subtasks_ig_static_id").refresh();
+  },
+  error: function (jqXHR, textStatus, errorThrown) {
+    console.error("Помилка при завантаженні підзавдань:", textStatus, errorThrown);
+  }
+});
+```
+
+🔸 Заміни `"subtasks_ig_static_id"` на **Static ID** свого IG регіону з підзавданнями.
+
+---
+
+### 🔹 **3. Вимкни логіку створення колекції в `Before Header`**
+
+Тепер вона не потрібна — сторінка завантажиться швидко, і дані підтягнуться асинхронно.
+
+---
+
+## 💬 **Додатково: якщо у тебе є ще підшаблони**
+
+🔁 Можна повторити все те саме:
+
+* окремий AJAX process → `LOAD_SUBTEMPLATE_COLLECTION`
+* свій `apex.server.process(...)`
+* `refresh()` на інший регіон
+
+---
+
+## ✅ Переваги підходу
+
+| Плюс                                             | Деталі                                        |
+| ------------------------------------------------ | --------------------------------------------- |
+| ⚡ Швидше завантаження сторінки                   | Сторінка не чекає повного заповнення колекції |
+| 🚫 Менше зависань                                | Немає затримки при парсингу великих колекцій  |
+| 🔄 Можливість перезавантажити колекцію динамічно | Без перезавантаження сторінки                 |
+
+---
+
+Хочеш — можу також допомогти реалізувати `progress bar` або `loading spinner`, щоб показати, що дані завантажуються. Потрібно?

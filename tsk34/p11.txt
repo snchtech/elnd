@@ -1,0 +1,87 @@
+Чудово! Ось як ти можеш реалізувати **progress bar (або spinner)** при завантаженні колекції через AJAX:
+
+---
+
+## ✅ **1. HTML для лоадера (спінер або прогрес бар)**
+
+Додай **статичний HTML-регіон** у сторінку, вище або поруч з IG.
+**Static ID:** `loader_subtasks`
+
+**Вміст:**
+
+```html
+<div id="loader_subtasks" style="display:none; text-align: center; margin: 10px 0;">
+  <div class="t-Region-loading">
+    <div class="t-Region-loadingOverlay"></div>
+    <div class="t-Region-loadingIcon">
+      <span class="u-Processing">&nbsp;</span>
+      <span>Завантаження підзавдань...</span>
+    </div>
+  </div>
+</div>
+```
+
+🔹 Якщо хочеш звичайний спінер:
+
+```html
+<div id="loader_subtasks" style="display:none;">
+  <div class="t-Button--simple u-Processing">Завантаження...</div>
+</div>
+```
+
+---
+
+## ✅ **2. Онови JavaScript код у Dynamic Action**
+
+```js
+// Показати спінер
+$("#loader_subtasks").show();
+
+apex.server.process('LOAD_SUBTASKS_COLLECTION', {
+  x01: $v('P6_TASK_ID')
+}, {
+  success: function () {
+    // Сховати спінер
+    $("#loader_subtasks").hide();
+    
+    // Оновити IG
+    apex.region("subtasks_ig_static_id").refresh();
+  },
+  error: function (jqXHR, textStatus, errorThrown) {
+    $("#loader_subtasks").hide();
+    console.error("Помилка при завантаженні підзавдань:", textStatus, errorThrown);
+  }
+});
+```
+
+---
+
+## ✅ **3. Рекомендації щодо стилю**
+
+Можеш також стилізувати `loader_subtasks` через **Inline CSS**:
+
+```css
+#loader_subtasks {
+  background: #f4f4f4;
+  border: 1px solid #ddd;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+}
+```
+
+---
+
+## 📌 Якщо хочеш реалізувати progress bar поетапно (advanced)
+
+Можна реалізувати лоадер, що показує статус виконання (якщо обробка займає 2–3 секунди+). Для цього треба:
+
+* Створити окремий **APEX process з DBMS\_SESSION.set\_identifier**
+* У циклі обробки виконувати `APEX_DEBUG.MESSAGE`
+* Викликати прогрес через `apex.server.plugin(...)` (custom plugin або polling)
+
+💡 Але для звичайного `apex.server.process()` достатньо показати/сховати спінер.
+
+---
+
+Готовий допомогти стилізувати цей лоадер під твою тему — просто скажи, як він має виглядати.

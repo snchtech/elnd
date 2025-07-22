@@ -1,0 +1,82 @@
+Ось як правильно реалізувати твою логіку для **Radio Group (`r1`, `r2`, `r3`)** і елемента `P2_SELECT_USER_LIST` у Oracle APEX:
+
+---
+
+## ✅ **Цілі:**
+
+1. Якщо `P2_SR_TAB_NO` = `null` → приховати `r1`
+2. Якщо `P2_SR_TAB_NO` ≠ `null` → показати `r1`
+3. Якщо вибрано `r1` або `r2` → приховати `P2_SELECT_USER_LIST`
+4. Якщо вибрано `r3` → показати `P2_SELECT_USER_LIST`
+
+---
+
+## 🔧 **1. Приховування r1, якщо P2\_SR\_TAB\_NO = null**
+
+### 🔹 Кроки:
+
+1. Додай до Radio Group (`P2_RADIO`) — **Static ID**, наприклад `radio_group`
+2. Увімкни **Page Load DA (Dynamic Action)**:
+
+   * **Event:** `Page Load`
+   * **Action:** `Execute JavaScript Code`
+   * **Code:**
+
+```javascript
+if (!$v('P2_SR_TAB_NO')) {
+  // Ховаємо перший radio (r1)
+  $("#radio_group input[value='r1']").closest('div.t-Form-fieldContainer').hide();
+} else {
+  $("#radio_group input[value='r1']").closest('div.t-Form-fieldContainer').show();
+}
+```
+
+> 🔁 Заміни `radio_group` на `Static ID` твого radio region, якщо інший.
+
+---
+
+## 🔧 **2. Керування видимістю `P2_SELECT_USER_LIST` при зміні radio**
+
+### 🔹 Кроки:
+
+1. Створи **Dynamic Action**:
+
+   * **Event:** `Change`
+   * **Item:** `P2_RADIO` (або свій)
+2. Додай **True Action**: `Execute JavaScript Code`
+
+```javascript
+var val = $v('P2_RADIO');
+
+if (val === 'r3') {
+  $s('P2_SELECT_USER_LIST', ''); // Очистити, якщо потрібно
+  $('#P2_SELECT_USER_LIST_CONTAINER').show(); // Показати поле
+} else {
+  $('#P2_SELECT_USER_LIST_CONTAINER').hide(); // Сховати поле
+}
+```
+
+---
+
+## 🧩 **Альтернатива — через APEX Actions:**
+
+* `True Action:` → `Show` `P2_SELECT_USER_LIST`
+
+  * **Client-side Condition**: Item = `P2_RADIO`, Value = `r3`
+* `Else Action:` → `Hide` `P2_SELECT_USER_LIST`
+
+🔔 Але JS-варіант дає більшу гнучкість.
+
+---
+
+## ✅ Підсумковий порядок:
+
+| Подія                   | Ефект                         |
+| ----------------------- | ----------------------------- |
+| `P2_SR_TAB_NO` порожній | приховує `r1`                 |
+| `P2_RADIO = r3`         | показує `P2_SELECT_USER_LIST` |
+| `P2_RADIO = r1 або r2`  | ховає `P2_SELECT_USER_LIST`   |
+
+---
+
+Якщо хочеш — можу згенерувати тобі точний HTML/JS фрагмент під твою тему/шаблон APEX.

@@ -1,0 +1,113 @@
+Ось оновлений PL/SQL код, який реалізує твою логіку з урахуванням полів `MARK_BY_CHIEF` і `CHIEF_POSITION` у таблиці `SIGNATUREHISTORY`. У разі, якщо вони заповнені — виводиться інформація про особу, яка підписала "від імені", і про того, від імені кого це зроблено. Якщо не заповнені — працює стара логіка:
+
+---
+
+### ✅ **Оновлений PL/SQL код** (оптимізовано та доповнено):
+
+```plsql
+-- Отримання значення дати з таблиці SIGNATUREHISTORY для поточного запису
+BEGIN
+  SELECT t.SIGNER_DATE INTO l_check_signer_date
+  FROM TaskTracker.SIGNATUREHISTORY@TO_TASKTRACKER10 t
+  WHERE t.SIGNRIGHT_ID = l_signature_id;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    l_check_signer_date := NULL;
+END;
+
+-- Якщо дата існує — виводимо історію підпису
+IF l_check_signer_date IS NOT NULL THEN
+
+  OPEN sign_history FOR
+    SELECT
+      TO_CHAR(sh.SDATE, 'dd.mm.yyyy') AS SDATEV,
+      TO_CHAR(sh.SDATE, 'hh24:mi') AS STIMEV,
+      p.FAMILIA || ' ' || SUBSTR(p.IMYA, 1, 1) || '.' || SUBSTR(p.OTCHESTVO, 1, 1) || '.' AS SIGNER_BY,
+      ps.short AS posada,
+      p.TSEH_SHORT AS depart,
+      sh.NOTE,
+      sh.NEW_STATUS_ID,
+      -- Додано для mark_by_chief
+      chief.FAMILIA || ' ' || SUBSTR(chief.IMYA, 1, 1) || '.' || SUBSTR(chief.OTCHESTVO, 1, 1) || '.' AS CHIEF_PIB,
+      chief_ps.short AS chief_posada,
+      chief.TSEH_SHORT AS chief_depart
+    FROM TaskTracker.signaturehistory@TO_TASKTRACKER10 sh
+    LEFT JOIN TaskTracker.signaturerights@TO_TASKTRACKER10 sr
+      ON sr.id = sh.signright_id
+    LEFT JOIN TaskTracker.dict_app_confirm_list@TO_TASKTRACKER10 cl
+      ON cl.id = sr.stages_id
+    LEFT JOIN kbs.persona1@TO_TASKTRACKER10 p
+      ON p.tab_no = sh.signer_by AND p.priznak IS NULL
+    LEFT JOIN TaskTracker.dict_posada_short_v@TO_TASKTRACKER10 ps
+      ON ps.kod = p.dolznost
+    -- Додано для mark_by_chief
+    LEFT JOIN kbs.persona1@TO_TASKTRACKER10 chief
+      ON chief.tab_no = sh.mark_by_chief AND chief.priznak IS NULL
+    LEFT JOIN TaskTracker.dict_posada_short_v@TO_TASKTRACKER10 chief_ps
+      ON chief_ps.kod = sh.chief_position
+    WHERE sh.signright_id = l_signature_id
+    ORDER BY sr.stages_id;
+
+  LOOP
+    FETCH sign_history INTO l_signer_date, l_signer_time, l_signed_by, l_posada, l_department,
+      l_note, l_status_history, l_chief_pib, l_chief_posada, l_chief_department;
+    EXIT WHEN sign_history%NOTFOUND;
+
+    -- Вивід дати і часу підпису
+    HTP.P('<div class="c-cart-date-time">');
+    IF l_signer_date IS NOT NULL THEN
+      HTP.P('<span class="confirm-sign-attributes_date">' || l_signer_date || '<br />' || l_signer_time || '</span>');
+    END IF;
+    HTP.P('</div>');
+
+    -- Вивід ПІБ
+    HTP.P('<div class="c-cart-pib">');
+    IF l_chief_pib IS NOT NULL AND l_chief_posada IS NOT NULL THEN
+      -- Підпис "від імені"
+      HTP.P('<span class="confirm-sign-attributes_by">Виконано: ' || l_chief_pib || ', ' || l_chief_posada || ', ' || l_chief_department || '</span>');
+      HTP.P('<br /><span class="confirm-sign-attributes_by">Від імені: ' || l_signed_by || ', ' || l_posada || ', ' || l_department || '</span>');
+    ELSE
+      -- Звичайний підпис
+      IF l_signed_by IS NOT NULL THEN
+        HTP.P('<span class="confirm-sign-attributes_by">' || l_signed_by || '</span>');
+      END IF;
+      IF l_posada IS NOT NULL THEN
+        HTP.P('<span class="confirm-sign-attributes_posada">' || l_posada || '</span>');
+      END IF;
+    END IF;
+    HTP.P('</div>');
+
+    -- Коментар
+    IF l_note IS NOT NULL THEN
+      HTP.P('<div class="c-cart-signer-comment">' || l_note || '</div>');
+    END IF;
+
+    -- Статус підпису
+    IF l_status_history = 11 THEN
+      HTP.P('<div class="c-cart-signer-mark c-cart-signer-mark_canceled">Анульовано</div>');
+    ELSE
+      HTP.P('<div class="c-cart-signer-mark c-cart-signer-mark_success">' || l_substage_after_text || '</div>');
+    END IF;
+
+  END LOOP;
+  CLOSE sign_history;
+
+ELSE
+  -- Немає підпису, пустий блок
+  HTP.P('<div class="c-cart-date-time"></div>');
+  HTP.P('<div class="c-cart-pib"></div>');
+  HTP.P('<div class="c-cart-signer-comment"></div>');
+END IF;
+```
+
+---
+
+### 📝 Пояснення:
+
+* Додано `chief` (особа, яка підписала від імені) та `chief_posada`.
+* У `IF l_chief_pib IS NOT NULL` перевіряється, чи був підпис «від імені».
+* HTML-класи залишені без змін, але за потреби можна стилізувати під відображення двох рядків: «Виконано» і «Від імені».
+
+---
+
+🔔 Якщо хочеш, я можу допомогти винести цю логіку в окрему PL/SQL функцію або спростити ще більше.

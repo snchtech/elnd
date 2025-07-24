@@ -1,0 +1,148 @@
+Ось покрокова інструкція для створення сторінки **"Довідники"** в Oracle APEX з формою створення нового запису в таблицю `TASK_COLLECTIONS`:
+
+---
+
+## 🔧 **1. Таблиці:**
+
+* `TASK_COLLECTIONS`: основна таблиця для довідника
+* `COLLECTIONS_TYPE`: типи довідника
+
+---
+
+## 📄 **2. Створення сторінки:**
+
+Створіть **Modal Dialog Page** (наприклад, сторінка 10) типу **Form** з ручною логікою збереження (без автоматичного CRUD).
+
+---
+
+## 🧩 **3. Додайте елементи на сторінку:**
+
+### 💬 **Textarea:**
+
+* **Name:** `P10_COLLECTION_ITEM_CONTENT`
+* **Label:** Текст елементу
+
+### 📋 **Select List:**
+
+* **Name:** `P10_TYPE_ID`
+* **Label:** Тип
+* **LOV Query:**
+
+  ```sql
+  SELECT NAME d, ID r FROM COLLECTIONS_TYPE ORDER BY NAME
+  ```
+* **Settings:**
+
+  * Save Session State: **Yes**
+  * Add Dynamic Action on **Change** (див. нижче)
+
+### 🔀 **Switch:**
+
+* **Name:** `P10_IS_PERSONAL`
+* **Label:** Особисте (буде відображатись тільки для Вас)
+* **Settings:**
+
+  * On Value: `Y`
+  * Off Value: `N`
+  * Save Session State: **Yes**
+  * Add Dynamic Action on **Change** (див. нижче)
+
+---
+
+## 🔁 **4. Dynamic Actions (на зміну Select/Switch):**
+
+### A. Для `P10_TYPE_ID`:
+
+* **Event:** Change
+* **True Action:** Execute JavaScript Code
+
+```javascript
+apex.item('P10_TYPE_ID').save();
+```
+
+### B. Для `P10_IS_PERSONAL`:
+
+* **Event:** Change
+* **True Action:** Execute JavaScript Code
+
+```javascript
+apex.item('P10_IS_PERSONAL').save();
+```
+
+> Це оновлює значення в сесії без повного сабміту.
+
+---
+
+## 🖱️ **5. Додайте кнопку "Зберегти":**
+
+* Name: `SAVE_BTN`
+* Action: **Defined by Dynamic Action**
+
+---
+
+## 🛠️ **6. Процес "Processing when button click":**
+
+### 🔄 Server-side Process:
+
+* **Name:** `PROCESS_SAVE_COLLECTION_ITEM`
+* **Point:** When Button Pressed = `SAVE_BTN`
+* **Process Type:** PL/SQL Code
+* **Code:**
+
+```plsql
+INSERT INTO TASK_COLLECTIONS (
+  COLLECTION_ITEM_CONTENT,
+  DEPARTMENT_ID,
+  CREATOR_ID,
+  TYPE_ID,
+  IS_PERSONAL,
+  DATE_CREATE
+) VALUES (
+  :P10_COLLECTION_ITEM_CONTENT,
+  :P0_DEPARTMENT_ID,
+  :P0_USER_ID,
+  :P10_TYPE_ID,
+  :P10_IS_PERSONAL,
+  SYSDATE
+);
+```
+
+> **P0\_DEPARTMENT\_ID** та **P0\_USER\_ID** повинні бути встановлені на глобальній сторінці (0).
+
+---
+
+## ✅ **7. Додайте Dynamic Action для кнопки (окремо):**
+
+### A. **Execute PL/SQL (запускає збереження):**
+
+* **True Action:** Execute PL/SQL Code
+
+```plsql
+NULL; -- виконується PROCESS_SAVE_COLLECTION_ITEM
+```
+
+* **Settings:** Submit Page Items:
+
+  * `P10_COLLECTION_ITEM_CONTENT`, `P10_TYPE_ID`, `P10_IS_PERSONAL`
+
+### B. **Close Dialog:**
+
+* Додайте другий True Action після збереження:
+
+  * **Action:** Close Dialog
+
+---
+
+## 📌 Порада:
+
+* Можна додатково додати перевірку на заповнення `COLLECTION_ITEM_CONTENT` (обов’язковість) через валідацію або `required`.
+
+---
+
+🔄 У результаті:
+
+* Select і Switch автоматично зберігають свої значення у сесію (через `.save()`).
+* При натисканні на кнопку дані записуються до `TASK_COLLECTIONS`.
+* Вікно закривається після збереження.
+
+Хочете, я підготую імпортну APEX-інструкцію або шаблон SQL?

@@ -1,0 +1,137 @@
+Ah, thank you for the clarification!
+
+You're saying that the button has an `onclick` attribute, and **inside that string**, somewhere, there is a substring like `p2_signature_id=...`, and you want to:
+
+1. **Get the full `onclick` string.**
+2. **Find and replace the value of `p2_signature_id=` with a new one.**
+3. **Update the `onclick` attribute with the new value.**
+4. **Trigger the click.**
+
+Yes — this is totally doable. Here's how you can do it:
+
+---
+
+### ✅ Example Code (for buttons with `onclick` attribute):
+
+```javascript
+document.querySelectorAll('button').forEach(button => {
+  button.addEventListener('click', function (event) {
+    event.preventDefault(); // Prevent default click behavior
+
+    let newValue = 'MY_VALUE';
+
+    // Step 1: Get original onclick code as a string
+    let onclickCode = this.getAttribute('onclick');
+
+    if (onclickCode && onclickCode.includes('p2_signature_id=')) {
+      // Step 2: Replace the p2_signature_id value
+      let updatedOnclickCode = onclickCode.replace(/p2_signature_id=[^&'"]*/, `p2_signature_id=${newValue}`);
+
+      // Step 3: Update the onclick attribute
+      this.setAttribute('onclick', updatedOnclickCode);
+
+      // Step 4: Manually execute the updated onclick code
+      new Function(updatedOnclickCode).call(this);
+    }
+  });
+});
+```
+
+---
+
+### 🔍 Example Scenario
+
+```html
+<button onclick="doSomething('https://example.com?foo=bar&p2_signature_id=abc123')">Click me</button>
+```
+
+After the script runs and you click the button, the `p2_signature_id=abc123` part will be replaced with `p2_signature_id=MY_VALUE`, and the updated `onclick` will be executed.
+
+---
+
+### ⚠️ Important Considerations
+
+* `new Function(...).call(this)` will safely execute JavaScript from the updated `onclick`. It behaves similarly to `eval()`, so be cautious with untrusted content.
+* If the function called in `onclick` is defined in the global scope, this will work fine.
+* If `onclick` is not present or doesn’t include `p2_signature_id=`, the code will do nothing (safely).
+
+---
+Yes, you absolutely can — and should — **preserve the rest of the text** after `p2_signature_id=` (including any escaped characters like `\u0026`, which is just `&`), and **only replace the value** for `p2_signature_id` without cutting off or modifying anything else.
+
+---
+
+### ✅ Goal:
+
+In a string like this:
+
+```js
+let onclickString = "someFunction('...p2_signature_id=oldValue\\u0026clear=true')";
+```
+
+You want to **change only `oldValue`**, keeping everything after (like `\u0026clear=true`) **untouched**.
+
+---
+
+### ✅ Solution (Regex Approach):
+
+```javascript
+document.querySelectorAll('button').forEach(button => {
+  button.addEventListener('click', function (event) {
+    event.preventDefault();
+
+    let newValue = 'MY_VALUE';
+
+    // Get the original onclick code
+    let onclickCode = this.getAttribute('onclick');
+
+    if (onclickCode && onclickCode.includes('p2_signature_id=')) {
+      // Replace only the value of p2_signature_id, preserving everything after it
+      let updatedOnclickCode = onclickCode.replace(
+        /p2_signature_id=([^\\&'"]*)/,
+        `p2_signature_id=${newValue}`
+      );
+
+      this.setAttribute('onclick', updatedOnclickCode);
+
+      // Execute the updated onclick
+      new Function(updatedOnclickCode).call(this);
+    }
+  });
+});
+```
+
+---
+
+### 🔍 Example Input
+
+```html
+<button onclick="goToURL('https://example.com?user=123&p2_signature_id=abc123\\u0026clear=true')">
+  Sign
+</button>
+```
+
+After running the script and clicking the button, the `onclick` will become:
+
+```html
+onclick="goToURL('https://example.com?user=123&p2_signature_id=MY_VALUE\\u0026clear=true')"
+```
+
+✅ All text after `p2_signature_id=` — including escaped characters like `\u0026` — is preserved.
+
+---
+
+### ✅ Why It Works
+
+* The regex `/p2_signature_id=([^\\&'"]*)/` matches:
+
+  * `p2_signature_id=`
+  * Followed by the old value, stopping **before** a backslash, ampersand, single quote, or double quote.
+* This avoids replacing or truncating anything beyond the ID value.
+
+---
+
+Let me know if you’re working with HTML-encoded values or need to unescape anything too!
+
+
+
+Let me know if your button uses inline `onclick`, or some `data-*` attribute instead. I can adjust accordingly.

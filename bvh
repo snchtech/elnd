@@ -1,0 +1,60 @@
+Ah, thank you for the clarification!
+
+You're saying that the button has an `onclick` attribute, and **inside that string**, somewhere, there is a substring like `p2_signature_id=...`, and you want to:
+
+1. **Get the full `onclick` string.**
+2. **Find and replace the value of `p2_signature_id=` with a new one.**
+3. **Update the `onclick` attribute with the new value.**
+4. **Trigger the click.**
+
+Yes — this is totally doable. Here's how you can do it:
+
+---
+
+### ✅ Example Code (for buttons with `onclick` attribute):
+
+```javascript
+document.querySelectorAll('button').forEach(button => {
+  button.addEventListener('click', function (event) {
+    event.preventDefault(); // Prevent default click behavior
+
+    let newValue = 'MY_VALUE';
+
+    // Step 1: Get original onclick code as a string
+    let onclickCode = this.getAttribute('onclick');
+
+    if (onclickCode && onclickCode.includes('p2_signature_id=')) {
+      // Step 2: Replace the p2_signature_id value
+      let updatedOnclickCode = onclickCode.replace(/p2_signature_id=[^&'"]*/, `p2_signature_id=${newValue}`);
+
+      // Step 3: Update the onclick attribute
+      this.setAttribute('onclick', updatedOnclickCode);
+
+      // Step 4: Manually execute the updated onclick code
+      new Function(updatedOnclickCode).call(this);
+    }
+  });
+});
+```
+
+---
+
+### 🔍 Example Scenario
+
+```html
+<button onclick="doSomething('https://example.com?foo=bar&p2_signature_id=abc123')">Click me</button>
+```
+
+After the script runs and you click the button, the `p2_signature_id=abc123` part will be replaced with `p2_signature_id=MY_VALUE`, and the updated `onclick` will be executed.
+
+---
+
+### ⚠️ Important Considerations
+
+* `new Function(...).call(this)` will safely execute JavaScript from the updated `onclick`. It behaves similarly to `eval()`, so be cautious with untrusted content.
+* If the function called in `onclick` is defined in the global scope, this will work fine.
+* If `onclick` is not present or doesn’t include `p2_signature_id=`, the code will do nothing (safely).
+
+---
+
+Let me know if your button uses inline `onclick`, or some `data-*` attribute instead. I can adjust accordingly.

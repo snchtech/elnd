@@ -1,0 +1,98 @@
+Got it! You want to assign the `posname` based on the position number (like 123, 563, etc.), then use that `posname` in your function to decide whether the access is "full" or "partial."
+
+You can achieve this by adding a simple check to assign the `posname` based on the `position` number. Then you can use that `posname` inside your function as the `position` argument.
+
+Here's how you can structure the logic:
+
+### Step 1: Assign `posname` Based on Position Number
+
+We'll check if the `position` is in the specified groups (like `123`, `563`, etc.) and assign the `posname` accordingly.
+
+### Step 2: Use the `posname` in the `updateOutfitData` function
+
+### Updated Code:
+
+```javascript
+function getPosname(position) {
+  // Convert the position to a string for easier matching
+  const pos = position.toString();
+
+  // Check if the position is in full access or partial access groups
+  if (['123', '563'].includes(pos)) {
+    return 'fullaccess';
+  } else if (['364', '973'].includes(pos)) {
+    return 'partialaccess';
+  }
+
+  // Return a default if the position doesn't match any known values
+  return 'noaccess';  // You can change this to handle positions without defined access
+}
+
+function updateOutfitData(data, position) {
+  // Determine posname based on the position
+  const posname = getPosname(position);
+
+  // Ensure posname exists in the data structure
+  if (!data.outfit[posname]) return;
+
+  // Iterate over units (unit1, unit2, unit3)
+  for (let i = 1; i <= 3; i++) {
+    const unitKey = `${posname}_unit${i}`;
+    const unitData = data.outfit[posname][unitKey];
+
+    // Skip if no data for this unit
+    if (!unitData) continue;
+
+    const container = document.querySelector(`.outfit-unit${i}`);
+    if (!container) continue;
+
+    // Update values in the elements
+    const firmBrigades = container.querySelector('.firm-brigades');
+    if (firmBrigades) firmBrigades.innerText = unitData.firm_brigades ?? 0;
+
+    const contractorBrigades = container.querySelector('.contractor-brigades');
+    if (contractorBrigades) contractorBrigades.innerText = unitData.contractor_brigades ?? 0;
+
+    const firmPeople = container.querySelector('.firm-people');
+    if (firmPeople) firmPeople.innerText = unitData.firm_people ?? 0;
+
+    const contractorPeople = container.querySelector('.contractor-people');
+    if (contractorPeople) contractorPeople.innerText = unitData.contractor_people ?? 0;
+  }
+}
+```
+
+### Explanation of Changes:
+
+1. **`getPosname` function**:
+
+   * This function takes the `position` number, converts it to a string, and checks if it matches one of the predefined sets (e.g., `123`, `563` for full access or `364`, `973` for partial access).
+   * If the position matches one of the specified groups, the function returns the corresponding `posname` (`'fullaccess'` or `'partialaccess'`).
+   * If the position doesn't match any of these, it returns a default `posname` (e.g., `'noaccess'`).
+
+2. **Modified `updateOutfitData`**:
+
+   * The `posname` is now determined dynamically using the `getPosname` function.
+   * The rest of the code remains the same as before, using the `posname` to access the correct data and update the HTML elements.
+
+### How It Works:
+
+1. When you call `updateOutfitData(data, position)`, the `position` number will be passed in.
+2. The `getPosname` function will determine whether the position corresponds to `'fullaccess'`, `'partialaccess'`, or some default like `'noaccess'`.
+3. The function will then update the relevant units for the corresponding `posname`.
+
+### Example Use:
+
+* For position `123`, it will use the data from the `'fullaccess'` group:
+
+  ```javascript
+  updateOutfitData(data, 123);  // posname = 'fullaccess'
+  ```
+
+* For position `364`, it will use the data from the `'partialaccess'` group:
+
+  ```javascript
+  updateOutfitData(data, 364);  // posname = 'partialaccess'
+  ```
+
+* For any other position, it will fall back to `'noaccess'` (or any default you want to set).

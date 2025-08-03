@@ -1,0 +1,62 @@
+It sounds like you want to update the function to handle the change in your data structure, where the units are grouped by position (`pos1`, `pos2`, etc.), and the function should only update the data for the relevant position. Here's how you can modify the function to achieve that:
+
+```javascript
+function updateOutfitData(data, position) {
+  // Check if position is valid (either 'pos1', 'pos2', etc.)
+  if (!data.outfit[position]) return;
+
+  for (let i = 1; i <= 3; i++) {
+    const unitKey = `${position}_unit${i}`;
+    const unitData = data.outfit[position][unitKey];
+
+    // Skip if no data for this unit
+    if (!unitData) continue;
+
+    const container = document.querySelector(`.outfit-unit${i}`);
+    if (!container) continue;
+
+    // Update values in the elements
+    const firmBrigades = container.querySelector('.firm-brigades');
+    if (firmBrigades) firmBrigades.innerText = unitData.firm_brigades ?? 0;
+
+    const contractorBrigades = container.querySelector('.contractor-brigades');
+    if (contractorBrigades) contractorBrigades.innerText = unitData.contractor_brigades ?? 0;
+
+    const firmPeople = container.querySelector('.firm-people');
+    if (firmPeople) firmPeople.innerText = unitData.firm_people ?? 0;
+
+    const contractorPeople = container.querySelector('.contractor-people');
+    if (contractorPeople) contractorPeople.innerText = unitData.contractor_people ?? 0;
+  }
+}
+```
+
+### Explanation of Changes:
+
+1. **Added `position` argument**:
+
+   * The function now takes `position` as an argument (e.g., `'pos1'`, `'pos2'`, etc.), which will dynamically select the correct data group.
+
+2. **Accessing the `position` data**:
+
+   * The code checks `data.outfit[position]` to ensure that the position exists in the data. If it doesn't, the function returns early without performing any operations.
+
+3. **Dynamic `unitKey`**:
+
+   * The key used to access the unit data is now dynamically generated with `${position}_unit${i}`, where `position` could be `pos1`, `pos2`, etc., and `i` is the unit number (1, 2, or 3).
+
+### How to Use:
+
+* If you want to update data for `pos1`, call the function like this:
+
+  ```javascript
+  updateOutfitData(data, 'pos1');
+  ```
+
+* If you want to update data for `pos2`, call it like this:
+
+  ```javascript
+  updateOutfitData(data, 'pos2');
+  ```
+
+This should now handle the new data structure correctly, updating only the relevant units for the specified position.

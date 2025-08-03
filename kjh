@@ -1,0 +1,72 @@
+To adapt your existing function to the new structure of the `data` object and to accommodate the `dep` parameter, we can modify both the data access logic and the condition checking for `dep`. Here's the updated version of your code:
+
+### Updated Code
+
+```javascript
+function updateOutfitData(data, dep = 'dep_0') {
+  // Get the unit data for the given department
+  const depData = data.outfit[dep];
+
+  // If no data for the department, exit early
+  if (!depData) return;
+
+  // Loop through units 1, 2, 3
+  for (let i = 1; i <= 3; i++) {
+    const unitKey = `unit${i}`;
+    const unitData = depData[unitKey];
+
+    // Skip if data for this unit does not exist
+    if (!unitData) continue;
+
+    const container = document.querySelector(`.outfit-unit${i}`);
+    if (!container) continue;
+
+    // Update values in the elements for this unit
+    const firmBrigades = container.querySelector('.firm-brigades');
+    if (firmBrigades) firmBrigades.innerText = unitData.firm_brigades ?? 0;
+
+    const contractorBrigades = container.querySelector('.contractor-brigades');
+    if (contractorBrigades) contractorBrigades.innerText = unitData.contractor_brigades ?? 0;
+
+    const firmPeople = container.querySelector('.firm-people');
+    if (firmPeople) firmPeople.innerText = unitData.firm_people ?? 0;
+
+    const contractorPeople = container.querySelector('.contractor-people');
+    if (contractorPeople) contractorPeople.innerText = unitData.contractor_people ?? 0;
+  }
+}
+```
+
+### Explanation of Changes:
+
+1. **`dep` Parameter**:
+
+   * The function now accepts `dep` as a parameter, with a default value of `'dep_0'`. This ensures that if `dep` is not passed in the function call, the department `dep_0` is used by default.
+
+2. **Accessing Data Based on `dep`**:
+
+   * The data for the department is accessed using `data.outfit[dep]`. For example, if `dep = 'dep_1237'`, it will look for `data.outfit.dep_1237`.
+
+3. **Error Handling**:
+
+   * If no data is available for the given department (`if (!depData)`), the function returns early without further processing.
+
+4. **Iterating Over Units**:
+
+   * The loop remains the same: it iterates through `unit1`, `unit2`, and `unit3` under the selected department and updates the corresponding HTML elements.
+
+### Usage Example:
+
+* If you want to update the outfit data for department `dep_1237`:
+
+```javascript
+updateOutfitData(data, 'dep_1237');
+```
+
+* If you want to use the default department (`dep_0`):
+
+```javascript
+updateOutfitData(data);
+```
+
+This way, the logic stays consistent, but it’s flexible enough to handle different departments based on the `dep` parameter. Let me know if you need further adjustments!

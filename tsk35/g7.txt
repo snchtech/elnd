@@ -1,0 +1,102 @@
+Ось як можна реалізувати **Interactive Report** для `TASK_COLLECTIONS` з усіма зазначеними вимогами:
+
+---
+
+## 🔧 **1. SQL Query для звіту:**
+
+```sql
+SELECT 
+  t.ID,
+  t.COLLECTION_ITEM_CONTENT AS CONTENT,
+  ct.NAME AS TYPE_NAME,
+  CASE WHEN t.IS_PERSONAL = 'Y' THEN 'YES' ELSE NULL END AS PERSONAL,
+  u.FIRST_NAME || ' ' || u.LAST_NAME AS CREATOR,
+  t.DATE_CREATE,
+  d.NAME AS DEPARTMENT,
+  
+  -- Кнопка видалення: HTML кнопка з класом та data-id
+  '<button class="del-btn" data-id="' || t.ID || '">🗑️</button>' AS DELETE_BTN
+
+FROM 
+  TASK_COLLECTIONS t
+  JOIN COLLECTIONS_TYPE ct ON t.TYPE_ID = ct.ID
+  LEFT JOIN USERS u ON u.ID = t.CREATOR_ID
+  LEFT JOIN DEPARTMENT d ON d.ID = t.DEPARTMENT_ID
+
+WHERE 
+  (
+    t.CREATOR_ID = :P0_CURRENT_USER_ID
+    OR (:P0_IS_SUBSTITUTION = 'Y' AND :P0_NEW_USER_ID IS NOT NULL AND t.CREATOR_ID = :P0_NEW_USER_ID)
+    OR t.DEPARTMENT_ID = :P0_CUR_DEPARTMENT
+  )
+```
+
+> 🔸 Заміни назви колонок у `USERS`, `DEPARTMENT` за своїми даними, якщо відрізняються.
+
+---
+
+## 🧩 **2. Динамічне видалення через JavaScript + Apex Server Process:**
+
+### A. **JS код (на сторінці або Dynamic Action):**
+
+```js
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.classList.contains('del-btn')) {
+    var id = e.target.getAttribute('data-id');
+    
+    apex.message.confirm("Ви дійсно хочете видалити запис?", function(okPressed) {
+      if (okPressed) {
+        apex.server.process("DELETE_COLLECTION_ITEM", {
+          x01: id
+        }, {
+          success: function() {
+            apex.region("your-region-static-id").refresh();
+          }
+        });
+      }
+    });
+  }
+});
+```
+
+> 🔸 Замініть `"your-region-static-id"` на Static ID звіту.
+
+---
+
+### B. **Apex Server Process:**
+
+* **Name:** `DELETE_COLLECTION_ITEM`
+* **Type:** PL/SQL
+* **Code:**
+
+```plsql
+BEGIN
+  DELETE FROM TASK_COLLECTIONS
+  WHERE ID = APEX_APPLICATION.G_X01;
+END;
+```
+
+---
+
+## 🎯 **3. Підказки по оптимізації:**
+
+* Додайте до сторінки (або global page) Items:
+
+  * `P0_CURRENT_USER_ID` — ID поточного користувача
+  * `P0_NEW_USER_ID` — ID користувача, якого заміщають
+  * `P0_IS_SUBSTITUTION` — `'Y'`, якщо активне заміщення
+  * `P0_CUR_DEPARTMENT` — ID підрозділу користувача
+
+* Використовуйте ці значення також для фільтрації LOV у формі створення (textarea/select).
+
+---
+
+## 📌 **Що отримаєте у звіті:**
+
+* Всі необхідні колонки з приєднаними назвами
+* Відображення лише релевантних рядків згідно прав доступу
+* Кнопка видалення з підтвердженням і оновленням регіону без перезавантаження сторінки
+
+---
+
+Бажаєте, щоб я сформував готовий APEX export-файл для цього Interactive Report?

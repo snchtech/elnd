@@ -1,0 +1,80 @@
+Щоб реалізувати логіку:
+
+> **"Показувати тільки ті записи, з якими немає ознайомлення, а якщо всі вже ознайомлені або немає взагалі — виводити текст “Немає записів для ознайомлення” замість звіту"**,
+> ти можеш зробити так:
+
+---
+
+## ✅ ВАРІАНТ 1: В APEX (рекомендовано)
+
+### 🔹 Крок 1: **SQL-запит для IR (без змін):**
+
+```sql
+SELECT 
+  t.ID as TASK_ID,
+  'Зміна ' || TO_CHAR(:PXX_SHIFT_START, 'DD.MM.YYYY HH24:MI') || ' — ' || TO_CHAR(:PXX_SHIFT_END, 'HH24:MI') AS TASK_SHIFT,
+  CASE 
+    WHEN t.TASK_TYPE = 2 THEN 
+      (SELECT LISTAGG(st.SUBTASK_CONTENT, '; ') WITHIN GROUP (ORDER BY st.SUBTASK_ORDER)
+       FROM TASK_SUBTASKS st 
+       WHERE st.TASK_ID = t.ID)
+    ELSE 
+      t.TASK_CONTENT
+  END AS TASK_CONTENT,
+  t.PLANNING_DATE_START,
+  t.PLANNING_DATE_END,
+  'f?p=&APP_ID.:6:&SESSION.::&DEBUG.:6:P6_TASK_ID:' || t.ID AS LINK_TO_DETAILS
+FROM TASKS t
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM TASK_VIEWED v 
+    WHERE v.TASK_ID = t.ID 
+      AND v.USER_ID = :PXX_USER_ID 
+      AND v.DATE_VIEWED BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END
+)
+```
+
+---
+
+### 🔹 Крок 2: **Додай HTML регіон зверху або замість звіту**
+
+1. Створи **HTML регіон** (тип: *Static Content*) над IR.
+2. Вміст:
+
+```html
+<div id="no-records-text" style="display:none; color:#b00; font-weight:bold; margin-bottom:10px;">
+  Немає записів для ознайомлення.
+</div>
+```
+
+---
+
+### 🔹 Крок 3: **Dynamic Action (Page Load або після Refresh IR)**
+
+* **Подія**: *After Refresh* (для твого IR)
+* **True Action**: *Execute JavaScript Code*
+
+```js
+var hasData = apex.region("your_ir_static_id").widget().find("tbody tr td").length > 1;
+
+if (!hasData) {
+  $("#no-records-text").show();
+  $("#your_ir_static_id").hide();  // ховаємо IR
+} else {
+  $("#no-records-text").hide();
+  $("#your_ir_static_id").show(); // показуємо IR
+}
+```
+
+> Замінити `"your_ir_static_id"` на **Static ID** твоєї IR (наприклад: `tasks_report`)
+
+---
+
+## ✅ ВАРІАНТ 2: Через PL/SQL Function Returning SQL Query (альтернатива)
+
+1. Створи PL/SQL функцію типу `Function Returning SQL Query`, яка повертає `'SELECT ...'` або `'SELECT NULL a, NULL b FROM DUAL WHERE 1=0'`, якщо записів немає.
+2. Але в такому разі **повідомлення** доведеться виводити вручну — або окремим HTML-елементом.
+
+---
+
+🔔 Якщо треба — можу допомогти вставити все в твою сторінку. Хочеш?

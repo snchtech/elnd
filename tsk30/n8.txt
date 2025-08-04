@@ -1,0 +1,58 @@
+Ось приклад, як стилізувати ці блоки з іконками та кольорами:
+
+---
+
+### 🔧 **PL/SQL (HTP.P) блок:**
+
+```plsql
+-- Якщо є ознайомлення
+HTP.P('<div class="task-viewed-info view-exist">
+  <span class="t-Icon fa fa-check-circle-o viewed-icon viewed-icon-success" title="Ознайомлено"></span>
+  Ознайомлений ' || l_user_name || ', ' || TO_CHAR(l_viewed_date, 'DD.MM.YYYY HH24:MI') || '
+</div>');
+
+-- Якщо немає ознайомлення
+HTP.P('<div class="task-viewed-info view-not-exist">
+  <span class="t-Icon fa fa-info-circle viewed-icon viewed-icon-neutral" title="Не ознайомлений"></span>
+  Не ознайомлений
+</div>');
+```
+
+---
+
+### 🎨 **CSS для стилізації** *(додай у CSS або inline style / static file)*:
+
+```css
+.task-viewed-info {
+  margin-top: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewed-icon {
+  font-size: 18px;
+}
+
+.viewed-icon-success {
+  color: #28a745; /* зелений */
+}
+
+.viewed-icon-neutral {
+  color: #6c757d; /* сірий */
+}
+```
+
+---
+
+### ✅ Результат:
+
+* ✅ Іконка ✅ (зелена) + текст — якщо є дата ознайомлення.
+* ℹ️ Іконка ℹ️ (сіра) + текст — якщо немає ознайомлення.
+
+> Якщо ти хочеш трохи більші іконки, додай `font-size: 20px` або `24px` у `.viewed-icon`.
+
+---
+
+🔁 Якщо хочеш, я можу одразу зробити версію для APEX Region HTML Template.

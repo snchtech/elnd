@@ -1,0 +1,92 @@
+Щоб у звіті (IR) додати **чекбокс напроти кожного рядка** та реалізувати обробку вибраних завдань кнопкою **«Ознайомитись із обраними»**, зроби так:
+
+---
+
+## ✅ КРОК 1: Додай колонку з чекбоксом у SQL-запит IR
+
+Оновлений запит:
+
+```sql
+SELECT 
+  t.ID as TASK_ID,
+  apex_item.checkbox(1, t.ID) AS SELECT_ROW, -- Чекбокс (name="f01", значення = TASK_ID)
+  
+  'Зміна ' || TO_CHAR(:PXX_SHIFT_START, 'DD.MM.YYYY HH24:MI') || ' — ' || TO_CHAR(:PXX_SHIFT_END, 'HH24:MI') AS TASK_SHIFT,
+  
+  CASE 
+    WHEN t.TASK_TYPE = 2 THEN 
+      (SELECT LISTAGG(st.SUBTASK_CONTENT, '; ') 
+         WITHIN GROUP (ORDER BY st.SUBTASK_ORDER)
+       FROM TASK_SUBTASKS st 
+       WHERE st.TASK_ID = t.ID)
+    ELSE 
+      t.TASK_CONTENT
+  END AS TASK_CONTENT,
+  
+  t.PLANNING_DATE_START,
+  t.PLANNING_DATE_END,
+  
+  'f?p=&APP_ID.:6:&SESSION.::&DEBUG.:6:P6_TASK_ID:' || t.ID AS LINK_TO_DETAILS
+
+FROM TASKS t
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM TASK_VIEWED v 
+    WHERE v.TASK_ID = t.ID 
+      AND v.USER_ID = :PXX_USER_ID 
+      AND v.DATE_VIEWED BETWEEN :PXX_SHIFT_START AND :PXX_SHIFT_END
+)
+```
+
+> ⚠️ Обов'язково: у властивостях звіту в **Column Attributes** для `SELECT_ROW`:
+
+* Set **Escape special characters** = `No`
+* Set **Display as** = `Standard Report Column`
+
+---
+
+## ✅ КРОК 2: Додай кнопку **«Ознайомитись із обраними»**
+
+* Кнопка типу: **Submit Page**
+* Static ID: `btn_confirm_selected`
+
+---
+
+## ✅ КРОК 3: Створи обробник (Process) типу **PL/SQL**
+
+* Назва: `Insert Task Viewed`
+* Тип: *PL/SQL Code*
+* **Condition**: *When Button Pressed* → `btn_confirm_selected`
+
+```plsql
+FOR i IN 1..APEX_APPLICATION.G_F01.COUNT LOOP
+  INSERT INTO TASK_VIEWED (ID, USER_ID, TASK_ID, DATE_VIEWED)
+  VALUES (
+    TASK_VIEWED_SEQ.NEXTVAL, 
+    :PXX_USER_ID, 
+    APEX_APPLICATION.G_F01(i), 
+    SYSDATE
+  );
+END LOOP;
+```
+
+---
+
+## ✅ КРОК 4: Онови звіт після збереження
+
+* Після вставки додай **True Action** → *Refresh Region*
+* Обери свою IR регіон (наприклад: `Tasks_IR`)
+
+---
+
+## 🔍 Результат
+
+1. З’явиться колонка з чекбоксами в кожному рядку.
+2. Після вибору чекбоксів і натискання кнопки **«Ознайомитись із обраними»**:
+
+   * Дані зберігаються в `TASK_VIEWED`.
+   * Звіт оновлюється, і вже ознайомлені записи зникають.
+
+---
+
+🔔 Хочеш, я покажу ще й реалізацію "Ознайомитись із усіма" (масово, без чекбоксів)?

@@ -1,0 +1,49 @@
+Great — you're adding another layer of logic based on `:P0_SUBSTITUTION_MODE`, which controls whether to use `:P0_USER_ID1` or `:P0_USER_ID2` as the user in the check.
+
+---
+
+### ✅ Updated PL/SQL Function Body Returning Boolean:
+
+```plsql
+DECLARE
+  l_user_id VARCHAR2(100);
+BEGIN
+  -- Decide which user ID to use based on substitution mode
+  IF :P0_SUBSTITUTION_MODE = '1' THEN
+    l_user_id := :P0_USER_ID1;
+  ELSIF :P0_SUBSTITUTION_MODE = '0' THEN
+    l_user_id := :P0_USER_ID2;
+  ELSE
+    RETURN FALSE; -- Invalid substitution mode
+  END IF;
+
+  -- Role check
+  IF :P0_HAS_SHIFT_ROLE = 'N' THEN
+    RETURN NOT EXISTS (
+      SELECT 1 FROM TASK_VIEWED
+       WHERE TASK_ID = :P6_TASK_ID AND USER_ID = l_user_id
+    );
+
+  ELSIF :P0_HAS_SHIFT_ROLE = 'Y' THEN
+    RETURN NOT EXISTS (
+      SELECT 1 FROM TASK_VIEWED
+       WHERE TASK_ID = :P6_TASK_ID
+         AND USER_ID = l_user_id
+         AND DATE_VIEWED BETWEEN :P6_SHIFT_START_DATE AND :P6_SHIFT_END_DATE
+    );
+
+  ELSE
+    RETURN FALSE; -- Invalid role state
+  END IF;
+END;
+```
+
+---
+
+### ✅ What This Does:
+
+* Selects `USER_ID1` or `USER_ID2` depending on `:P0_SUBSTITUTION_MODE`.
+* Performs the `EXISTS` logic just like before, but with the chosen user ID.
+* Returns `TRUE` or `FALSE` to control button visibility or logic.
+
+Let me know if `:P0_SUBSTITUTION_MODE` might ever be `NULL` or unexpected — I can help you handle that too.

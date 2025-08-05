@@ -1,0 +1,96 @@
+Ти можеш реалізувати динамічну логіку для виведення даних по ознайомленню в SQL-виразі у view або, якщо простіше — у SQL-запиті в APEX, де маєш доступ до `:P_...` items. Оскільки в APEX краще обробляти логіку на рівні SQL з `CASE` і `:P_ITEM`, ось приклад, як це можна реалізувати:
+
+---
+
+### ✅ **Варіант SQL-запиту для APEX, з урахуванням описаної логіки**
+
+```sql
+(
+  SELECT 
+    CASE 
+      -- 🔹 Якщо P_SUBSTITUTION_MODE = 0
+      WHEN :P_SUBSTITUTION_MODE = 0 THEN
+        CASE 
+          -- Якщо P_CUR_SHIFT порожній => виводимо останню дату (незалежно від shift)
+          WHEN NVL(:P_CUR_SHIFT, '0') = '0' THEN
+            (
+              SELECT 
+                (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+                us.SPR_DOLZNOST || ', ' || us.TSEH || 
+                ' (' || TO_CHAR(MAX(tv.DATE_VIEWED), 'DD.MM.YYYY HH24:MI') || ')'
+              FROM TASK_VIEWED tv
+              JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+              WHERE tv.TASK_ID = t.ID 
+                AND tv.USER_ID = :P_CUR_VIEWED
+            )
+          -- Якщо P_CUR_SHIFT існує => перевірка в межах поточної зміни
+          ELSE
+            (
+              SELECT 
+                (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+                us.SPR_DOLZNOST || ', ' || us.TSEH || 
+                ' (' || TO_CHAR(tv.DATE_VIEWED, 'DD.MM.YYYY HH24:MI') || ')'
+              FROM TASK_VIEWED tv
+              JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+              WHERE tv.TASK_ID = t.ID 
+                AND tv.USER_ID = :P_CUR_VIEWED
+                AND tv.DATE_VIEWED BETWEEN TO_DATE(:P_START_SHIFT, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(:P_END_SHIFT, 'YYYY-MM-DD HH24:MI:SS')
+              FETCH FIRST ROW ONLY
+            )
+        END
+      
+      -- 🔹 Якщо P_SUBSTITUTION_MODE = 1
+      WHEN :P_SUBSTITUTION_MODE = 1 THEN
+        CASE 
+          -- Якщо P_NEW_SHIFT порожній => виводимо останню дату
+          WHEN NVL(:P_NEW_SHIFT, '0') = '0' THEN
+            (
+              SELECT 
+                (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+                us.SPR_DOLZNOST || ', ' || us.TSEH || 
+                ' (' || TO_CHAR(MAX(tv.DATE_VIEWED), 'DD.MM.YYYY HH24:MI') || ')'
+              FROM TASK_VIEWED tv
+              JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+              WHERE tv.TASK_ID = t.ID 
+                AND tv.USER_ID = :P_NEW_VIEWED
+            )
+          -- Якщо є зміна => перевіряємо попадання в діапазон
+          ELSE
+            (
+              SELECT 
+                (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+                us.SPR_DOLZNOST || ', ' || us.TSEH || 
+                ' (' || TO_CHAR(tv.DATE_VIEWED, 'DD.MM.YYYY HH24:MI') || ')'
+              FROM TASK_VIEWED tv
+              JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+              WHERE tv.TASK_ID = t.ID 
+                AND tv.USER_ID = :P_NEW_VIEWED
+                AND tv.DATE_VIEWED BETWEEN TO_DATE(:P_START_SHIFT, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(:P_END_SHIFT, 'YYYY-MM-DD HH24:MI:SS')
+              FETCH FIRST ROW ONLY
+            )
+        END
+    END
+) AS VIEWED_BY
+```
+
+---
+
+### 🛠 Що потрібно врахувати:
+
+* `TASK_VIEWED` — це таблиця ознайомлень, яка має `TASK_ID`, `USER_ID`, `DATE_VIEWED`.
+* `t.ID` — це alias таблиці завдань у запиті.
+* `:P_CUR_VIEWED`, `:P_NEW_VIEWED` — значення `USER_ID` поточного або заміщуваного користувача.
+* `:P_CUR_SHIFT`, `:P_NEW_SHIFT` — прапорці, чи потрібно перевіряти діапазон ознайомлення по зміні.
+* `:P_START_SHIFT`, `:P_END_SHIFT` — межі зміни, формат `YYYY-MM-DD HH24:MI:SS`.
+
+---
+
+### ✅ Спрощення (якщо виводити лише `DATE_VIEWED` або `BOOLEAN`):
+
+Можна адаптувати запит під APEX-логіку на рівні `interactive report` і потім у колонці створити форматування через JavaScript або шаблон (наприклад, зелений/сірий статус).
+
+---
+
+🔔 Якщо хочеш винести цю логіку у **Oracle View**, то доведеться передавати параметри через `context` або реалізувати через `APEX_APPLICATION.G_X01`, `V('APP_USER')`, тощо, що складніше. Найкраще — писати цей вираз прямо у SQL джерелі APEX-звіту.
+
+Хочеш, я покажу, як реалізувати це в PL/SQL-функції, щоб зробити її повторно використовуваною в різних запитах?

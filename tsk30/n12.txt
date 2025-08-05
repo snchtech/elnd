@@ -1,0 +1,110 @@
+Окей! Нижче — приклад реалізації колонки **VIEWED\_STATUS**, яка:
+
+* ✅ відображає іконку (зелена або сіра),
+* ✅ додає текст з прізвищем, посадою і датою,
+* ✅ або пише *"Не ознайомлено"* із сірою іконкою.
+
+---
+
+### 🔹 **SQL-фрагмент для APEX Interactive Report**
+
+> Підстав у свій основний SQL-запит (наприклад, в `SELECT ... FROM TASKS t`) цей вираз:
+
+```sql
+(
+  CASE
+    WHEN :P_SUBSTITUTION_MODE = 0 THEN
+      CASE 
+        WHEN NVL(:P_CUR_SHIFT, '0') = '0' THEN
+          (
+            SELECT 
+              '<span class="fa fa-check-circle text-success" title="Ознайомлено"></span> ' ||
+              (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+              us.SPR_DOLZNOST || ', ' || us.TSEH || 
+              ' (' || TO_CHAR(MAX(tv.DATE_VIEWED), 'DD.MM.YYYY HH24:MI') || ')'
+            FROM TASK_VIEWED tv
+            JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+            WHERE tv.TASK_ID = t.ID 
+              AND tv.USER_ID = :P_CUR_VIEWED
+          )
+        ELSE
+          (
+            SELECT 
+              '<span class="fa fa-check-circle text-success" title="Ознайомлено"></span> ' ||
+              (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+              us.SPR_DOLZNOST || ', ' || us.TSEH || 
+              ' (' || TO_CHAR(tv.DATE_VIEWED, 'DD.MM.YYYY HH24:MI') || ')'
+            FROM TASK_VIEWED tv
+            JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+            WHERE tv.TASK_ID = t.ID 
+              AND tv.USER_ID = :P_CUR_VIEWED
+              AND tv.DATE_VIEWED BETWEEN TO_DATE(:P_START_SHIFT, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(:P_END_SHIFT, 'YYYY-MM-DD HH24:MI:SS')
+            FETCH FIRST ROW ONLY
+          )
+      END
+
+    WHEN :P_SUBSTITUTION_MODE = 1 THEN
+      CASE 
+        WHEN NVL(:P_NEW_SHIFT, '0') = '0' THEN
+          (
+            SELECT 
+              '<span class="fa fa-check-circle text-success" title="Ознайомлено"></span> ' ||
+              (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+              us.SPR_DOLZNOST || ', ' || us.TSEH || 
+              ' (' || TO_CHAR(MAX(tv.DATE_VIEWED), 'DD.MM.YYYY HH24:MI') || ')'
+            FROM TASK_VIEWED tv
+            JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+            WHERE tv.TASK_ID = t.ID 
+              AND tv.USER_ID = :P_NEW_VIEWED
+          )
+        ELSE
+          (
+            SELECT 
+              '<span class="fa fa-check-circle text-success" title="Ознайомлено"></span> ' ||
+              (us.FAMILIA || ' ' || substr(us.IMYA, 1, 1) || '. ' || substr(us.OTCHESTVO, 1, 1) || '.') || ', ' ||
+              us.SPR_DOLZNOST || ', ' || us.TSEH || 
+              ' (' || TO_CHAR(tv.DATE_VIEWED, 'DD.MM.YYYY HH24:MI') || ')'
+            FROM TASK_VIEWED tv
+            JOIN USERS us ON tv.USER_ID = us.TAB_NO AND us.PRIZNAK IS NULL
+            WHERE tv.TASK_ID = t.ID 
+              AND tv.USER_ID = :P_NEW_VIEWED
+              AND tv.DATE_VIEWED BETWEEN TO_DATE(:P_START_SHIFT, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(:P_END_SHIFT, 'YYYY-MM-DD HH24:MI:SS')
+            FETCH FIRST ROW ONLY
+          )
+      END
+    ELSE
+      '<span class="fa fa-circle text-muted" title="Не ознайомлено"></span> Не ознайомлено'
+  END
+) AS VIEWED_STATUS
+```
+
+---
+
+### 🔹 **У APEX:**
+
+* Для колонки `VIEWED_STATUS`:
+
+  * **Escape Special Characters** = `No`.
+  * Можна заховати колонку `VIEWED_BY`, якщо використовуєш `VIEWED_STATUS`.
+
+---
+
+### 🔹 **CSS-оформлення (якщо треба тонші стилі)**
+
+Якщо хочеш додати стилі або зробити піктограму більшу:
+
+```css
+.fa-check-circle.text-success {
+  color: #28a745;
+  font-size: 1.2em;
+}
+
+.fa-circle.text-muted {
+  color: #6c757d;
+  font-size: 1.2em;
+}
+```
+
+---
+
+🔔 Хочеш ще додаткову колонку, наприклад, лише з піктограмою (`VIEWED_ICON`), щоб мати візуальне поле поряд із текстом?

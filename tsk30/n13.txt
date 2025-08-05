@@ -1,0 +1,156 @@
+Дякую, бачу структуру на фото й PL/SQL-HTML код. Спробую навести покращення дизайну та додати **CSS-розділення між підетапами (особливо для Етапу 2)**, не змінюючи структуру, лише стилізацію.
+
+---
+
+## ✅ **Цілі:**
+
+1. **Сучасний вигляд** блоків з відмітками.
+2. **Візуальні роздільники** між кількома блоками в одному підетапі (наприклад, "Етап 2").
+3. Залишити логіку формування через `HTP.P`, а всі візуальні покращення — в **CSS**.
+
+---
+
+## 🎨 **CSS-оформлення блоку картки погодження**
+
+```css
+/* Основний контейнер картки */
+.confirm-cart-container {
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+/* Заголовок таблички */
+.confirm-cart-title {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr 2fr 1fr;
+  font-weight: bold;
+  background-color: #2c3e50;
+  color: #fff;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+/* Рядок заголовку етапу */
+.confirm-cart-item_stg {
+  margin-top: 20px;
+  font-weight: 600;
+  color: #34495e;
+  font-size: 16px;
+  border-left: 5px solid #2980b9;
+  background-color: #ecf0f1;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+
+/* Рядок заголовку підетапу */
+.confirm-cart-item_substg {
+  margin-top: 10px;
+  font-weight: 500;
+  color: #2c3e50;
+  font-size: 15px;
+  padding: 4px 10px;
+  border-left: 4px solid #95a5a6;
+}
+
+/* Один запис */
+.confirm-cart-item {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr 2fr 1fr;
+  background-color: #ffffff;
+  border: 1px solid #dcdcdc;
+  border-radius: 5px;
+  margin: 10px 0;
+  padding: 10px;
+  align-items: center;
+  transition: background-color 0.3s;
+}
+
+.confirm-cart-item:hover {
+  background-color: #f1f1f1;
+}
+
+/* Класи колонок */
+.c-cart-signer,
+.c-cart-date-time,
+.c-cart-pib,
+.c-cart-signer-comment,
+.c-cart-signer-mark {
+  padding: 5px;
+  font-size: 14px;
+}
+
+.confirm-sign-attributes_by {
+  font-weight: 600;
+  display: block;
+}
+
+.confirm-sign-attributes_posada {
+  font-size: 13px;
+  color: #7f8c8d;
+}
+
+.confirm-sign-attributes_date {
+  font-size: 13px;
+  color: #2980b9;
+}
+
+.wait-confirm-signature-text {
+  color: #999;
+  font-style: italic;
+  font-size: 13px;
+}
+
+.wait-confirm-signature-text-current {
+  color: #e67e22;
+  font-weight: bold;
+}
+
+.confirm-signature-button {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.confirm-signature-button:hover {
+  background-color: #2980b9;
+}
+
+/* Статус успішної відмітки */
+.c-cart-signer-mark_success {
+  background-color: #2ecc71;
+  color: white;
+  text-align: center;
+  font-weight: bold;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+/* Розділення між кількома блоками "До виконання" */
+.confirm-cart-item + .confirm-cart-item::before {
+  content: '';
+  grid-column: 1 / -1;
+  height: 1px;
+  background-color: #e0e0e0;
+  margin: 8px 0;
+}
+```
+
+---
+
+## 📌 **Що це дає:**
+
+* Сучасна сітка (CSS Grid) для розмітки — адаптивно виглядає на різні ширини.
+* Розділення блоків `+ .confirm-cart-item::before` — між елементами в межах підетапу з'являється сіра лінія.
+* Етапи і підетапи мають кольорові ліві бордери для візуального відділення.
+* Кнопки з hover-ефектами.
+* Чіткий поділ кольорів: успішно, очікує, розглядає.
+
+---
+
+Хочеш, я можу також винести цей CSS як окремий блок `Style` для вставки в APEX (на Global Page або Page 3)?

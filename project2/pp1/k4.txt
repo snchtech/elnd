@@ -1,0 +1,201 @@
+Супер питання — це якраз про **debounce**, inline‑помилки й анти‑double‑tap. Коротко і по ділу:
+
+---
+
+# 1) Що станеться, якщо користувач продовжує вводити?
+
+З **debounce 400 мс** усе просто:
+
+* при кожному натисканні клавіші таймер **СКИДАЄТЬСЯ**;
+* перевірка викликається **лише після паузи** довжиною ≥ 400 мс;
+* якщо користувач продовжив друк до спливу 400 мс, **перевірка не виконається** (бо попередній таймер скасовано) — чекатимемо нові 400 мс після останнього символу.
+
+Щоб уникнути “накладання” кількох AJAX‑запитів, корисно **абортити попередній XHR** перед новим.
+
+---
+
+# 2) Код: debounce + скасування попереднього AJAX + inline‑error
+
+Додай у **Page → JavaScript → Function and Global Variable Declaration**:
+
+```js
+// Debounce-обгортка
+function debounce(fn, ms){
+  var t; 
+  return function(){
+    var ctx=this, args=arguments;
+    clearTimeout(t);
+    t = setTimeout(function(){ fn.apply(ctx,args); }, ms);
+  };
+}
+
+// Керування кнопками Login/Logout
+function setNextAction(action){
+  $s('P10_NEXT_ACTION', action);
+  // Якщо хочеш клієнтське перемикання видимості:
+  $('#P10_LOGIN').toggle(action === 'LOGIN');
+  $('#P10_LOGOUT').toggle(action === 'LOGOUT');
+}
+
+// Поточний XHR, щоб абортити, якщо користувач друкує далі
+var currentCheckXhr = null;
+
+function checkCodeLive(){
+  if (currentCheckXhr && currentCheckXhr.readyState !== 4){
+    currentCheckXhr.abort(); // скасуємо попередній запит
+  }
+
+  // Чистимо попередні помилки
+  apex.message.clearErrors();
+
+  currentCheckXhr = apex.server.process(
+    "CHECK_STATE",
+    { pageItems: "#P10_NUMBER" },
+    { dataType: "json",
+      success: function(res){
+        if (!res || res.ok === false){
+          // INLINE помилка біля P10_NUMBER
+          apex.message.showErrors([{
+            type: "error",
+            location: "inline",
+            pageItem: "P10_NUMBER",
+            message: (res && res.message) ? res.message : "Помилка перевірки",
+            unsafe: false
+          }]);
+          setNextAction('HIDE');
+          return;
+        }
+        setNextAction(res.nextAction || 'LOGIN');
+      },
+      error: function(xhr, status){
+        if (status === 'abort'){ return; } // це нормальна ситуація при повторному вводі
+        apex.message.showErrors([{
+          type: "error",
+          location: "inline",
+          pageItem: "P10_NUMBER",
+          message: "Помилка з’єднання під час перевірки",
+          unsafe: false
+        }]);
+        setNextAction('HIDE');
+      },
+      complete: function(){ currentCheckXhr = null; }
+    }
+  );
+}
+
+var checkCodeLiveDebounced = debounce(checkCodeLive, 400);
+
+// Ініціалізація на завантаженні сторінки
+(function init(){
+  var el = document.getElementById('P10_NUMBER');
+  if (!el) return;
+
+  // live-перевірка
+  el.addEventListener('input', function(){ checkCodeLiveDebounced(); });
+  el.addEventListener('paste', function(){ setTimeout(checkCodeLive, 0); });
+
+  // Швидкий шлях для сканера (Enter/Tab)
+  el.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === 'Tab'){
+      // Остання перевірка перед сабмітом
+      checkCodeLive();
+      setTimeout(function(){
+        var next = $v('P10_NEXT_ACTION');
+        if (next === 'LOGIN'){
+          safeSubmit('LOGIN');
+        } else if (next === 'LOGOUT'){
+          safeSubmit('LOGOUT');
+        }
+      }, 50);
+      e.preventDefault();
+    }
+  });
+})();
+```
+
+**Як виглядає INLINE error:** ми викликаємо
+
+```js
+apex.message.showErrors([{
+  type: "error",
+  location: "inline",
+  pageItem: "P10_NUMBER",
+  message: "Користувача не знайдено",
+  unsafe: false
+}]);
+```
+
+— і помилка з’явиться саме під елементом `P10_NUMBER`. Щоб прибрати — `apex.message.clearErrors()`.
+
+---
+
+# 3) Запобігання “подвійному тапу” (подвійний submit)
+
+Є два шляхи — **(A) суто JS** (працює завжди) і **(B) стандартні опції APEX**.
+
+### (A) JS‑захист (рекомендую додати)
+
+```js
+var __submitting = false;
+
+function safeSubmit(request){
+  if (__submitting) { return; } // вже відправляємо — ігноруємо повтор
+  __submitting = true;
+
+  // Вимикаємо кнопки, щоб користувач не тиснув ще раз
+  $('#P10_LOGIN, #P10_LOGOUT').prop('disabled', true).addClass('is-disabled');
+
+  apex.submit({
+    request: request,
+    showWait: true
+  });
+}
+
+// На випадок, якщо сторінка не перезавантажиться (SPA-навігація тощо):
+document.addEventListener('apexafterrefresh', function(){
+  __submitting = false;
+  $('#P10_LOGIN, #P10_LOGOUT').prop('disabled', false).removeClass('is-disabled');
+});
+```
+
+Тепер у місцях, де ти робиш сабміт, **викликай `safeSubmit('LOGIN')` або `safeSubmit('LOGOUT')`**, а не прямий `apex.submit`.
+
+> Якщо кнопки мають стандартну дію *Submit Page*, зміни їх на *Action: Redirect to URL* з `javascript:safeSubmit('LOGIN');` / `javascript:safeSubmit('LOGOUT');` **або** додай *Dynamic Action → Event: Click* на кожну кнопку, де *True Action: Execute JavaScript Code* з `safeSubmit('LOGIN')`.
+
+### (B) Опції Universal Theme
+
+* Для кнопок увімкни **Template Option → “Disable on Click” / “Show Processing”** (назва може відрізнятись за версією UT). Це автоматично блокує повторні кліки, поки йде сабміт.
+* Додатково є подія `apexbeforepagesubmit` — можна глобально відключати всі кнопки:
+
+  ```js
+  document.addEventListener('apexbeforepagesubmit', function(){
+    $('#P10_LOGIN, #P10_LOGOUT').prop('disabled', true).addClass('is-disabled');
+  });
+  ```
+
+---
+
+# 4) Мінімальні зміни в AJAX‑процесі (PL/SQL)
+
+Твій `CHECK_STATE` уже повертає `ok=false` і `message='Користувача не знайдено'`. Це і є тригер для INLINE error (див. success‑гілку JS вище). Якщо треба, додай чітке повідомлення:
+
+```plsql
+IF l_exists = 0 THEN
+  apex_json.open_object;
+  apex_json.write('ok',        false);
+  apex_json.write('message',   'Користувача не знайдено');
+  apex_json.write('nextAction','HIDE');
+  apex_json.close_object;
+  RETURN;
+END IF;
+```
+
+---
+
+## Підсумок
+
+* Якщо користувач **ввів і продовжив вводити** — debounce скасовує попередній таймер і **не робить перевірку**, поки не настане пауза ≥ 400 мс.
+* **Inline‑error** показуємо через `apex.message.showErrors({ location:'inline', pageItem:'P10_NUMBER', ... })`.
+* **Подвійний тап** блокуємо `safeSubmit()` (JS) +/або Template Option “Disable on Click”.
+
+Хочеш — зберу це в один невеликий APEX‑експорт сторінки для імпорту.

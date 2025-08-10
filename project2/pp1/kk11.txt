@@ -1,0 +1,135 @@
+Зробимо так, щоб «архівування» було надійним і працювало і в UI, і автоматично.
+
+# 1) Логіка в БД (надійна основа)
+
+Рекомендую винести правило в БД — або тригер, або процедуру + планове завдання. Це гарантує єдину поведінку з будь‑якого місця.
+
+## Варіант A. Тригер на таблиці `TASK_TEMPLATES`
+
+```sql
+-- припустимо: ID шаблону = ID, дата завершення = END_TEMPLATE_DATE, статус = STATUS_ID
+-- 12 = Архів
+CREATE OR REPLACE TRIGGER trg_templ_autoset_archive
+BEFORE INSERT OR UPDATE OF END_TEMPLATE_DATE ON TASK_TEMPLATES
+FOR EACH ROW
+DECLARE
+  c_archived CONSTANT NUMBER := 12;
+BEGIN
+  IF :NEW.END_TEMPLATE_DATE IS NOT NULL
+     AND :NEW.END_TEMPLATE_DATE < SYSTIMESTAMP
+  THEN
+    :NEW.STATUS_ID := c_archived;
+  END IF;
+END;
+/
+```
+
+> Якщо для вас важлива лише дата без часу — використайте `TRUNC(:NEW.END_TEMPLATE_DATE) < TRUNC(SYSDATE)`.
+
+## Варіант B. Щоденний «прибиральник» (Scheduler / APEX Automation)
+
+```sql
+BEGIN
+  UPDATE TASK_TEMPLATES
+     SET STATUS_ID = 12
+   WHERE END_TEMPLATE_DATE < SYSTIMESTAMP
+     AND NVL(STATUS_ID,0) <> 12;
+  COMMIT;
+END;
+```
+
+* Можете оформити як **APEX Automation** (щодня о 02:00) або через **DBMS\_SCHEDULER**.
+
+---
+
+# 2) Реакція одразу при зміні Date Picker у формі
+
+На сторінці редагування шаблону (наприклад, `P10_END_TEMPLATE_DATE`, `P10_ID`):
+
+1. **Dynamic Action**:
+
+* **Event:** Change
+* **Selection Type:** Item(s) → `P10_END_TEMPLATE_DATE`
+* **True Action:** Execute Server-side Code (PL/SQL)
+
+```plsql
+DECLARE
+  c_archived CONSTANT NUMBER := 12;
+BEGIN
+  IF :P10_END_TEMPLATE_DATE IS NOT NULL
+     AND :P10_END_TEMPLATE_DATE < SYSTIMESTAMP
+  THEN
+    UPDATE TASK_TEMPLATES
+       SET STATUS_ID = c_archived
+     WHERE ID = :P10_ID
+       AND NVL(STATUS_ID,0) <> c_archived;
+    :P10_STATUS_ID := c_archived; -- якщо у формі є item статусу
+  END IF;
+END;
+```
+
+* **Items to Submit:** `P10_END_TEMPLATE_DATE`, `P10_ID`
+* **Affected Elements (опційно):** Регіон форми (щоб перерендерити статус/бейдж).
+* (Не обов’язково) додайте **JavaScript** дію «Show notification»: *«Шаблон переведено в Архів (статус 12)»*.
+
+> Додатково поставте **Validation** (Before Processing) щоб не дозволити «майбутній» статус ≠ 12, якщо дата вже минула (на випадок, якщо хтось вручну підмінить значення).
+
+---
+
+# 3) Автооновлення статусів на сторінці «Журнал шаблонів»
+
+На сторінці списку (звіт/IR/IG) зробіть оновлення перед показом:
+
+**Варіант швидкий (Page Process Before Header):**
+
+```plsql
+BEGIN
+  UPDATE TASK_TEMPLATES
+     SET STATUS_ID = 12
+   WHERE END_TEMPLATE_DATE < SYSTIMESTAMP
+     AND NVL(STATUS_ID,0) <> 12;
+  COMMIT;
+END;
+```
+
+Після цього звіт завжди покаже вже оновлені статуси.
+Як альтернатива — **Dynamic Action** on Page Load → Execute PL/SQL Code (те саме) → Refresh регіону звіту.
+
+> Якщо не хочете змінювати дані на кожному перегляді, використайте «м’який» підхід у SQL звіту (див. наступний пункт).
+
+---
+
+# 4) «М’який» підхід (без зміни даних): обчислювати Архів у SELECT
+
+У запиті вашого журналу:
+
+```sql
+SELECT
+  t.*,
+  CASE 
+    WHEN t.end_template_date < SYSTIMESTAMP THEN 12
+    ELSE t.status_id
+  END AS status_effective
+FROM task_templates t
+```
+
+І відображайте `status_effective`. Це не змінює таблицю, але відразу показує «архівний» статус простроченим. Зручно поєднати з щоденним «прибиральником».
+
+---
+
+# 5) Рекомендований мінімум (щоб було і зручно, і правильно)
+
+* **Тригер** (`BEFORE INSERT/UPDATE`) — щоб не було «неправильних» записів при зміні дати.
+* **APEX Automation / Scheduler** — щоденний перегляд і оновлення статусів.
+* **DA при зміні Date Picker** — миттєвий фідбек користувачу у формі.
+* У звіті можна або показувати «м’який» статус, або вже оновлений полем.
+
+---
+
+## Дрібні поради
+
+* Визначтесь, чи «прострочка» настає в момент **точного часу** чи з **наступного дня**. Від цього залежить `SYSTIMESTAMP` vs `TRUNC(SYSDATE)`.
+* Додайте **індекс** на `(STATUS_ID, END_TEMPLATE_DATE)` — допоможе і звітам, і «прибиральнику».
+* Якщо є інші «термінальні» статуси (напр., «скасовано»), не знижуйте їх до 12. Тоді використовуйте умову `AND STATUS_ID NOT IN (12, <інші_термінальні>)`.
+
+Якщо даш назви ваших item’ів/сторінок — накину точні налаштування DA/Process під них.

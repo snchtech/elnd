@@ -1,0 +1,196 @@
+Ок, розкладаю **Варіант B (USER\_STATE + одна кнопка OK)** по поличках — що саме відбувається, як гарантуємо атомарність і як боремось з гонками.
+
+# Як це працює (модель станів)
+
+* Є таблиця `USER_STATE` з одним рядком на користувача.
+* Поле `OPEN_FLAG` показує **поточний стан**:
+  `Y` — “усередині” (після Login), `N` — “поза системою” (після Logout).
+* Кнопка **OK** завжди одна. Натискання **тоглить** стан:
+  `N → Y` (Login) або `Y → N` (Logout).
+* Журнал `REQUEST_LOG` записує кожну дію (для аудиту).
+
+# Чому це надійно без “сесій користувача”
+
+APEX‑сторінка публічна — автентифікації немає, але це й не потрібно:
+**стан зберігається в БД** (рядок `USER_STATE`) і міняється **атомарно** в одній транзакції.
+Навіть якщо той самий користувач “стріляє” з двох терміналів/сканерів одночасно, ми серіалізуємо зміни **рядковим блокуванням** (`FOR UPDATE`) — гонки зникають.
+
+# Транзакційна послідовність (крок за кроком)
+
+1. Користувач вводить код і тисне **OK** (або сканер додає Enter → submit).
+2. Процес у БД:
+
+   * Перевіряє, що `USER_ID` існує.
+   * Пробує **прочитати рядок стану під блокуванням**:
+     `SELECT open_flag FROM user_state WHERE user_id = :id FOR UPDATE;`
+   * Якщо рядка **нема** → це перший раз: створюємо з `OPEN_FLAG='Y'` (Login).
+   * Якщо рядок **є** → дивимось `OPEN_FLAG`:
+
+     * `Y` → робимо Logout: `open_flag='N'`, фіксуємо `last_logout`.
+     * `N` → робимо Login:  `open_flag='Y'`, фіксуємо `last_login`.
+   * У будь‑якому випадку пишемо запис у `REQUEST_LOG` з дією `LOGIN` або `LOGOUT`.
+3. Коміт транзакції — стан гарантовано узгоджений.
+
+# Що з конкуренцією
+
+* `FOR UPDATE` бере **рядковий лок** на `USER_STATE.USER_ID`.
+  Другий паралельний запит чекатиме, доки перший завершить (або можна поставити `NOWAIT` і показати повідомлення “спробуйте ще раз”).
+* Якщо рядка ще не існує, але **два** процеси майже одночасно спробували `INSERT`, один отримає `DUP_VAL_ON_INDEX`. Ми перехоплюємо це та **повторюємо** шлях “прочитати під блокуванням і тоглити” — без помилок.
+
+# Надійний PL/SQL (з обробкою гонок)
+
+В одному процесі кнопки **OK**:
+
+```plsql
+DECLARE
+  l_user_id   NUMBER := TO_NUMBER(:P10_NUMBER);
+  l_ip        VARCHAR2(45) := owa_util.get_cgi_env('REMOTE_ADDR');
+  l_ua        VARCHAR2(255):= SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'),1,255);
+  l_exists    NUMBER;
+  l_flag      CHAR(1);
+  l_action    VARCHAR2(10);
+BEGIN
+  -- 0) Валідація ID та існування користувача
+  IF NOT REGEXP_LIKE(:P10_NUMBER, '^\d+$') THEN
+    apex_error.add_error(
+      p_message => 'Введіть лише цифри',
+      p_display_location => apex_error.c_inline_with_field_and_notification,
+      p_page_item_name => 'P10_NUMBER');
+    RETURN;
+  END IF;
+
+  SELECT COUNT(*) INTO l_exists FROM USERS u WHERE u.USER_ID = l_user_id;
+  IF l_exists = 0 THEN
+    apex_error.add_error(
+      p_message => 'Користувача не знайдено',
+      p_display_location => apex_error.c_inline_with_field_and_notification,
+      p_page_item_name => 'P10_NUMBER');
+    RETURN;
+  END IF;
+
+  -- 1) Пробуємо прочитати та заблокувати рядок стану
+  BEGIN
+    SELECT open_flag
+      INTO l_flag
+      FROM user_state
+     WHERE user_id = l_user_id
+       FOR UPDATE; -- або FOR UPDATE NOWAIT
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      l_flag := NULL;
+  END;
+
+  IF l_flag IS NULL THEN
+    -- 2а) Рядка немає: створюємо Login (Y)
+    BEGIN
+      INSERT INTO user_state(user_id, open_flag, last_login, updated_at, updated_ip, updated_agent)
+      VALUES (l_user_id, 'Y', SYSTIMESTAMP, SYSTIMESTAMP, l_ip, l_ua);
+      l_action := 'LOGIN';
+    EXCEPTION
+      WHEN DUP_VAL_ON_INDEX THEN
+        -- Хтось одночасно вставив. Тепер рядок є: читаємо під блоком і тоглимо.
+        SELECT open_flag
+          INTO l_flag
+          FROM user_state
+         WHERE user_id = l_user_id
+           FOR UPDATE;
+        IF l_flag = 'Y' THEN
+          UPDATE user_state
+             SET open_flag   = 'N',
+                 last_logout = SYSTIMESTAMP,
+                 updated_at  = SYSTIMESTAMP,
+                 updated_ip  = l_ip,
+                 updated_agent = l_ua
+           WHERE user_id = l_user_id;
+          l_action := 'LOGOUT';
+        ELSE
+          UPDATE user_state
+             SET open_flag   = 'Y',
+                 last_login  = SYSTIMESTAMP,
+                 updated_at  = SYSTIMESTAMP,
+                 updated_ip  = l_ip,
+                 updated_agent = l_ua
+           WHERE user_id = l_user_id;
+          l_action := 'LOGIN';
+        END IF;
+    END;
+  ELSE
+    -- 2б) Рядок є: звичайний тогл
+    IF l_flag = 'Y' THEN
+      UPDATE user_state
+         SET open_flag   = 'N',
+             last_logout = SYSTIMESTAMP,
+             updated_at  = SYSTIMESTAMP,
+             updated_ip  = l_ip,
+             updated_agent = l_ua
+       WHERE user_id = l_user_id;
+      l_action := 'LOGOUT';
+    ELSE
+      UPDATE user_state
+         SET open_flag   = 'Y',
+             last_login  = SYSTIMESTAMP,
+             updated_at  = SYSTIMESTAMP,
+             updated_ip  = l_ip,
+             updated_agent = l_ua
+       WHERE user_id = l_user_id;
+      l_action := 'LOGIN';
+    END IF;
+  END IF;
+
+  -- 3) Журнал
+  INSERT INTO request_log(
+    user_id, device_ip, request_action, request_date,
+    session_id, user_agent, request_source, result_status
+  ) VALUES (
+    l_user_id, l_ip, l_action, SYSTIMESTAMP,
+    v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS'
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    INSERT INTO request_log(
+      user_id, device_ip, request_action, request_date,
+      session_id, user_agent, request_source,
+      result_status, error_code, error_message
+    ) VALUES (
+      CASE WHEN REGEXP_LIKE(:P10_NUMBER,'^\d+$') THEN TO_NUMBER(:P10_NUMBER) ELSE NULL END,
+      NVL(l_ip,'UNKNOWN'), 'UNKNOWN', SYSTIMESTAMP,
+      v('APP_SESSION'), l_ua, 'FORM',
+      'FAIL', SQLCODE, SUBSTR(SQLERRM,1,4000));
+    RAISE;
+END;
+```
+
+> За замовчуванням Oracle ізоляція — **READ COMMITTED**. Рядкове блокування + єдиний апдейт у транзакції дають **атомарність** зміни стану.
+
+# Часті питання
+
+**Що, якщо треба дозволити *кілька* одночасних “входів”?**
+Тоді не `USER_STATE`, а таблиця `USER_SESSIONS` (багато рядків на користувача, кожен — окремий “вхід”). Але тоді кнопка **OK** має вирішувати, яку саме “сесію” закривати (останню? за цим терміналом? за офісом?). Для “просто облік присутності” — `USER_STATE` краще.
+
+**Як показати користувачу, що станеться після OK (Login чи Logout)?**
+Опційно додай легкий AJAX‑чек, який читає `OPEN_FLAG` і підписує кнопку: “Наступна дія: Logout” / “Login”. На саму логіку це не впливає.
+
+**А якщо користувач пішов і не натиснув Logout?**
+Додай **авто‑експірацію**: job раз на X годин, який ставить `OPEN_FLAG='N'` за правилами (наприклад, після зміни/робочого дня). У `REQUEST_LOG` можна писати `AUTO_LOGOUT`.
+
+**Як визначити OFFICE\_ID за IP?**
+При вставці в журнал додай:
+
+```plsql
+SELECT do.office_id
+  INTO l_office_id
+  FROM devices d
+  JOIN devices_office do ON do.device_id = d.id
+ WHERE d.device_ip = l_ip
+   AND ROWNUM = 1;
+-- і поклади l_office_id у REQUEST_LOG/USER_STATE
+```
+
+# Що робити в APEX (UI)
+
+* Одна кнопка **OK** → `javascript:safeSubmitOk();` (щоб не було подвійних кліків).
+* Поле `P10_NUMBER` (лише цифри), inline‑errors через `apex_error.add_error` як у коді.
+* Все. Ніяких debounce, ніяких прихованих кнопок.
+
+Якщо хочеш, зберу це в невеличкий export сторінки з процесом‑тоглером і готовою `USER_STATE`.

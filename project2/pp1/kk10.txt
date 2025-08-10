@@ -1,0 +1,118 @@
+Окей, зробимо це акуратно й «по-апексівськи».
+
+# 1) SQL для репорту «Хто ознайомився»
+
+(під конкретний `TASK_ID`, з підтяганням ПІБ, відділу, посади та дати)
+
+```sql
+SELECT
+    tv.id,
+    tv.task_id,
+    u.id                  AS user_id,
+    u.firstname || ' ' || u.lastname AS full_name,
+    d.name                AS department_name,
+    p.name                AS position_name,
+    tv.date_viewed,
+    TO_CHAR(tv.date_viewed, 'DD.MM.YYYY HH24:MI') AS date_viewed_v,
+    CASE 
+      WHEN u.id = :P0_CURRENT_USER_ID THEN 'row-current' 
+      ELSE NULL 
+    END AS row_class
+FROM task_viewed tv
+JOIN users      u ON u.id = tv.user_id
+LEFT JOIN department d ON d.id = u.department_id
+LEFT JOIN position   p ON p.id = u.position_id
+WHERE tv.task_id = :PXX_TASK_ID
+ORDER BY tv.date_viewed DESC;
+```
+
+* `:PXX_TASK_ID` — item на сторінці репорту (приймає `TASK_ID`).
+* `:P0_CURRENT_USER_ID` — ваш глобальний item з поточним користувачем (як у ваших проєктах).
+
+# 2) Сторінка репорту (окрема сторінка)
+
+**Варіант A (Interactive Report + правило підсвічування):**
+
+1. Створіть сторінку типу **Normal** або **Modal Dialog** з назвою «Ознайомлення із завданням».
+2. Додайте **Page Item** `PXX_TASK_ID` (Hidden, Value Protected = On).
+3. Додайте **Interactive Report** з SQL вище.
+4. У IR → **Attributes → Highlight** додайте правило:
+
+   * Condition: Column = `USER_ID`, Operator = `=`, Value = `&P0_CURRENT_USER_ID.`
+   * Apply to: **Row**
+   * Виберіть світло‑зелений фон (або залиште без кольору й додайте CSS нижче).
+5. (Необов’язково) Додайте CSS на сторінку:
+
+   ```css
+   .row-current td { background-color: #eaf9f0; font-weight: 600; }
+   ```
+
+   Якщо IR не підтримує «Row CSS Classes» у вашій версії, правило Highlight (крок 4) достатнє.
+
+**Варіант B (Classic Report + власний клас рядка):**
+
+1. Замість IR використайте **Classic Report** з тим самим SQL.
+2. У регіоні → **Attributes → Row CSS Classes** вкажіть: `#ROW_CLASS#`.
+3. Додайте CSS (як вище) для `.row-current`.
+
+> Порада: для зручності користувача виведіть колонки: «ПІБ», «Відділ», «Посада», «Дата ознайомлення (date\_viewed\_v)». `ID` та службові — сховайте.
+
+# 3) Кнопка‑іконка «Переглянути ознайомлення» на картці завдання
+
+На сторінці інформаційної картки (де є `PYY_TASK_ID`):
+
+* Створіть **Button** з іконкою **fa-eye** (Font APEX → “fa-eye”).
+* **Action:** Redirect to Page in this Application (на сторінку репорту).
+* **Target:** Page = `XX` (номер сторінки репорту).
+* **Set Items:**
+  `PXX_TASK_ID` = `&PYY_TASK_ID.`
+  (за потреби ще прокиньте `P0_CURRENT_USER_ID`, але він у вас глобальний)
+* Якщо хочете модальне вікно:
+
+  * У кнопки → **Target → Open in Dialog = On** (або налаштуйте саму сторінку як Modal Dialog).
+  * Розміри, заголовок — на ваш смак (напр., 900×600).
+
+Альтернатива через JS (коли хочете повний контроль):
+
+```javascript
+javascript:apex.navigation.openInDialog(
+  'f?p=&APP_ID.:XX:&SESSION.::&DEBUG.:XX,RIR:PXX_TASK_ID:&PYY_TASK_ID.',
+  { title: 'Ознайомлення', height: 600, width: 900 }
+);
+```
+
+# 4) Дрібні поліпшення
+
+* У IR додайте «Default Report» із сортуванням за `date_viewed DESC`.
+* Додайте **Filter** за ПІБ або відділом — користувачам це зручно.
+* Якщо є дублікати (повторні перегляди), вирішіть логіку: показувати всі події чи останню. Для «останньої» замініть SQL на підзапит з `MAX(date_viewed)` по `user_id`.
+
+Приклад для **останнього перегляду** на користувача:
+
+```sql
+SELECT *
+FROM (
+  SELECT
+    tv.task_id, tv.user_id,
+    u.firstname || ' ' || u.lastname AS full_name,
+    d.name AS department_name,
+    p.name AS position_name,
+    MAX(tv.date_viewed) KEEP (DENSE_RANK LAST ORDER BY tv.date_viewed) AS date_viewed,
+    TO_CHAR(MAX(tv.date_viewed), 'DD.MM.YYYY HH24:MI') AS date_viewed_v,
+    CASE WHEN u.id = :P0_CURRENT_USER_ID THEN 'row-current' END AS row_class
+  FROM task_viewed tv
+  JOIN users u ON u.id = tv.user_id
+  LEFT JOIN department d ON d.id = u.department_id
+  LEFT JOIN position   p ON p.id = u.position_id
+  WHERE tv.task_id = :PXX_TASK_ID
+  GROUP BY tv.task_id, tv.user_id, u.firstname, u.lastname, d.name, p.name, u.id
+)
+ORDER BY date_viewed DESC;
+```
+
+# 5) Безпека й точність
+
+* Переконайтесь, що переданий `PXX_TASK_ID` доступний користувачу (авторизація/умови видимості).
+* Використовуйте **Value Protected** на item’ах і **Session State Protection** (Checksum) на лінках.
+
+Якщо хочеш — можу швидко підкинути готовий експорт сторінки (IR + кнопка) під вашу версію APEX.

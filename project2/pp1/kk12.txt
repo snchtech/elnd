@@ -1,0 +1,110 @@
+Клас! Додаємо вкладку «До виконання» і під неї готуємо фільтр у **тому самому** звіті.
+
+### Логіка «До виконання»
+
+Виводимо **ті завдання, де для поточного користувача є право підпису (SIGNATURERIGHTS.USER\_ID = \:P0\_CURRENT\_USER\_ID), але ще немає відмітки в SIGNATUREHISTORY**, причому (якщо треба «по порядку») показуємо **найближчий/перший невідмічений крок** — тобто всі попередні кроки в процесі вже відмічені.
+
+#### SQL (базовий варіант: «є моє право і немає моєї відмітки»)
+
+```sql
+SELECT
+  t.id,
+  t.task_content,
+  t.department_id,
+  t.unit_id,
+  sr.id              AS signright_id,
+  sr.stage_order,
+  sr.substage_order
+FROM tasks t
+JOIN signaturerights sr
+  ON sr.task_id = t.id
+LEFT JOIN signaturehistory sh
+  ON sh.signright_id = sr.id
+WHERE sr.user_id = :P0_CURRENT_USER_ID
+  AND sh.signright_id IS NULL
+-- вкладка "До виконання"
+  AND NVL(:P_MAIN_TAB, 'ALL') IN ('TODO','ALL')
+ORDER BY t.id, sr.stage_order, NVL(sr.substage_order,0);
+```
+
+#### SQL (строгий варіант: показує лише «перший невідмічений» крок у послідовності)
+
+```sql
+SELECT
+  t.id,
+  t.task_content,
+  t.department_id,
+  t.unit_id,
+  sr.id              AS signright_id,
+  sr.stage_order,
+  sr.substage_order
+FROM tasks t
+JOIN signaturerights sr
+  ON sr.task_id = t.id
+LEFT JOIN signaturehistory sh
+  ON sh.signright_id = sr.id
+WHERE sr.user_id = :P0_CURRENT_USER_ID
+  AND sh.signright_id IS NULL
+  -- усі попередні кроки вже відмічені
+  AND NOT EXISTS (
+    SELECT 1
+    FROM signaturerights sr2
+    WHERE sr2.task_id = t.id
+      AND (
+           sr2.stage_order < sr.stage_order
+        OR (sr2.stage_order = sr.stage_order AND NVL(sr2.substage_order,0) < NVL(sr.substage_order,0))
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM signaturehistory sh2
+        WHERE sh2.signright_id = sr2.id
+      )
+  )
+  AND NVL(:P_MAIN_TAB, 'ALL') IN ('TODO','ALL')
+ORDER BY t.id, sr.stage_order, NVL(sr.substage_order,0);
+```
+
+> Якщо у вас інші назви колонок порядку — підставте свої (наприклад, `ORDER_IN_STAGE`, `ORDER_GLOBAL` тощо). Якщо підпис фіксується не через `SIGNRIGHT_ID`, адаптуйте `JOIN`/`EXISTS` під вашу схему.
+
+---
+
+## Як підв’язати до вкладки «До виконання» в одному звіті
+
+1. Зробіть **hidden** item, напр.: `P_MAIN_TAB`.
+2. Ваш контрол «вкладки» (кнопки/теги/Region Display Selector) хай встановлює `P_MAIN_TAB` у значення `'TODO'` і робить **Refresh** звіту.
+3. У SQL звіту додайте умовний фільтр (він вище вже є):
+
+```sql
+AND NVL(:P_MAIN_TAB,'ALL') IN ('TODO','ALL')
+```
+
+— або використовуйте `CASE WHEN`/`DECODE`, якщо в одному SQL різні «вкладки» з різною логікою.
+
+> Якщо інші вкладки вже зроблені аналогічно — просто додайте ще одну кнопку/таґ «До виконання» і логику встановлення `P_MAIN_TAB := 'TODO'`.
+
+---
+
+## Підсвітка «моїх» рядків (опційно)
+
+У вашому випадку всі рядки вже «мої», бо фільтр за `sr.user_id = :P0_CURRENT_USER_ID`. Але якщо хочете стиль:
+
+* Classic Report: у SELECT додайте `row_class => 'row-mine'` і в атрибутах **Row CSS Classes** зробіть `#ROW_CLASS#`.
+* IR: додайте **Highlight** rule.
+
+```css
+.row-mine td { background:#fff9e6; }
+```
+
+---
+
+## Продуктивність (дуже бажано)
+
+* Індекси:
+
+  * `SIGNATURERIGHTS(task_id, user_id, stage_order, substage_order)`
+  * `SIGNATUREHISTORY(signright_id)`
+  * `TASKS(id)`
+* Якщо «строгий» варіант — особливо критичний індекс на `(task_id, stage_order, substage_order)`.
+
+---
+
+Якщо даш точні назви колонок у `SIGNATURERIGHTS`/`SIGNATUREHISTORY` для порядку та мітки, скину фінальний SQL під вашу схему + приклад DA для перемикання вкладок.

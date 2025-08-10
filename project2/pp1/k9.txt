@@ -1,0 +1,82 @@
+Ок, це можна зробити в APEX буквально однією сторінкою без зайвих елементів — суцільний синій фон, по центру велике повідомлення з білим текстом і іконкою “заборони доступу” (наприклад, з Font Awesome).
+
+---
+
+## 1️⃣ Створення сторінки
+
+* **Page Type**: Blank Page
+* **Page Name**: Access Denied
+* **Template**: “Blank with Attributes” (або будь-який без бокових панелей, щоб легко задати фон).
+
+---
+
+## 2️⃣ Регіон з повідомленням
+
+* Тип: **Static Content**
+* **Static ID**: `accessDenied`
+* **Source**:
+
+```html
+<div class="access-container">
+  <div class="access-icon">
+    <span class="fa fa-ban" aria-hidden="true"></span>
+  </div>
+  <div class="access-text">
+    Запуск даного ПЗ заборонений на Вашому ПК
+  </div>
+</div>
+```
+
+> Іконка `fa-ban` — стандартна іконка Font Awesome (червоне коло з косою лінією).
+
+---
+
+## 3️⃣ CSS для оформлення (Page → CSS → Inline)
+
+```css
+/* Синій фон на всю сторінку */
+.t-Body, .t-Body-content {
+  background-color: #0f4c81 !important; /* насичений синій */
+  min-height: 100vh;
+}
+
+/* Центрування по вертикалі/горизонталі */
+.access-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  text-align: center;
+}
+
+/* Іконка заборони */
+.access-icon {
+  font-size: 120px;
+  color: #ff4d4d; /* червоний для іконки */
+  margin-bottom: 20px;
+}
+
+/* Текст повідомлення */
+.access-text {
+  color: #ffffff;
+  font-size: 36px;
+  font-weight: 700;
+  max-width: 800px;
+  line-height: 1.3;
+}
+```
+
+---
+
+## 4️⃣ Результат
+
+* Фон сторінки — насичений синій
+* В центрі: велика червона іконка **"заборона"**
+* Під нею — великий білий текст
+* Все адаптивне, текст по центру на будь-якому екрані
+
+---
+
+Якщо хочеш, я можу додати **анімацію появи** цього блоку, щоб воно виглядало більш сучасно у flat-стилі.
+Хочеш, щоб я додав анімацію?

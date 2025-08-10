@@ -1,0 +1,243 @@
+Круте питання. Зробимо так, щоб система **сама визначала потрібну кнопку (Login/Logout)** як при ручному вводі, так і при зчитуванні мітки/сканера — **без додаткової “Підтвердити”**.
+
+Нижче — робоча схема з **debounce‑перевіркою**, “швидкою доріжкою” для сканера (Enter/Tab), і простими процесами в APEX.
+
+---
+
+# Ідея логіки
+
+1. **Живий чекер коду (debounce 300–500 мс)**
+   Після кожної зміни в полі (ввод/вставка/скан) ми чекаємо коротку паузу (користувач перестав друкувати) і **викликаємо AJAX‑процес** `CHECK_STATE`.
+   Він повертає, яка **наступна** дія для цього користувача: `NEXT_ACTION = 'LOGIN'` або `LOGOUT`. На цій основі показуємо відповідну кнопку.
+
+2. **Миттєвий тригер для сканера**
+   Більшість сканерів працюють як клавіатура і додають **Enter** або **Tab** в кінці.
+
+   * Якщо прийшов **Enter/Tab** → одразу виконуємо дію (Submit з потрібним REQUEST).
+   * Якщо сканер без суфікса — “спіймаємо” його все одно debounce‑чекером (він спрацює через 300–500 мс після останнього символу).
+
+3. **Валідація та статус**
+
+   * Якщо `USER_ID` не існує → показуємо попередження, кнопки ховаємо.
+   * Якщо останній запис — `LOGIN` (успішний) → **наступна** дія `LOGOUT`. І навпаки.
+
+---
+
+# APEX налаштування
+
+## Елементи та кнопки
+
+* Поле: `P10_NUMBER` (Number Field).
+* Кнопки:
+
+  * `P10_LOGIN` (Submit) — **Server-side Condition:** `:P10_NEXT_ACTION = 'LOGIN'`
+  * `P10_LOGOUT` (Submit) — **Server-side Condition:** `:P10_NEXT_ACTION = 'LOGOUT'`
+* Прихований елемент: `P10_NEXT_ACTION` (Text) — тут зберігаємо, яку кнопку показувати.
+
+> Початково `P10_NEXT_ACTION` можна set default `LOGIN`.
+
+## AJAX процес (Page Processing → Processes → type: PL/SQL, *AJAX Callback*): `CHECK_STATE`
+
+```plsql
+DECLARE
+  l_user_id   NUMBER;
+  l_next      VARCHAR2(10) := 'LOGIN';
+  l_exists    NUMBER;
+  l_last_act  VARCHAR2(10);
+  l_last_ok   VARCHAR2(10);
+  l_last_date TIMESTAMP WITH TIME ZONE;
+BEGIN
+  -- 1) Валідація
+  IF NOT REGEXP_LIKE(:P10_NUMBER, '^\d+$') THEN
+    apex_json.open_object;
+    apex_json.write('ok',        false);
+    apex_json.write('message',   'Введіть лише цифри');
+    apex_json.write('nextAction','HIDE');
+    apex_json.close_object;
+    RETURN;
+  END IF;
+
+  l_user_id := TO_NUMBER(:P10_NUMBER);
+
+  SELECT COUNT(*) INTO l_exists FROM USERS u WHERE u.USER_ID = l_user_id;
+  IF l_exists = 0 THEN
+    apex_json.open_object;
+    apex_json.write('ok',        false);
+    apex_json.write('message',   'Користувача не знайдено');
+    apex_json.write('nextAction','HIDE');
+    apex_json.close_object;
+    RETURN;
+  END IF;
+
+  -- 2) Остання дія з журналу
+  BEGIN
+    SELECT request_action, result_status, request_date
+      INTO l_last_act, l_last_ok, l_last_date
+      FROM (
+        SELECT request_action, result_status, request_date
+        FROM request_log
+        WHERE user_id = l_user_id
+        ORDER BY request_date DESC
+      )
+      WHERE ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      l_last_act := NULL;
+  END;
+
+  IF l_last_act = 'LOGIN' AND NVL(l_last_ok, 'SUCCESS') = 'SUCCESS' THEN
+    l_next := 'LOGOUT';
+  ELSE
+    l_next := 'LOGIN';
+  END IF;
+
+  apex_json.open_object;
+  apex_json.write('ok',        true);
+  apex_json.write('message',   NULL);
+  apex_json.write('nextAction',l_next);
+  apex_json.write('lastAction',NVL(l_last_act,'NONE'));
+  apex_json.close_object;
+END;
+```
+
+> Якщо треба — тут же можеш додати бізнес‑перевірки: заборона повторного `LOGIN` впродовж X секунд, перевірка офісу за IP і т.д.
+
+## JS: debounce + Enter/Tab fast‑path
+
+**Page → JavaScript → Function and Global Variable Declaration**
+
+```js
+// Простий debounce
+function debounce(fn, ms){
+  var t; return function(){
+    var ctx=this, args=arguments;
+    clearTimeout(t);
+    t = setTimeout(function(){ fn.apply(ctx,args); }, ms);
+  };
+}
+
+function setNextAction(action){
+  $s('P10_NEXT_ACTION', action); // set item value
+  // Показ/прихов. кнопок (про всяк випадок, якщо не хочеш server-side conditions)
+  var showLogin  = action === 'LOGIN';
+  var showLogout = action === 'LOGOUT';
+  $('#P10_LOGIN').toggle(showLogin);
+  $('#P10_LOGOUT').toggle(showLogout);
+}
+
+function checkCodeLive(){
+  apex.server.process(
+    "CHECK_STATE",
+    { pageItems: "#P10_NUMBER" },
+    { dataType: "json",
+      success: function(res){
+        if (!res || res.ok === false){
+          setNextAction('HIDE');
+          if (res && res.message){ apex.message.showErrors([{ type:"error", location:"inline", pageItem:"P10_NUMBER", message:res.message }]); }
+          return;
+        }
+        apex.message.clearErrors();
+        setNextAction(res.nextAction || 'LOGIN');
+      },
+      error: function(){
+        setNextAction('HIDE');
+        apex.message.showErrors([{ type:"error", location:"inline", pageItem:"P10_NUMBER", message:"Помилка перевірки" }]);
+      }
+    }
+  );
+}
+var checkCodeLiveDebounced = debounce(checkCodeLive, 400);
+```
+
+**Page → JavaScript → Execute when Page Loads**
+
+```js
+(function init(){
+  // Початковий стан
+  checkCodeLive(); // якщо є дефолт або збережений код
+
+  // Live перевірка: друк/вставка/зміна
+  var el = document.getElementById('P10_NUMBER');
+  if (!el) return;
+
+  el.addEventListener('input', function(){ checkCodeLiveDebounced(); });
+  el.addEventListener('paste', function(){ setTimeout(checkCodeLive, 0); });
+
+  // Швидка доріжка для сканера (Enter/Tab)
+  el.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === 'Tab'){
+      // на всяк випадок перед submit уточнимо nextAction
+      checkCodeLive();
+      setTimeout(function(){
+        var next = $v('P10_NEXT_ACTION');
+        if (next === 'LOGIN'){
+          apex.submit({request:'LOGIN', showWait:true});
+        } else if (next === 'LOGOUT'){
+          apex.submit({request:'LOGOUT', showWait:true});
+        } else {
+          // якщо HIDE або невідомо — нічого
+        }
+      }, 50);
+      e.preventDefault();
+    }
+  });
+})();
+```
+
+> Якщо твій сканер **не додає Enter/Tab**, усе одно спрацює `debounce` за 400 мс — кнопка автоматично перемкнеться, і користувач натисне її руками (або додай авто‑submit після debounce, якщо хочеш повністю без кліку).
+
+## Серверні процеси для Submit (Login/Logout)
+
+Створи **два** процеси PL/SQL (після валідацій).
+
+**Process “DO\_LOGIN”** — *Server-side Condition: Request = LOGIN*
+
+```plsql
+DECLARE
+  l_ip VARCHAR2(45) := owa_util.get_cgi_env('REMOTE_ADDR');
+  l_ua VARCHAR2(255):= SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'),1,255);
+BEGIN
+  INSERT INTO request_log(
+    user_id, device_ip, request_action, request_date,
+    session_id, user_agent, request_source, result_status
+  ) VALUES (
+    TO_NUMBER(:P10_NUMBER), l_ip, 'LOGIN', SYSTIMESTAMP,
+    v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS'
+  );
+  -- Можна показати Toast:
+  apex_util.set_session_state('P10_NEXT_ACTION','LOGOUT');
+END;
+```
+
+**Process “DO\_LOGOUT”** — *Server-side Condition: Request = LOGOUT*
+
+```plsql
+DECLARE
+  l_ip VARCHAR2(45) := owa_util.get_cgi_env('REMOTE_ADDR');
+  l_ua VARCHAR2(255):= SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'),1,255);
+BEGIN
+  INSERT INTO request_log(
+    user_id, device_ip, request_action, request_date,
+    session_id, user_agent, request_source, result_status
+  ) VALUES (
+    TO_NUMBER(:P10_NUMBER), l_ip, 'LOGOUT', SYSTIMESTAMP,
+    v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS'
+  );
+  apex_util.set_session_state('P10_NEXT_ACTION','LOGIN');
+END;
+```
+
+> Після процесу можна додати **Branch**: *Type: Branch to Page* (same page, Request: `RESET`) — щоб відмалювати UI зі свіжим `P10_NEXT_ACTION`.
+
+---
+
+# UX нюанси та поради
+
+* **Анти‑“подвійний тап”**: додай на кнопки Client‑side Condition “When Button is Processing → Disable” (Template Option) або в JS блокуй повторний submit, доки не повернулась сторінка.
+* **Швидкі скани**: інколи сканер “вивалює” 10–20 символів за \~50–100 мс — debounce це чудово ловить. Якщо хочеш 100% миттєво — налаштуй сканер додавати **Enter**.
+* **Відсутній користувач**: одразу прибирай обидві кнопки й показуй inline‑error (у нас уже зроблено в AJAX).
+* **Авто‑submit після debounce** (повністю без кліку): у `success` AJAX, якщо хочеш, додавай `apex.submit({request:$v('P10_NEXT_ACTION')});` — я лишив у ручному режимі, щоб уникнути випадкових спрацьовувань, але це опція.
+
+---
+
+Хочеш — зберу це у невеликий **export SQL** сторінки, щоб ти імпортував і мав готовий прототип.

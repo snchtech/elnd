@@ -1,0 +1,142 @@
+Коротко: навіть **публічні** сторінки APEX все одно мають **технічну APEX‑сесію** — `v('APP_SESSION')` існує без автентифікації. Але якщо ти **не хочеш** покладатися на сесію як концепт «користувача в системі», робимо **стейт користувача** на рівні БД і перемикаємо його атомарно.
+
+Ось два надійні варіанти — обирай, що ближче.
+
+---
+
+# Варіант A (можна лишити як є)
+
+Продовжуємо вставляти в `REQUEST_LOG` і, за бажання, зберігати `v('APP_SESSION')` лише як технічний слід. Логіка «OK» працює так само — вона не залежить від автентифікації.
+
+---
+
+# Варіант B (чисто публічний, без «сесій» у сенсі користувача): USER\_STATE
+
+## 1) DDL
+
+```sql
+CREATE TABLE USER_STATE (
+  USER_ID       NUMBER        CONSTRAINT PK_USER_STATE PRIMARY KEY,
+  OPEN_FLAG     CHAR(1)       DEFAULT 'N' NOT NULL
+                 CONSTRAINT CK_USER_STATE_FLAG CHECK (OPEN_FLAG IN ('Y','N')),
+  LAST_LOGIN    TIMESTAMP WITH TIME ZONE,
+  LAST_LOGOUT   TIMESTAMP WITH TIME ZONE,
+  UPDATED_AT    TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+  UPDATED_IP    VARCHAR2(45),
+  UPDATED_AGENT VARCHAR2(255)
+);
+
+-- надійність при гонках
+CREATE UNIQUE INDEX UX_USER_STATE ON USER_STATE (USER_ID);
+```
+
+## 2) Процес на одну кнопку `OK` (toggle, публічна сторінка)
+
+```plsql
+DECLARE
+  l_user_id NUMBER;
+  l_ip  VARCHAR2(45) := owa_util.get_cgi_env('REMOTE_ADDR');
+  l_ua  VARCHAR2(255) := SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'),1,255);
+  l_flag CHAR(1);
+  l_exists NUMBER;
+BEGIN
+  -- валідація
+  IF NOT REGEXP_LIKE(:P10_NUMBER, '^\d+$') THEN
+    apex_error.add_error(
+      p_message => 'Введіть лише цифри',
+      p_display_location => apex_error.c_inline_with_field_and_notification,
+      p_page_item_name => 'P10_NUMBER');
+    RETURN;
+  END IF;
+
+  l_user_id := TO_NUMBER(:P10_NUMBER);
+
+  SELECT COUNT(*) INTO l_exists FROM USERS u WHERE u.USER_ID = l_user_id;
+  IF l_exists = 0 THEN
+    apex_error.add_error(
+      p_message => 'Користувача не знайдено',
+      p_display_location => apex_error.c_inline_with_field_and_notification,
+      p_page_item_name => 'P10_NUMBER');
+    RETURN;
+  END IF;
+
+  -- 1) Пробуємо заблокувати існуючий рядок стану
+  BEGIN
+    SELECT open_flag
+      INTO l_flag
+      FROM user_state
+     WHERE user_id = l_user_id
+       FOR UPDATE NOWAIT;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      l_flag := NULL;
+  END;
+
+  IF l_flag IS NULL THEN
+    -- першій раз: вважаємо LOGIN
+    INSERT INTO user_state(user_id, open_flag, last_login, updated_at, updated_ip, updated_agent)
+    VALUES (l_user_id, 'Y', SYSTIMESTAMP, SYSTIMESTAMP, l_ip, l_ua);
+
+    INSERT INTO request_log(user_id, device_ip, request_action, request_date,
+                            session_id, user_agent, request_source, result_status)
+    VALUES (l_user_id, l_ip, 'LOGIN', SYSTIMESTAMP,
+            v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS');
+
+  ELSIF l_flag = 'Y' THEN
+    -- зараз «в системі» → робимо LOGOUT
+    UPDATE user_state
+       SET open_flag   = 'N',
+           last_logout = SYSTIMESTAMP,
+           updated_at  = SYSTIMESTAMP,
+           updated_ip  = l_ip,
+           updated_agent = l_ua
+     WHERE user_id = l_user_id;
+
+    INSERT INTO request_log(user_id, device_ip, request_action, request_date,
+                            session_id, user_agent, request_source, result_status)
+    VALUES (l_user_id, l_ip, 'LOGOUT', SYSTIMESTAMP,
+            v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS');
+
+  ELSE
+    -- зараз «поза системою» → робимо LOGIN
+    UPDATE user_state
+       SET open_flag   = 'Y',
+           last_login  = SYSTIMESTAMP,
+           updated_at  = SYSTIMESTAMP,
+           updated_ip  = l_ip,
+           updated_agent = l_ua
+     WHERE user_id = l_user_id;
+
+    INSERT INTO request_log(user_id, device_ip, request_action, request_date,
+                            session_id, user_agent, request_source, result_status)
+    VALUES (l_user_id, l_ip, 'LOGIN', SYSTIMESTAMP,
+            v('APP_SESSION'), l_ua, 'FORM', 'SUCCESS');
+  END IF;
+
+EXCEPTION
+  WHEN OTHERS THEN
+    -- журналюємо фейл і показуємо нотифікацію
+    INSERT INTO request_log(user_id, device_ip, request_action, request_date,
+                            session_id, user_agent, request_source,
+                            result_status, error_code, error_message)
+    VALUES (CASE WHEN REGEXP_LIKE(:P10_NUMBER,'^\d+$') THEN TO_NUMBER(:P10_NUMBER) ELSE NULL END,
+            NVL(l_ip,'UNKNOWN'), 'UNKNOWN', SYSTIMESTAMP,
+            v('APP_SESSION'), l_ua, 'FORM',
+            'FAIL', SQLCODE, SUBSTR(SQLERRM,1,4000));
+    RAISE;
+END;
+```
+
+> Це атомарно, не опирається на «парність записів», і не потребує автентифікації. `v('APP_SESSION')` просто допомагає аудитити, але логіка на нього не спирається.
+
+---
+
+## Що ще врахувати для публічної сторінки
+
+* **Анти‑подвійний тап**: залишай `safeSubmit()` з попереднього кроку (кнопка `OK` → `javascript:safeSubmitOk();`).
+* **Rate limit / анти‑зловживання** (опційно): лічильник за `DEVICE_IP` у `REQUEST_LOG` за 1–5 хвилин; якщо перевищено — показуємо помилку.
+* **CAPTCHA** (якщо потрібно): APEX має вбудований компонент reCAPTCHA — ввімкнути лише на «підозрілих» IP/частоті.
+* **Прив’язка до офісу**: у процесі легко визначити `OFFICE_ID` за IP через твою `DEVICES_OFFICE` і класти в `REQUEST_LOG` / `USER_STATE`.
+* **Конкурентність**: ми блокуємо рядок `USER_STATE FOR UPDATE` — це прибирає гонки, коли з двох терміналів «стріляють» одночасно.
+
+Хочеш — накину ще й `VIEW` для звітів (з JOIN на USERS, DEVICES\_OFFICE) + приклад Interactive Report з фільтрами по `OPEN_FLAG`/датах.

@@ -1,0 +1,148 @@
+Ось надійний спосіб сховати/показати кнопку в **PL/SQL Dynamic Content** залежно від того, чи **для всіх стадій** створені записи в `SIGNATURERIGHTS`.
+
+## Випадок 1: перевірка лише за `STAGE`
+
+(у `dict_app_confirm_list` є еталонний перелік `STAGE` для певного `LIST_ID`, а в `signaturerights` — фактично створені права для `TASK_ID`)
+
+```plsql
+DECLARE
+  l_all_created BOOLEAN;
+BEGIN
+  -- TRUE, якщо відсутніх стадій немає
+  SELECT CASE 
+           WHEN EXISTS (
+             SELECT 1
+             FROM dict_app_confirm_list d
+             WHERE d.list_id = :P_LIST_ID
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM signaturerights sr
+                 WHERE sr.task_id = :P_TASK_ID
+                   AND sr.stage     = d.stage
+               )
+           )
+           THEN FALSE  -- є хоча б одна відсутня стадія
+           ELSE TRUE   -- всі стадії присутні
+         END
+  INTO l_all_created
+  FROM dual;
+
+  IF l_all_created THEN
+    -- показуємо кнопку
+    htp.p('<button class="t-Button t-Button--primary t-Button--icon t-Button--iconRight" type="button" onclick="doSomething()">');
+    htp.p('  <span class="t-Icon fa fa-check"></span> Виконати дію');
+    htp.p('</button>');
+  END IF;
+END;
+```
+
+* Параметри:
+
+  * `:P_TASK_ID` — поточне завдання;
+  * `:P_LIST_ID` — довідниковий список стадій (звідки беремо еталон).
+
+---
+
+## Випадок 2: перевірка пари `STAGE` + `SUBSTAGE`
+
+(якщо в обох таблицях є деталізація по підстадіях)
+
+```plsql
+DECLARE
+  l_all_created BOOLEAN;
+BEGIN
+  SELECT CASE 
+           WHEN EXISTS (
+             SELECT 1
+             FROM dict_app_confirm_list d
+             WHERE d.list_id = :P_LIST_ID
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM signaturerights sr
+                 WHERE sr.task_id       = :P_TASK_ID
+                   AND sr.stage         = d.stage
+                   AND NVL(sr.substage,0) = NVL(d.substage,0)
+               )
+           )
+           THEN FALSE
+           ELSE TRUE
+         END
+  INTO l_all_created
+  FROM dual;
+
+  IF l_all_created THEN
+    htp.p('<button class="t-Button t-Button--primary" type="button" onclick="doSomething()">');
+    htp.p('  <span class="t-Icon fa fa-check"></span> Виконати дію');
+    htp.p('</button>');
+  END IF;
+END;
+```
+
+---
+
+## Лаконічніше (через `MINUS`)
+
+Працює швидко й читабельно. Якщо результат **порожній** — усі стадії створені.
+
+```plsql
+DECLARE
+  l_missing_cnt NUMBER;
+BEGIN
+  SELECT COUNT(*)
+  INTO l_missing_cnt
+  FROM (
+    SELECT d.stage, NVL(d.substage,0) AS substage
+    FROM dict_app_confirm_list d
+    WHERE d.list_id = :P_LIST_ID
+
+    MINUS
+
+    SELECT sr.stage, NVL(sr.substage,0) AS substage
+    FROM signaturerights sr
+    WHERE sr.task_id = :P_TASK_ID
+  );
+
+  IF l_missing_cnt = 0 THEN
+    -- показуємо кнопку
+    htp.p('<button class="t-Button t-Button--primary" type="button" onclick="doSomething()">');
+    htp.p('  <span class="t-Icon fa fa-check"></span> Виконати дію');
+    htp.p('</button>');
+  END IF;
+END;
+```
+
+---
+
+## Альтернатива: умова видимості для звичайної кнопки (не PL/SQL DC)
+
+Якщо у вас кнопка — окремий елемент сторінки, у **Server-side Condition → SQL Query (returning at least one row)** поставте:
+
+**Показувати, тільки якщо ВСЕ створено:**
+
+```sql
+SELECT 1
+FROM dual
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM dict_app_confirm_list d
+  WHERE d.list_id = :P_LIST_ID
+    AND NOT EXISTS (
+      SELECT 1
+      FROM signaturerights sr
+      WHERE sr.task_id = :P_TASK_ID
+        AND sr.stage   = d.stage
+        -- AND NVL(sr.substage,0) = NVL(d.substage,0) -- якщо потрібно
+    )
+)
+```
+
+---
+
+## Індекси (щоб літало)
+
+* `SIGNATURERIGHTS(task_id, stage, substage)`
+* `DICT_APP_CONFIRM_LIST(list_id, stage, substage)`
+
+---
+
+Скажеш точні назви полів (`stage`, `substage`, ключ на список) — піджену під вашу схему 1:1.

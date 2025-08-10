@@ -1,0 +1,180 @@
+Ок, розкладаю на 2 частини: як **надійно отримати IP** у APEX/ORDS і як **зробити розгалуження (branch)** зі сторінки 1 залежно від наявності IP в `DEVICES_OFFICE`.
+
+---
+
+# 1) Як отримати IP (працює на всіх машинах, з проксі/NGINX)
+
+У APEX/ORDS IP беруть із CGI‑змінних. Надійний порядок пріоритетів:
+
+1. `HTTP_X_FORWARDED_FOR` (може містити список IP через кому — беремо перший «публічний»)
+2. `HTTP_X_REAL_IP`
+3. `REMOTE_ADDR` (fallback)
+
+Щоб не повторювати логіку, зроби маленький утилітний пакунок у БД.
+
+## 1.1 Пакет `util_net` (IP‑детект)
+
+```sql
+CREATE OR REPLACE PACKAGE util_net AS
+  FUNCTION get_client_ip RETURN VARCHAR2;
+END util_net;
+/
+
+CREATE OR REPLACE PACKAGE BODY util_net AS
+
+  -- Чи приватний/локальний IP (спрощено: RFC1918 + localhost + ::1)
+  FUNCTION is_private_ip(p_ip IN VARCHAR2) RETURN BOOLEAN IS
+  BEGIN
+    IF p_ip IS NULL THEN RETURN TRUE; END IF;
+    -- IPv4 private
+    IF REGEXP_LIKE(p_ip, '^(10\.)') THEN RETURN TRUE; END IF;
+    IF REGEXP_LIKE(p_ip, '^(192\.168\.)') THEN RETURN TRUE; END IF;
+    IF REGEXP_LIKE(p_ip, '^(172\.(1[6-9]|2[0-9]|3[0-1])\.)') THEN RETURN TRUE; END IF;
+    -- loopback
+    IF p_ip = '127.0.0.1' THEN RETURN TRUE; END IF;
+    -- IPv6 loopback/ULA link-local (дуже базово)
+    IF p_ip = '::1' THEN RETURN TRUE; END IF;
+    RETURN FALSE;
+  END;
+
+  -- Взяти перший публічний IP зі списку XFF
+  FUNCTION first_public_from_list(p_list IN VARCHAR2) RETURN VARCHAR2 IS
+    l_ip   VARCHAR2(200);
+    l_rest VARCHAR2(4000) := p_list;
+  BEGIN
+    IF p_list IS NULL THEN RETURN NULL; END IF;
+    LOOP
+      l_ip := TRIM(REGEXP_SUBSTR(l_rest, '^[^,]+'));
+      IF l_ip IS NOT NULL AND NOT is_private_ip(l_ip) THEN
+        RETURN l_ip;
+      END IF;
+      -- відкидаємо перший елемент і рухаємось далі
+      l_rest := REGEXP_REPLACE(l_rest, '^[^,]+,?', '');
+      EXIT WHEN l_rest IS NULL OR l_rest = '';
+    END LOOP;
+    -- якщо всі були приватні — повертаємо перший
+    RETURN TRIM(REGEXP_SUBSTR(p_list, '^[^,]+'));
+  END;
+
+  FUNCTION get_client_ip RETURN VARCHAR2 IS
+    l_xff  VARCHAR2(4000) := owa_util.get_cgi_env('HTTP_X_FORWARDED_FOR');
+    l_xrip VARCHAR2(4000) := owa_util.get_cgi_env('HTTP_X_REAL_IP');
+    l_rem  VARCHAR2(4000) := owa_util.get_cgi_env('REMOTE_ADDR');
+    l_ip   VARCHAR2(4000);
+  BEGIN
+    IF l_xff IS NOT NULL THEN
+      l_ip := first_public_from_list(l_xff);
+      IF l_ip IS NOT NULL THEN RETURN SUBSTR(l_ip,1,45); END IF;
+    END IF;
+
+    IF l_xrip IS NOT NULL THEN
+      RETURN SUBSTR(l_xrip,1,45);
+    END IF;
+
+    RETURN SUBSTR(l_rem,1,45);
+  END;
+
+END util_net;
+/
+```
+
+> Зберігай IP у `VARCHAR2(45)` — вистачає для IPv4/IPv6.
+> Якщо ORDS за проксі — подбай, щоб проксі пробрасывав `X-Forwarded-For` / `X-Real-IP`.
+
+## 1.2 Додавання запису «при кожному зверненні»
+
+Якщо хочеш логувати **кожен** хіт (опційно), створи **Application Process → On Load (Before Header)** (рівень додатку або сторінки) з простим `INSERT`:
+
+```plsql
+DECLARE
+  l_ip VARCHAR2(45) := util_net.get_client_ip;
+  l_ua VARCHAR2(255):= SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'),1,255);
+BEGIN
+  INSERT INTO ACCESS_LOG ( -- створи на свій розсуд, або використовуй REQUEST_LOG
+    log_id, log_time, app_id, page_id, client_ip, user_agent
+  ) VALUES (
+    ACCESS_LOG_SEQ.NEXTVAL, SYSTIMESTAMP, v('APP_ID'), v('APP_PAGE_ID'), l_ip, l_ua
+  );
+EXCEPTION
+  WHEN OTHERS THEN NULL; -- не блокуємо навігацію у випадку помилки логування
+END;
+```
+
+(Таблицю `ACCESS_LOG`/seq зроби як треба; або додавай цей запис у вже існуючий `REQUEST_LOG`.)
+
+---
+
+# 2) Розгалуження зі сторінки 1 (pre‑header)
+
+Завдання: на **сторінці 1** дістати IP і:
+
+* якщо він є у зв’язці `DEVICES_OFFICE` → **Branch на сторінку 2** (форма),
+* якщо немає → **Branch на сторінку 3**.
+
+Зручно спочатку поставити IP та `OFFICE_ID` у елементи сторінки (або аплікейшн‑айтеми), а далі зробити **дві гілки з умовами**.
+
+## 2.1 Елементи сторінки 1
+
+* `P1_CLIENT_IP` (Text, Hidden) — запам’ятати IP.
+* `P1_OFFICE_ID` (Number, Hidden) — сюди покладемо знайдений OFFICE.
+
+## 2.2 Процес «Before Header» на сторінці 1
+
+```plsql
+DECLARE
+  l_ip  VARCHAR2(45) := util_net.get_client_ip;
+BEGIN
+  -- збережемо для відладження/використання
+  :P1_CLIENT_IP := l_ip;
+
+  BEGIN
+    SELECT do.office_id
+      INTO :P1_OFFICE_ID
+      FROM devices d
+      JOIN devices_office do ON do.device_id = d.id
+     WHERE d.device_ip = l_ip
+       AND ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      :P1_OFFICE_ID := NULL;
+  END;
+END;
+```
+
+> Якщо IP зберігаєш не в `devices`, а безпосередньо в `devices_office` — підправ `SELECT`.
+
+## 2.3 Дві гілки (Branches) на сторінці 1
+
+Створи **дві** Branch у секції *Processing → Branches* (виконуються після процесів pre‑header).
+
+1. **Branch: на сторінку 2**
+
+   * **Target:** Page 2
+   * **Server-side Condition:** *PL/SQL Expression*
+
+     ```plsql
+     :P1_OFFICE_ID IS NOT NULL
+     ```
+
+2. **Branch: на сторінку 3**
+
+   * **Target:** Page 3
+   * **Server-side Condition:** *PL/SQL Expression*
+
+     ```plsql
+     :P1_OFFICE_ID IS NULL
+     ```
+
+> Порядок гілок не критичний, бо вони взаємовиключні.
+> Якщо ще потрібно передати параметри — додай *Set Items* у Branch або через *Clear/Set Session State* процес до них.
+
+---
+
+## Пара порад (щоб не спіткнутись)
+
+* **Proxy/Load Balancer:** упевнись, що на рівні проксі налаштовано передавання `X-Forwarded-For` / `X-Real-IP`. Інакше ти завжди бачитимеш адресу проксі.
+* **IPv6:** усе вище працює (довжина 45 символів, без додаткових спеціальних обробок).
+* **Кеш/сесія:** якщо хочеш використовувати IP на інших сторінках без повторного обчислення, зроби Application Item, напр. `G_CLIENT_IP`, і в **Application Process (On New Session)** один раз встановлюй `:G_CLIENT_IP := util_net.get_client_ip;`.
+* **Безпека:** IP — не автентифікація. Не роби на ньому «критичні рішення». Для маршрутизації/ UX — ок.
+
+Якщо хочеш — можу дати DDL для `ACCESS_LOG` або зразу накидати export сторінки 1 з процесом і двома гілками, щоб імпортував і перевірив за 1 хв.

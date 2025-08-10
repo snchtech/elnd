@@ -1,0 +1,355 @@
+Клас, робимо «скелет» сторінки з чіткими кроками в APEX + даю готові CSS/JS. Після цього ти одразу отримаєш працюючий макет у flat‑стилі.
+
+# 1) Що створити в APEX (структура сторінки)
+
+**Сторінка**: наприклад `P10 – Verify User`
+**Template**: стандартний (OK).
+**Body Attributes (опціонально):** додай `apex-disable-default-padding` (менше зайвих відступів).
+
+## Регіони (у такому порядку)
+
+1. **Wrapper (контейнер)**
+
+* Тип: Static Content
+* Шаблон: *Blank with Attributes* або *Standard*
+* **Static ID:** `wrap`
+* **Region Display Selector:** Off
+* **Server-side Condition:** None
+* **Source → Static Content:** лишаємо порожнім (тільки контейнер).
+
+2. **Лого (всередині Wrapper)**
+
+* Тип: Static Content
+* **Parent Region:** `wrap`
+* **Title:** (необов’язково)
+* **Static ID:** `logo`
+* **Source → Static Content:**
+
+  ```html
+  <div class="app-logo" aria-label="App logo"></div>
+  ```
+
+  > Логотип підвантажимо як фон через CSS (див. розділ 3).
+
+3. **Текстовий блок (2 рядки)**
+
+* Тип: Static Content
+* **Parent Region:** `wrap`
+* **Static ID:** `lead`
+* **Source:**
+
+  ```html
+  <div class="lead-text">
+    <div>Перевірка користувача веб‑сервісу</div>
+    <div>Введіть ідентифікатор та оберіть дію</div>
+  </div>
+  ```
+
+4. **Годинник**
+
+* Тип: Static Content
+* **Parent Region:** `wrap`
+* **Static ID:** `clockRegion`
+* **Source:**
+
+  ```html
+  <div id="clock" class="clock" aria-live="polite">--.--.---- --:--</div>
+  ```
+
+5. **Форма перевірки**
+
+* Тип: Form → Static Content (для UI) або *Form – Manual* (як зручно)
+* **Parent Region:** `wrap`
+* **Static ID:** `verifyForm`
+* **Source:** лишаємо порожнім — елемент і кнопки додаємо як об’єкти сторінки.
+
+  **Елемент сторінки:**
+
+  * **P10\_NUMBER**
+
+    * Тип: *Number Field*
+    * Label: «Ідентифікатор»
+    * **Settings → Appearance → Template Options:** Wide (якщо доступно)
+    * **Advanced → Custom Attributes:**
+
+      ```
+      inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+      ```
+    * **Advanced → CSS Classes:** `big-number`
+    * **Validation:** серверна не потрібна для UI-макета (тип Number вже фільтрує), але нижче дам JS для жорсткішого обмеження.
+
+  **Кнопки:**
+
+  * **LOGIN**
+
+    * Button Name: `P10_LOGIN`
+    * **Action:** Submit Page (поки без процесів)
+    * **CSS Classes:** `btn-login`
+  * **LOGOUT**
+
+    * Button Name: `P10_LOGOUT`
+    * **Action:** Redirect to URL (поки `#` або на сторінку логіну/логауту, коли буде)
+    * **Target:** `#` (тимчасово)
+    * **CSS Classes:** `btn-logout`
+
+6. **Підпис внизу**
+
+* Тип: Static Content
+* **Parent Region:** `wrap`
+* **Static ID:** `footerNote`
+* **Source:**
+
+  ```html
+  <div class="footer-note">© 2025 Example Developer. All rights reserved.</div>
+  ```
+
+> Всі ці регіони мають бути у **спільному контейнері** `wrap`, щоб легко центрувати по вертикалі/горизонталі.
+
+---
+
+# 2) Dynamic Actions (DA)
+
+1. **Page Load → Фокус + старт годинника**
+
+* **Event:** Page Load
+* **True Action 1:** *Execute JavaScript Code*
+
+  ```js
+  startClock();
+  setTimeout(function () {
+    var el = document.getElementById('P10_NUMBER');
+    if (el) { el.focus(); el.select?.(); }
+  }, 50);
+  ```
+* **True Action 2 (опц., якщо хочеш підчистити ввод):** *Execute JavaScript Code*
+
+  ```js
+  enforceNumericInput('P10_NUMBER');
+  ```
+
+(Альтернатива: усе це можна об’єднати в один JS‑блок.)
+
+---
+
+# 3) CSS (Inline CSS на сторінці)
+
+Зайди: **Page → CSS → Inline** та додай:
+
+```css
+/* Синій фон на всю сторінку + центрування контенту */
+body, html {
+  height: 100%;
+}
+.t-Body, .t-Body-content {
+  background: #0f4c81; /* насичений синій */
+  min-height: 100vh;
+}
+
+/* Головний контейнер */
+#region-wrap, #wrap {
+  /* якщо шаблон додає префікс region-, дублюємо селектори */
+}
+#wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;      /* горизонтальний центр */
+  justify-content: center;  /* вертикальний центр */
+  gap: 16px;                /* відстані між блоками */
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* Логотип як фон */
+.app-logo {
+  width: 140px;
+  height: 140px;
+  background-image: url("#APP_FILES#logo.png"); /* завантаж файл у Static Application Files */
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.3));
+}
+
+/* Дворядковий текст */
+.lead-text {
+  text-align: center;
+  color: #f2f6fb;
+  font-size: 20px;
+  line-height: 1.35;
+  opacity: 0.95;
+}
+
+/* Годинник */
+.clock {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+/* Блок форми: голуба рамка, flat‑card */
+#verifyForm {
+  background: rgba(255,255,255,0.08); /* легесенький прозорий */
+  border: 3px solid #5eb3f6;          /* голуба рамка */
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+  max-width: 560px;
+  width: 100%;
+}
+
+/* Велике числове поле */
+.big-number input,
+#P10_NUMBER {
+  font-size: 24px !important;
+  padding: 16px !important;
+  height: 60px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.2) !important;
+  border: none !important;
+  outline: none !important;
+  width: 100%;
+}
+
+/* Кнопки у flat‑стилі */
+.btn-login,
+.btn-logout {
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 14px 18px !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  text-transform: uppercase;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+
+/* Login: світло‑зелена */
+.btn-login {
+  background: #98f58c !important; /* світло‑зелена */
+  color: #000000 !important;      /* чорний текст */
+}
+
+/* Logout: жовта */
+.btn-logout {
+  background: #ffd44d !important; /* жовта */
+  color: #000000 !important;      /* чорний текст */
+}
+
+/* Підпис внизу */
+.footer-note {
+  margin-top: 8px;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  text-align: center;
+}
+```
+
+> Лого: завантаж у **Shared Components → Static Application Files** файл `logo.png`, шлях у CSS вже вказаний: `#APP_FILES#logo.png`.
+
+---
+
+# 4) JavaScript (годинник + обмеження введення + автофокус)
+
+Зайди: **Page → JavaScript → Function and Global Variable Declaration** та додай:
+
+```js
+function pad2(n){ return n < 10 ? '0' + n : '' + n; }
+
+function formatClock(d){
+  var dd = pad2(d.getDate());
+  var mm = pad2(d.getMonth() + 1);
+  var yyyy = d.getFullYear();
+  var hh = pad2(d.getHours());
+  var mi = pad2(d.getMinutes());
+  // Формат: DD.MM.YYYY HH:MI (як просили)
+  return dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + mi;
+}
+
+var __clockTimer = null;
+function startClock(){
+  function tick(){
+    var el = document.getElementById('clock');
+    if (el){
+      el.textContent = formatClock(new Date());
+    }
+  }
+  tick();
+  if (__clockTimer) { clearInterval(__clockTimer); }
+  __clockTimer = setInterval(tick, 1000 * 5); // оновлення кожні 5 сек.
+}
+
+/* Дозволити лише цифри в полі (додатково до Number Field) */
+function enforceNumericInput(itemName){
+  var id = (itemName || '').startsWith('P') ? itemName : 'P10_NUMBER';
+  var el = document.getElementById(id);
+  if (!el) return;
+
+  function sanitize(){
+    var v = el.value || '';
+    // Прибираємо все, окрім цифр
+    var s = v.replace(/\D+/g, '');
+    if (v !== s) el.value = s;
+  }
+
+  el.addEventListener('input', sanitize);
+  el.addEventListener('paste', function(e){
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    el.value = (el.value || '') + text.replace(/\D+/g, '');
+  });
+  el.addEventListener('keydown', function(e){
+    // Дозволяємо: Backspace, Delete, Tab, Escape, Enter, Home/End/Arrows
+    var allowed = [8,46,9,27,13,35,36,37,38,39,40];
+    if (allowed.indexOf(e.keyCode) > -1) return;
+    // Дозволяємо цифри (верхній ряд і numpad)
+    var isTopRowDigit = e.keyCode >= 48 && e.keyCode <= 57;
+    var isNumpadDigit = e.keyCode >= 96 && e.keyCode <= 105;
+    if (!isTopRowDigit && !isNumpadDigit) e.preventDefault();
+  });
+}
+```
+
+А в **Page → JavaScript → Execute when Page Loads** додай (або через DA Page Load як вище):
+
+```js
+startClock();
+setTimeout(function (){
+  enforceNumericInput('P10_NUMBER');
+  var el = document.getElementById('P10_NUMBER');
+  if (el) { el.focus(); el.select?.(); }
+}, 50);
+```
+
+---
+
+# 5) Вирівнювання та відстані
+
+Ми центруємо все контейнером `#wrap` (flex‑вертикаль + горизонталь). Кожен регіон всередині `wrap` — окремий блок. Відстані між блоками задає `gap: 16px;`.
+**Форма** виділена: рамка 3px, легкий прозорий фон, тінь, скруглення — сучасний flat‑стиль без «скляних» ефектів.
+
+---
+
+# 6) Прив’язка класів у APEX
+
+* У кнопок в **Appearance → CSS Classes** пропиши відповідно `btn-login` і `btn-logout`.
+* У **P10\_NUMBER → Appearance → CSS Classes** додай `big-number`.
+* Регіони мають **Static ID** як у кроці 1 (потрібно для CSS).
+
+---
+
+# 7) Що далі (підготовка до логіки)
+
+* Кнопці **LOGIN** можна залишити *Submit Page* і додати пізніше процес (виклик REST/PLSQL).
+* Кнопка **LOGOUT** тимчасово робить Redirect `#`; пізніше підставиш лінк/процес завершення сесії.
+* У валідаціях сторінки додай просту перевірку, що `P10_NUMBER` **не null**.
+
+---
+
+Готово! Після цих кроків у тебе буде повністю зібраний макет: синій фон, центроване розміщення, лого, дворядковий текст, живий годинник, велике числове поле, кнопки login/logout у потрібних кольорах і нижній підпис. Якщо хочеш — можу згенерувати експрес‑імпорт у вигляді SQL‑скрипта для створення сторінки.

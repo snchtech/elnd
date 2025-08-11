@@ -1,0 +1,136 @@
+ок, зробимо макет без «великих margin». Використаємо **CSS Grid**: зверху — стек (logo → text → clock), по центру — форма, знизу — копірайт. Усе responsive, з акуратними відступами через `clamp()`.
+
+## HTML (твоя логічна структура)
+
+> В APEX просто задай **Static ID** для кожного регіону як нижче.
+
+```html
+<div id="wrap">
+  <div id="logo"></div>
+  <div id="text">Перевірка користувача веб‑сервісу</div>
+  <div id="clock">--.--.---- --:--</div>
+  <div id="form"><!-- тут твоя форма/елементи/кнопки --></div>
+  <div id="copywrite">© 2025 Example Developer</div>
+</div>
+```
+
+## CSS (встав у Page → CSS → Inline)
+
+```css
+/* 1) Базовий фон і повноекранний контейнер */
+html, body { height: 100%; }
+.t-Body, .t-Body-content { min-height: 100vh; background:#0f4c81; }
+
+/* 2) Грід-розкладка: top stack (logo+text+clock), центр (form), низ (copywrite) */
+#wrap{
+  min-height: 100svh;           /* коректно на мобілках */
+  display: grid;
+  grid-template-rows: auto 1fr auto;  /* верхній стек / центр / низ */
+  align-items: start;            /* верхній стек прилягає догори */
+  padding: clamp(12px, 3vw, 24px) clamp(12px, 4vw, 40px);
+  box-sizing: border-box;
+  color:#fff;
+}
+
+/* 3) Верхній стек: акуратні невеликі відступи між logo→text→clock */
+#logo, #text, #clock{
+  justify-self: center;          /* по центру горизонтально */
+  text-align: center;
+  margin-top: 0;                  /* контролюємо відступи через gap */
+}
+
+/* керуємо компактними проміжками у верхній частині */
+#logo{ 
+  width: clamp(80px, 12vw, 140px);
+  height: clamp(80px, 12vw, 140px);
+  background: url("#APP_FILES#logo.png") center/contain no-repeat;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,.25));
+  margin-top: clamp(8px, 2vh, 16px); /* невеликий відступ від верхнього краю */
+}
+#text{
+  margin-top: clamp(8px, 1.8vh, 14px);
+  font-size: clamp(18px, 2.2vw, 24px);
+  line-height: 1.35;
+  opacity:.95;
+  max-width: 900px;
+}
+#clock{
+  margin-top: clamp(6px, 1.2vh, 12px);
+  font-weight: 700;
+  font-size: clamp(18px, 2vw, 22px);
+  letter-spacing:.3px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+
+/* 4) Центральна зона: форма завжди по центру вільного простору */
+#form{
+  /* друга рядка гріда займає весь 1fr простір; центруємо всередині */
+  display: grid;
+  place-items: center;           /* ідеальний центр */
+  padding: clamp(8px, 2vh, 16px) 0;
+}
+#form > .form-card, /* якщо маєш внутрішню обгортку */
+#form .t-Region, 
+#verifyForm{                      /* або твій Static ID регіону форми */
+  background: rgba(255,255,255,0.08);
+  border: 3px solid #5eb3f6;
+  border-radius: 16px;
+  padding: clamp(16px, 3vw, 24px);
+  box-shadow: 0 12px 24px rgba(0,0,0,.2);
+  width: min(720px, 100%);
+}
+
+/* приклад великих інпутів і кнопок у flat стилі */
+#form input[type="text"], 
+#form input[type="number"], 
+#form .apex-item-text{
+  width: 100%;
+  height: clamp(48px, 7vh, 64px);
+  font-size: clamp(18px, 2.2vw, 22px);
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 8px 18px rgba(0,0,0,.2);
+  outline: none;
+}
+#form .btn-row{
+  display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;
+}
+#form .btn-login{
+  background:#98f58c; color:#000; border:none; border-radius:12px;
+  padding: 14px 18px; font-weight:700; text-transform:uppercase;
+  box-shadow:0 8px 18px rgba(0,0,0,.2); cursor:pointer;
+}
+#form .btn-logout{
+  background:#ffd44d; color:#000; border:none; border-radius:12px;
+  padding: 14px 18px; font-weight:700; text-transform:uppercase;
+  box-shadow:0 8px 18px rgba(0,0,0,.2); cursor:pointer;
+}
+
+/* 5) Низ сторінки: копірайт завжди “прижатий” до нижнього краю */
+#copywrite{
+  align-self: end;               /* в третій (auto) рядці він автоматично внизу */
+  justify-self: center;
+  color: rgba(255,255,255,.75);
+  font-size: clamp(12px, 1.6vw, 14px);
+  padding-bottom: max(8px, env(safe-area-inset-bottom)); /* iOS safe area */
+  text-align: center;
+}
+
+/* 6) Дрібні твіки для дуже вузьких екранів */
+@media (max-width: 420px){
+  #form .btn-row{ justify-content: center; }
+}
+```
+
+### Як це працює
+
+* `grid-template-rows: auto 1fr auto` робить три логічні зони:
+
+  * верхній стек (logo→text→clock) «прильнутий» до верху,
+  * середня зона **розтягується** і в ній ми центруємо форму,
+  * копірайт у третій рядці автоматично внизу.
+* Ніяких великих `margin-top` — усе адаптивно через `clamp()` та грід.
+* Потрібно лише, щоб твої APEX‑регіони мали **Static ID** як у селекторах: `wrap`, `logo`, `text`, `clock`, `form`, `copywrite`.
+
+Хочеш — можу під твій конкретний шаблон сторінки (наприклад, якщо там є внутрішні `.t-Region`) швидко поправити селектори, щоб воно “сіло” ідеально.

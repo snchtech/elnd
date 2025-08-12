@@ -1,0 +1,59 @@
+В APEX ти можеш зробити очищення input-поля як при завантаженні сторінки, так і після натискання кнопки **Ok**, буквально у кілька рядків JavaScript.
+
+---
+
+## 1️⃣ Очищення при завантаженні сторінки
+
+У **Page → Execute when Page Loads** додай:
+
+```javascript
+apex.item("P10_CODE").setValue("");
+apex.item("P10_CODE").setFocus();
+```
+
+* `P10_CODE` — це ім’я твого item-поля (заміни на своє, якщо інше).
+* `setValue("")` очищає значення.
+* `setFocus()` ставить курсор у поле.
+
+---
+
+## 2️⃣ Очищення після натискання кнопки **Ok**
+
+В **Dynamic Action** для кнопки **Ok** (Event: *Click*) додай **True Action → Execute JavaScript Code**:
+
+```javascript
+apex.item("P10_CODE").setValue("");
+apex.item("P10_CODE").setFocus();
+```
+
+> Якщо кнопка **Ok** викликає AJAX Processing, можна додати цю дію **після** виконання AJAX, щоб очищення відбулося лише коли запит успішно відпрацював.
+
+---
+
+## 3️⃣ Приклад із AJAX (коли хочеш очищати після успіху)
+
+Якщо ти викликаєш AJAX через `apex.server.process`, можна так:
+
+```javascript
+apex.server.process(
+  "CHECK_OR_LOGIN", 
+  { x01: $v("P10_CODE") }, 
+  {
+    success: function(data) {
+      if (data.ok) {
+        // показуємо діалог успіху
+      } else {
+        // показуємо помилку
+      }
+      // очищення в будь-якому випадку
+      apex.item("P10_CODE").setValue("");
+      apex.item("P10_CODE").setFocus();
+    }
+  }
+);
+```
+
+---
+
+Хочеш, щоб я відразу зробив готовий **Dynamic Action сценарій** у APEX, де після AJAX-перевірки поле очищається і фокусується?
+Тоді це буде працювати як при скануванні NFC, так і при ручному вводі.

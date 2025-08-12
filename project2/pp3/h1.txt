@@ -1,0 +1,127 @@
+Це не проблема з `WITH` чи `FETCH FIRST`. Помилка **ORA‑02069: global\_names parameter must be set to TRUE for this operation** з’являється, коли твій SQL фактично звертається **через database link** (навіть якщо ти цього не очікуєш). Найчастіша причина тут — ти звертаєшся до об’єкта під ім’ям **`USERS`**, а у схемі/системі вже існує **(публічний) синонім `USERS`**, який вказує на іншу БД через dblink. Тому будь‑який `SELECT ... FROM USERS` лізе “назовні” і ловить ORA‑02069.
+
+## Як швидко виправити
+
+### Вариант 1 (рекомендовано): Явно вкажи свою схему
+
+Скрізь, де ти звертаєшся до таблиць, став префікс **схеми‑парсера APEX** (наприклад, `APP`):
+
+```sql
+WITH indata AS (
+  SELECT :P10_CODE AS code, norm_nfc(:P10_CODE) AS code_nfc FROM dual
+)
+SELECT user_id, method
+FROM (
+  -- NFC має пріоритет
+  SELECT n.user_id, 'NFC' AS method, 1 AS ord
+    FROM APP.USER_NFC n
+    JOIN indata d ON n.NFC_ID = d.code_nfc
+  UNION ALL
+  -- MANUAL тільки якщо code — це цілі числа
+  SELECT u.user_id, 'MANUAL' AS method, 2 AS ord
+    FROM APP.USERS u
+    JOIN indata d
+      ON REGEXP_LIKE(d.code,'^\d+$') AND u.USER_ID = TO_NUMBER(d.code)
+)
+ORDER BY ord
+FETCH FIRST 1 ROW ONLY;
+```
+
+І у PL/SQL‑процесі теж:
+
+```plsql
+SELECT u.user_firstname, u.user_lastname, u.user_depart, u.user_position
+  INTO l_firstname, l_lastname, l_depart, l_position
+  FROM APP.USERS u
+ WHERE u.user_id = l_user_id;
+```
+
+> Заміни `APP` на свою реальну схему (парсинг‑схему додатку APEX).
+
+### Варіант 2: Перейменувати локальну таблицю
+
+Щоб не конкурувати з можливими системними/публічними синонімами, краще мати власне ім’я, напр. `APP_USERS`:
+
+```sql
+RENAME USERS TO APP_USERS;
+-- і тоді в запитах: FROM APP.APP_USERS
+```
+
+### Варіант 3: Перекрити синонім
+
+Можна створити **приватний синонім** у своїй схемі, який вказує на локальну таблицю і переважить публічний:
+
+```sql
+CREATE OR REPLACE SYNONYM APP.USERS FOR APP.USERS; -- (або APP.APP_USERS)
+```
+
+> Працює, якщо у твоїй схемі **є** таблиця `USERS`. Але все одно краще явно писати `APP.USERS`.
+
+---
+
+## Перевірка, чому тягнеться dblink
+
+Швидко діагностувати, що саме таке `USERS` в оточенні:
+
+```sql
+-- що за об'єкт бачить схема:
+SELECT owner, object_name, object_type
+FROM   all_objects
+WHERE  UPPER(object_name) = 'USERS';
+
+-- чи існує синонім
+SELECT owner, synonym_name, table_owner, table_name, db_link
+FROM   all_synonyms
+WHERE  UPPER(synonym_name) = 'USERS';
+```
+
+Побачиш, чи є `DB_LINK` у кінці (тоді все ясно).
+Перевірити параметр (якщо є доступ):
+
+```sql
+SELECT name, value FROM v$parameter WHERE name = 'global_names';
+```
+
+Але міняти `GLOBAL_NAMES` не потрібно — ми просто уникаємо небажаного dblink.
+
+---
+
+## Оновлений AJAX‑процес (фрагменти з префіксами схеми)
+
+```plsql
+-- пошук USER_ID по NFC/ID
+WITH indata AS (
+  SELECT l_code AS code, norm_nfc(l_code) AS code_nfc FROM dual
+)
+SELECT user_id, method
+  INTO l_user_id, l_method
+  FROM (
+    SELECT n.user_id, 'NFC' AS method, 1 AS ord
+      FROM APP.USER_NFC n
+      JOIN indata d ON n.nfc_id = d.code_nfc
+    UNION ALL
+    SELECT u.user_id, 'MANUAL' AS method, 2 AS ord
+      FROM APP.USERS u
+      JOIN indata d
+        ON REGEXP_LIKE(d.code,'^\d+$') AND u.user_id = TO_NUMBER(d.code)
+  )
+ ORDER BY ord
+ FETCH FIRST 1 ROW ONLY;
+
+-- потім деталі користувача:
+SELECT u.user_firstname, u.user_lastname, u.user_depart, u.user_position
+  INTO l_firstname, l_lastname, l_depart, l_position
+  FROM APP.USERS u
+ WHERE u.user_id = l_user_id;
+```
+
+> Не забудь так само в `INSERT INTO request_log` (якщо `REQUEST_LOG` теж у твоїй схемі) ставити `APP.REQUEST_LOG`.
+
+---
+
+## Дрібні поради
+
+* Для уніфікації звернень у всьому додатку в APEX можна завести **Substitution String** типу `&SCHEMA.` і писати `&SCHEMA..USERS`. Але простіше й надійніше — зафіксувати явний префікс.
+* Якщо APEX‑додаток використовує **Database Links** для інших речей — тим більше уникай імен, які можуть перетинатися з публічними синонімами.
+
+Якщо накинеш назву твоєї схеми, я одразу підставлю її в усі шматки SQL/PLSQL, щоб можна було просто вставити й запускати.

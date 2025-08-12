@@ -1,0 +1,153 @@
+Чудово, робимо це “по‑апексівськи”: один глобальний процес на Page 0, два application items, і простий вивід на сторінці форми.
+
+# Крок 1. Application Items
+
+Створи два **Application Item**:
+
+* `G_OFFICE_ID` (Number)
+* `G_OFFICE_NAME` (Text)
+
+# Крок 2. Функція IP (якщо ще не зробив)
+
+Я рекомендую мати утиліту (з попередніх відповідей). Коротко:
+
+```sql
+CREATE OR REPLACE PACKAGE util_net AS
+  FUNCTION get_client_ip RETURN VARCHAR2;
+END util_net;
+/
+CREATE OR REPLACE PACKAGE BODY util_net AS
+  FUNCTION get_client_ip RETURN VARCHAR2 IS
+    l_xff  VARCHAR2(4000) := owa_util.get_cgi_env('HTTP_X_FORWARDED_FOR');
+    l_xrip VARCHAR2(4000) := owa_util.get_cgi_env('HTTP_X_REAL_IP');
+    l_rem  VARCHAR2(4000) := owa_util.get_cgi_env('REMOTE_ADDR');
+    l_ip   VARCHAR2(45);
+  BEGIN
+    IF l_xff IS NOT NULL THEN
+      l_ip := TRIM(REGEXP_SUBSTR(l_xff, '^[^,]+'));
+      IF l_ip IS NOT NULL THEN RETURN SUBSTR(l_ip,1,45); END IF;
+    END IF;
+    IF l_xrip IS NOT NULL THEN RETURN SUBSTR(l_xrip,1,45); END IF;
+    RETURN SUBSTR(l_rem,1,45);
+  END;
+END util_net;
+/
+```
+
+# Крок 3. Application Process на Page 0 (Global)
+
+Створи **Application Process**:
+
+* **Name:** `SET_OFFICE_FROM_IP`
+* **Point:** *On Load: Before Header*
+* **Execution Scope:** *Once Per Page View* (або *Once Per Session*, якщо офіс не змінюється протягом сесії)
+* **Code (PL/SQL):**
+
+```plsql
+DECLARE
+  l_ip        VARCHAR2(45) := util_net.get_client_ip;
+  l_office_id NUMBER;
+  l_name      VARCHAR2(400);
+BEGIN
+  -- 1) Знайти OFFICE_ID за IP у твоїй таблиці:
+  --    Заміни TABLE_NAME на реальну назву (у тебе — таблиця зі стовпцями ID, ID_OFFICE, DEVICE_IP, CREATED_AT).
+  BEGIN
+    SELECT t.id_office
+      INTO l_office_id
+      FROM TABLE_NAME t
+     WHERE t.device_ip = l_ip
+       AND ROWNUM = 1;  -- на випадок дублювань беремо перший
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      l_office_id := NULL;
+  END;
+
+  -- 2) Якщо офіс знайдено — дістаємо назву з OFFICES
+  IF l_office_id IS NOT NULL THEN
+    BEGIN
+      SELECT o.name
+        INTO l_name
+        FROM OFFICES o
+       WHERE o.id = l_office_id;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        l_name := NULL;
+    END;
+  END IF;
+
+  -- 3) Виставляємо Application Items
+  :G_OFFICE_ID   := l_office_id;
+  :G_OFFICE_NAME := NVL(l_name, 'Невідомий офіс');
+
+EXCEPTION
+  WHEN OTHERS THEN
+    -- На всяк випадок не блокуємо навігацію сторінки
+    :G_OFFICE_ID   := NULL;
+    :G_OFFICE_NAME := 'Невідомий офіс';
+END;
+```
+
+### Якщо твоя таблиця/офіси через dblink
+
+Додай `@DBLINK` у **FROM**:
+
+```plsql
+FROM TABLE_NAME@DBLINK t
+...
+FROM OFFICES@DBLINK o
+```
+
+> Зверни увагу: *посилання через dblink ставимо лише після імені таблиці у FROM*, не після псевдонімів.
+
+# Крок 4. Використання на сторінці форми
+
+Є два простих варіанти.
+
+### Варіант A: Static Content Region
+
+* Створи на сторінці форми **Region → Static Content**
+* **Source**:
+
+  ```
+  Ваш офіс: &G_OFFICE_NAME.
+  ```
+* **Escape Special Characters:** *No* (щоб підстановка працювала)
+
+### Варіант B: Display Only Item
+
+* Створи **Page Item**: `PXX_OFFICE_NAME` (Display Only)
+* **Default Value**: `&G_OFFICE_NAME.`
+* **Settings → Escape special characters:** Off
+* Поруч додай підпис “Ваш офіс:”
+
+> Варіант A — найпростіший для одного рядка. Варіант B зручний, якщо захочеш стилізувати або перевикористовувати item.
+
+# Крок 5. (Опційно) Стилі
+
+Щоб виглядало лаконічно у flat‑стилі:
+
+```css
+.office-badge{
+  color:#fff;
+  background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:12px;
+  padding:10px 14px;
+  display:inline-block;
+  font-weight:600;
+}
+```
+
+У **Static Content**:
+
+```html
+<div class="office-badge">Ваш офіс: &G_OFFICE_NAME.</div>
+```
+
+# Перевірки/поради
+
+* Якщо IP може бути **IPv6**, переконайся що `DEVICE_IP` зберігається повністю (`VARCHAR2(45)` ок).
+* Якщо можливі “резервні” адреси (NAT/Proxy), можеш зберігати *усі* IP цієї машини й під час пошуку використовувати `INSTR(l_ip, t.device_ip) > 0` або нормалізований список. Зазвичай прямий збіг достатній.
+* Якщо деякі IP змінюються (DHCP), передбач у таблиці дату актуальності/перевірки; але це вже бізнес‑логіка.
+
+Все. Тепер на кожному завантаженні сторінки глобальний процес встановлює `G_OFFICE_ID` і `G_OFFICE_NAME`, а на сторінці форми ти просто показуєш “Ваш офіс: \&G\_OFFICE\_NAME.”

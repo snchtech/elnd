@@ -1,0 +1,174 @@
+Класна ідея з нормалізацією `USER_AGENT` у довідник. Далі — готові DDL + робочий код для APEX із dblink.
+
+---
+
+# 1) Довідник USER‑AGENT на віддаленій БД (через dblink)
+
+> Припустимо, що твій dblink називається `REMOTEDB`. Замінюй на свій.
+
+## 1.1 Таблиця + унікальність + послідовність
+
+```sql
+-- На ВІДДАЛЕНІЙ БД (куди веде dblink)
+CREATE TABLE USER_AGENT_LU (
+  ID          NUMBER        CONSTRAINT PK_USER_AGENT_LU PRIMARY KEY,
+  USER_AGENT  VARCHAR2(1024) NOT NULL,
+  CREATED_AT  TIMESTAMP WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL
+);
+
+-- Унікальність рядка агента
+CREATE UNIQUE INDEX UQ_USER_AGENT_LU_AGENT ON USER_AGENT_LU (USER_AGENT);
+
+-- Послідовність для ключа
+CREATE SEQUENCE USER_AGENT_LU_SEQ START WITH 1 NOCACHE;
+```
+
+> Примітка: **FK з локальної `REQUEST_LOG` на віддалену `USER_AGENT_LU` зробити не можна** (Oracle не підтримує FK через dblink). Це нормально — контролюємо цілісність у коді.
+
+---
+
+# 2) Локальна функція «забезпечити ID для USER\_AGENT» (через dblink)
+
+RETURNING через dblink не працює, тому робимо «в два кроки»: беремо `NEXTVAL`, пробуємо `INSERT`, при `DUP_VAL_ON_INDEX` — вибираємо наявний ID.
+
+```sql
+-- На ЛОКАЛЬНІЙ БД (де крутиться APEX)
+CREATE OR REPLACE FUNCTION get_user_agent_id(p_user_agent IN VARCHAR2)
+RETURN NUMBER
+IS
+  l_id NUMBER;
+  l_ua VARCHAR2(1024) := SUBSTR(p_user_agent, 1, 1024);
+BEGIN
+  -- 1) Пошук існуючого
+  BEGIN
+    SELECT id
+      INTO l_id
+      FROM user_agent_lu@REMOTEDB     -- dblink застосовується у FROM
+     WHERE user_agent = l_ua;
+    RETURN l_id;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      NULL;
+  END;
+
+  -- 2) Генеруємо новий ID на віддаленій БД
+  SELECT user_agent_lu_seq.NEXTVAL
+    INTO l_id
+    FROM dual@REMOTEDB;
+
+  -- 3) Пробуємо вставити
+  BEGIN
+    INSERT INTO user_agent_lu@REMOTEDB (id, user_agent, created_at)
+    VALUES (l_id, l_ua, SYSTIMESTAMP);
+  EXCEPTION
+    WHEN DUP_VAL_ON_INDEX THEN
+      -- Хтось одночасно вставив — підхоплюємо існуючий
+      SELECT id
+        INTO l_id
+        FROM user_agent_lu@REMOTEDB
+       WHERE user_agent = l_ua;
+  END;
+
+  RETURN l_id;
+END;
+/
+```
+
+> Якщо твоя таблиця/послідовність на віддаленій БД у конкретній схемі, додай префікс: `remote_schema.user_agent_lu@REMOTEDB`, `remote_schema.user_agent_lu_seq` (префікс ставимо до імені, **@REMOTEDB — тільки в FROM**: `SELECT remote_schema.user_agent_lu_seq.NEXTVAL FROM dual@REMOTEDB`).
+
+---
+
+# 3) APEX: виставляємо `P0_USER_AGENT_ID` при заході (глобально)
+
+Page 0 не має процесів. Тому:
+
+* Створи **Application Item**: `G_USER_AGENT_ID`.
+* Створи **Application Process**: *On Load: Before Header* (вище за сторінки) з кодом:
+
+```plsql
+DECLARE
+  l_ua  VARCHAR2(1024) := SUBSTR(owa_util.get_cgi_env('HTTP_USER_AGENT'), 1, 1024);
+  l_id  NUMBER;
+BEGIN
+  l_id := get_user_agent_id(l_ua);
+  -- зберегти у Application Item
+  :G_USER_AGENT_ID := l_id;
+  -- якщо хочеш ще й у Page 0 item:
+  apex_util.set_session_state('P0_USER_AGENT_ID', l_id);
+END;
+```
+
+> Так цей код спрацює **на кожний запит** і встановить ID в сесію.
+
+(Альтернатива: зробити **AJAX‑процес** на Page 0 і викликати його «On Page Load», але application‑process простіше.)
+
+---
+
+# 4) Міграція `REQUEST_LOG`: додаємо `USER_AGENT_ID` і використовуємо його
+
+## 4.1 Додаємо колонку
+
+```sql
+ALTER TABLE REQUEST_LOG ADD USER_AGENT_ID NUMBER;
+-- (FK ставити не можна, бо lookup віддалений через dblink)
+-- За бажанням: можна тимчасово залишити і текстовий USER_AGENT для бекапу
+```
+
+> За потреби можеш поступово **прибрати** стару `USER_AGENT`, коли переконаєшся, що все працює:
+>
+> ```sql
+> ALTER TABLE REQUEST_LOG DROP COLUMN USER_AGENT;
+> ```
+
+## 4.2 Оновлюємо вставки у `REQUEST_LOG`
+
+В усіх процесах (LOGIN/LOGOUT/CHECK) замість `USER_AGENT` пиши `USER_AGENT_ID`:
+
+```plsql
+DECLARE
+  l_ip VARCHAR2(45) := util_net.get_client_ip;
+BEGIN
+  INSERT INTO request_log(
+    user_id, device_ip, request_action, request_date,
+    session_id, request_source, result_status, user_agent_id
+  ) VALUES (
+    TO_NUMBER(:P10_NUMBER), l_ip, 'LOGIN', SYSTIMESTAMP,
+    v('APP_SESSION'), 'FORM', 'SUCCESS', :G_USER_AGENT_ID  -- >>> тут ID
+  );
+END;
+```
+
+> Якщо тобі ще певний час потрібен повний рядок агента для відладки — лиши обидва поля, але **PRIMARY** використання роби через `USER_AGENT_ID`.
+
+---
+
+# 5) Перевірка й діагностика
+
+Швидкі селекти, щоб переконатися, що все працює:
+
+```sql
+-- Локально: перевір, що ID потрапляє у лог
+SELECT id, user_id, user_agent_id, request_date
+FROM   request_log
+ORDER BY id DESC FETCH FIRST 10 ROWS ONLY;
+
+-- Віддалено через dblink: дивись відповідник у довіднику
+SELECT l.id, l.user_agent
+FROM   user_agent_lu@REMOTEDB l
+WHERE  l.id IN (
+  SELECT user_agent_id FROM request_log WHERE user_agent_id IS NOT NULL
+);
+```
+
+---
+
+# 6) Типові підводні камені (і як обійти)
+
+* **RETURNING INTO** через dblink — не працює → тому беремо `NEXTVAL` із `dual@dblink` і робимо `INSERT`, при `DUP_VAL_ON_INDEX` дістаємо наявний `ID`.
+* **Транзакції**: це розподілена транзакція (2PC). Коміт іде разом із життєвим циклом сторінки APEX. Додаткових `COMMIT` не треба.
+* **Продуктивність**: якщо UA часто повторюється, lookup буде майже завжди `SELECT id ...` без `INSERT`. За необхідності додай індекс функції на нормалізоване UA (але тут простий унікальний індекс уже є).
+* **Безпека**: `USER_AGENT` — рядок із клієнта. Тримай розмір обмеженим (ми обрізаємо до 1024) і уникай логіки, що довіряє вмісту UA.
+
+---
+
+Якщо хочеш, накину ще **view** для зручного репорту, що «джойнить» `REQUEST_LOG` із довідником (через *materialized view* локально або через `DBMS_HS_PASSTHROUGH`), але базова нормалізація вже готова й працюватиме.

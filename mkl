@@ -1,0 +1,40 @@
+You want to filter records in Oracle SQL based on two conditions:
+
+1. Records from **today** (i.e., current date).
+2. Or records from **yesterday after 17:00 (5 PM)** **and** where `action = 'login'`.
+
+Here’s how you can write the `WHERE` clause for that logic in Oracle SQL:
+
+```sql
+WHERE 
+    TRUNC("date") = TRUNC(SYSDATE) -- today's records
+    OR (
+        "date" >= TRUNC(SYSDATE - 1) + INTERVAL '17' HOUR
+        AND "date" < TRUNC(SYSDATE) -- ensure it's still before today
+        AND action = 'login'
+    )
+```
+
+### Explanation:
+
+* `TRUNC("date") = TRUNC(SYSDATE)` → gets all records from **today** (midnight onwards).
+* `TRUNC(SYSDATE - 1)` → gives **yesterday at 00:00**.
+* `+ INTERVAL '17' HOUR` → adds 17 hours, so it becomes **yesterday at 17:00 (5 PM)**.
+* `"date" < TRUNC(SYSDATE)` ensures that we only take times before today (i.e., still yesterday).
+* `action = 'login'` restricts to login actions for the second case.
+
+### Full Query Example:
+
+```sql
+SELECT *
+FROM your_table
+WHERE 
+    TRUNC("date") = TRUNC(SYSDATE)
+    OR (
+        "date" >= TRUNC(SYSDATE - 1) + INTERVAL '17' HOUR
+        AND "date" < TRUNC(SYSDATE)
+        AND action = 'login'
+    );
+```
+
+Let me know if your `date` column includes a time component, or if you use a different data type.

@@ -1,0 +1,99 @@
+If you're asking **how to get the `X-Forwarded-For` or client IP address** in a **Dynamic Action (DA) in Oracle APEX**, here’s how to do it **step by step**, depending on what you really want:
+
+---
+
+## ✅ If You Want the **Client IP Address** in APEX Dynamic Action:
+
+### 🔹 Step 1: Create an **Application Item**
+
+1. Go to **Shared Components** > **Application Items**
+2. Create an item, e.g., `G_CLIENT_IP`
+
+---
+
+### 🔹 Step 2: Set It Using **Application Process**
+
+1. Go to **Shared Components** > **Processes** > **Create**
+2. Name it `SET_CLIENT_IP`
+3. Type: **Application Process**
+4. Point: **On Load: Before Header**
+5. Code:
+
+   ```plsql
+   declare
+     l_ip varchar2(100);
+   begin
+     -- Try to get X-Forwarded-For first (e.g. from reverse proxy)
+     l_ip := owa_util.get_cgi_env('X-Forwarded-For');
+
+     if l_ip is null then
+       -- Fall back to remote_addr
+       l_ip := owa_util.get_cgi_env('REMOTE_ADDR');
+     end if;
+
+     :G_CLIENT_IP := l_ip;
+   end;
+   ```
+
+---
+
+### 🔹 Step 3: Create a **Hidden Item on the Page**
+
+1. On your APEX page, create a **Hidden** item, e.g., `P1_CLIENT_IP`
+2. Set **Source**:
+
+   * Type: **Always, replacing any existing value in session state**
+   * Source Type: **Item**
+   * Source Value or Expression: `G_CLIENT_IP`
+
+---
+
+### 🔹 Step 4: Use It in a Dynamic Action
+
+Now you can access `P1_CLIENT_IP` in:
+
+* JavaScript: `apex.item('P1_CLIENT_IP').getValue();`
+* PL/SQL dynamic actions
+* Conditions, validations, etc.
+
+---
+
+## 🧠 What If You Want to Get It Only in JavaScript?
+
+If you **only** want to use it in JS (not store it in items), you can create a **Before Page Load DA** that runs PL/SQL returning the value.
+
+1. Create a **Dynamic Action**:
+
+   * Event: **Page Load**
+   * True Action: **Execute PL/SQL Code**
+
+     ```plsql
+     declare
+       l_ip varchar2(100);
+     begin
+       l_ip := owa_util.get_cgi_env('X-Forwarded-For');
+       if l_ip is null then
+         l_ip := owa_util.get_cgi_env('REMOTE_ADDR');
+       end if;
+       apex_util.set_session_state('P1_CLIENT_IP', l_ip);
+     end;
+     ```
+   * Items to Return: `P1_CLIENT_IP`
+2. Then create another action (e.g., JavaScript) that reads from `P1_CLIENT_IP`.
+
+---
+
+## 🧪 Test and Debug
+
+You can also add a temporary **"Display Only"** item on the page to show `P1_CLIENT_IP` to verify that it’s working.
+
+---
+
+## 📌 Notes
+
+* `X-Forwarded-For` is only available **if you are behind a reverse proxy** (like Apache, Nginx, Load Balancer).
+* `REMOTE_ADDR` always works, but may return the proxy IP if you're behind one.
+
+---
+
+Let me know if you're using a specific setup (like ORDS, Apache proxy, etc.) and I can help adjust the solution.

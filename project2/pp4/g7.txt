@@ -1,0 +1,366 @@
+Чудово. Нижче — оновлення під **нову логіку з сесіями**: один AJAX‑процес, три оп‑коди (`AUTO/LOGOUT/NEW`) та **діалог** із варіантами, коли вже є відкрита сесія (вихід або новий вхід). Дам готові шматки:
+
+---
+
+# 1) Оновлений JS (анти‑даблтап, 3 оп‑коди, 1 діалог)
+
+> Заміні твою функцію на цей комплект.
+> Ім’я процесу на сервері: `SESS_PROC` (з попереднього кроку).
+> Поле вводу коду: `P10_CODE`.
+> Кнопка ОК: `P10_OK`.
+
+```js
+// --- Константи оп-кодів (без рядків):
+const OP = { AUTO:1, LOGOUT:2, NEW:3 };
+
+// --- Глобальні прапорці для анти-даблтапу:
+var __submitting = false;
+
+// Вхідна точка: основна форма (ввід / NFC)
+function submitAuto(){
+  if (__submitting) return;
+  __submitting = true;
+  $('#P10_OK').prop('disabled', true);
+  apex.message.clearErrors();
+
+  apex.server.process(
+    "SESS_PROC",
+    { x01: OP.AUTO, pageItems: "#P10_CODE" },
+    {
+      dataType: "json",
+      success: handleResp,
+      error: function(){
+        showError("Проблеми з підключенням. Спробуйте ще раз.");
+      },
+      complete: function(){
+        __submitting = false;
+        $('#P10_OK').prop('disabled', false);
+      }
+    }
+  );
+}
+
+// Обробка відповіді бекенда
+function handleResp(res){
+  if (!res || res.ok === false){
+    const msg = (res && res.message) || "Помилка виконання запиту.";
+    showError(msg);
+    return;
+  }
+
+  // mode_id: 1=LOGIN_DONE, 2=HAS_OPEN_SESSION, 3=LOGOUT_DONE, 4=NEW_LOGIN_DONE
+  switch(res.mode_id){
+    case 1: // LOGIN_DONE
+      fillSuccessCard(res);             // ім'я/відділ, якщо повертаєш
+      openInfoDialog("Вхід виконано", /*isSuccess=*/true);
+      resetInput();
+      break;
+
+    case 2: // HAS_OPEN_SESSION -> показати діалог з двома кнопками
+      fillOpenSessionInfo(res);         // наприклад, час відкритої сесії
+      openChoiceDialog();               // діалог з кнопками "Вийти" / "Новий вхід"
+      break;
+
+    case 3: // LOGOUT_DONE
+      openInfoDialog("Вихід виконано", /*isSuccess=*/true);
+      resetInput();
+      break;
+
+    case 4: // NEW_LOGIN_DONE
+      openInfoDialog("Створено новий вхід", /*isSuccess=*/true);
+      resetInput();
+      break;
+
+    default:
+      openInfoDialog("Операцію виконано", /*isSuccess=*/true);
+      resetInput();
+  }
+}
+
+// Клік по кнопці "Вийти" в діалозі
+function doLogout(){
+  if (__submitting) return;
+  __submitting = true;
+  disableChoiceButtons(true);
+
+  apex.server.process(
+    "SESS_PROC",
+    { x01: OP.LOGOUT, pageItems: "#P10_CODE" },
+    {
+      dataType: "json",
+      success: handleResp,
+      error: function(){ showError("Не вдалося виконати вихід."); },
+      complete: function(){
+        __submitting = false;
+        disableChoiceButtons(false);
+      }
+    }
+  );
+}
+
+// Клік по кнопці "Новий вхід" в діалозі
+function doNew(){
+  if (__submitting) return;
+  __submitting = true;
+  disableChoiceButtons(true);
+
+  apex.server.process(
+    "SESS_PROC",
+    { x01: OP.NEW, pageItems: "#P10_CODE" },
+    {
+      dataType: "json",
+      success: handleResp,
+      error: function(){ showError("Не вдалося створити новий вхід."); },
+      complete: function(){
+        __submitting = false;
+        disableChoiceButtons(false);
+      }
+    }
+  );
+}
+
+// --- Утиліти UI --- //
+
+function showError(msg){
+  document.getElementById('dlg-errmsg').textContent = msg;
+  apex.message.showErrors([{
+    type: "error",
+    location: "inline",
+    pageItem: "P10_CODE",
+    message: msg,
+    unsafe: false
+  }]);
+  openInfoDialog("Помилка", /*isSuccess=*/false);
+}
+
+function fillSuccessCard(res){
+  // Якщо повертаєш із бекенда деталі користувача:
+  if (res.ts)  document.getElementById('dlg-ts').textContent  = res.ts;
+  if (res.firstname) document.getElementById('dlg-fn').textContent = res.firstname;
+  if (res.lastname)  document.getElementById('dlg-ln').textContent = res.lastname;
+  if (res.depart)    document.getElementById('dlg-dep').textContent= res.depart;
+  if (res.position)  document.getElementById('dlg-pos').textContent= res.position;
+}
+
+function fillOpenSessionInfo(res){
+  // Наприклад, показати час поточної сесії
+  if (res.openLoginTs){
+    document.getElementById('dlg-open-login-ts').textContent = res.openLoginTs;
+  }
+}
+
+function openInfoDialog(title, isSuccess){
+  // Перемикаємо секції
+  const ok  = document.getElementById('dlg-success');
+  const err = document.getElementById('dlg-error');
+  const ttl = document.getElementById('dlg-title');
+
+  if (ttl) ttl.textContent = title || '';
+  if (isSuccess){
+    ok?.removeAttribute('hidden');
+    err?.setAttribute('hidden', 'hidden');
+  } else {
+    err?.removeAttribute('hidden');
+    ok?.setAttribute('hidden', 'hidden');
+  }
+  // Ховаємо секцію вибору
+  document.getElementById('dlg-choice')?.setAttribute('hidden','hidden');
+
+  apex.theme.openRegion('userDialog');
+
+  // автозакриття через 7с
+  window.clearTimeout(window.__dlgTimer);
+  window.__dlgTimer = window.setTimeout(function(){
+    try{ apex.theme.closeRegion('userDialog'); }catch(e){}
+  }, 7000);
+}
+
+function openChoiceDialog(){
+  // Показати секцію вибору (дві великі кнопки)
+  document.getElementById('dlg-success')?.setAttribute('hidden','hidden');
+  document.getElementById('dlg-error')?.setAttribute('hidden','hidden');
+  document.getElementById('dlg-choice')?.removeAttribute('hidden');
+
+  const ttl = document.getElementById('dlg-title');
+  if (ttl) ttl.textContent = "Є відкрита сесія";
+
+  apex.theme.openRegion('userDialog');
+  window.clearTimeout(window.__dlgTimer); // без автозакриття, користувач має вибрати
+}
+
+function disableChoiceButtons(disabled){
+  $('#btnLogout, #btnNew').prop('disabled', disabled);
+}
+
+function resetInput(){
+  apex.item("P10_CODE").setValue("");
+  apex.item("P10_CODE").setFocus();
+}
+```
+
+> Якщо хочеш, Enter у полі теж запускає `submitAuto()`:
+
+```js
+document.addEventListener('DOMContentLoaded', function(){
+  var el = document.getElementById('P10_CODE');
+  if (el){
+    el.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ submitAuto(); e.preventDefault(); }
+    });
+  }
+});
+```
+
+---
+
+# 2) Регіон діалогу (Inline Dialog) — розмітка з 3 секціями
+
+**Region → Inline Dialog**, Static ID: `userDialog`. У **Source** додай:
+
+```html
+<div class="dlg-card">
+  <button type="button" class="dlg-close" aria-label="Закрити"
+          onclick="apex.theme.closeRegion('userDialog')">×</button>
+
+  <div id="dlg-title" class="dlg-title">Статус</div>
+
+  <!-- УСПІХ -->
+  <div id="dlg-success" class="dlg-section" hidden>
+    <div class="dlg-icon success"><span class="fa fa-check-circle" aria-hidden="true"></span></div>
+    <div class="dlg-text">
+      <div class="dlg-row"><span class="lbl">Час:</span> <span id="dlg-ts"></span></div>
+      <div class="dlg-row"><span class="lbl">Ім’я:</span> <span id="dlg-fn"></span></div>
+      <div class="dlg-row"><span class="lbl">Прізвище:</span> <span id="dlg-ln"></span></div>
+      <div class="dlg-row"><span class="lbl">Відділ:</span> <span id="dlg-dep"></span></div>
+      <div class="dlg-row"><span class="lbl">Посада:</span> <span id="dlg-pos"></span></div>
+    </div>
+  </div>
+
+  <!-- ПОМИЛКА -->
+  <div id="dlg-error" class="dlg-section" hidden>
+    <div class="dlg-icon error"><span class="fa fa-times-circle" aria-hidden="true"></span></div>
+    <div class="dlg-text">
+      <div class="dlg-row"><span id="dlg-errmsg">Користувача не знайдено.</span></div>
+    </div>
+  </div>
+
+  <!-- ВИБІР КОЛИ Є ВІДКРИТА СЕСІЯ -->
+  <div id="dlg-choice" class="dlg-section" hidden>
+    <div class="dlg-icon info"><span class="fa fa-info-circle" aria-hidden="true"></span></div>
+    <div class="dlg-text">
+      <div class="dlg-row">
+        Виявлено активну сесію від: <b><span id="dlg-open-login-ts"></span></b>
+      </div>
+      <div class="btn-grid">
+        <button id="btnLogout" class="btn btn-logout" type="button" onclick="doLogout()">Вийти</button>
+        <button id="btnNew"    class="btn btn-new"    type="button" onclick="doNew()">Новий вхід</button>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+> Це той самий діалог, але тепер має **третю секцію** для вибору дії, коли сесія відкрита.
+
+---
+
+# 3) Стилі (flat, великі кнопки, чітке розмежування)
+
+Додай у **Page → CSS → Inline**:
+
+```css
+/* Карта діалогу */
+#userDialog .dlg-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e9eef5;
+  border-radius: 16px;
+  padding: 20px;
+  min-width: 320px;
+  max-width: 560px;
+  box-shadow: 0 16px 36px rgba(0,0,0,0.12);
+}
+
+/* Заголовок */
+#userDialog .dlg-title {
+  font-weight: 800;
+  font-size: 20px;
+  margin-bottom: 12px;
+  color: #1f2a37;
+}
+
+/* Закрити */
+#userDialog .dlg-close {
+  position: absolute;
+  top: 10px; right: 12px;
+  background: transparent; border: none;
+  font-size: 20px; line-height: 1;
+  cursor: pointer; opacity: .6;
+}
+#userDialog .dlg-close:hover { opacity: 1; }
+
+/* Секції */
+#userDialog .dlg-section {
+  display: flex; gap: 14px; align-items: flex-start;
+}
+
+#userDialog .dlg-icon { font-size: 40px; margin-top: 2px; }
+#userDialog .dlg-icon.success { color: #30b566; }
+#userDialog .dlg-icon.error   { color: #e64a4a; }
+#userDialog .dlg-icon.info    { color: #3b82f6; }
+
+#userDialog .dlg-text .dlg-row { font-size: 14px; color: #475569; margin: 6px 0; }
+#userDialog .dlg-text .lbl     { color: #6b7280; margin-right: 6px; }
+
+/* Грід кнопок вибору: великі, рознесені, промахнутися важко */
+#userDialog .btn-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+#userDialog .btn{
+  display: inline-block;
+  width: 100%;
+  padding: 18px 16px;
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(0,0,0,.15);
+  transition: transform .02s ease-in;
+}
+#userDialog .btn:active { transform: translateY(1px); }
+
+/* Візуально різні та контрастні: */
+#userDialog .btn-logout{
+  background: #ffd44d; color: #111;  /* жовта */
+}
+#userDialog .btn-new{
+  background: #98f58c; color: #111;  /* світло-зелена */
+}
+
+/* Для екранних читачів — фокус */
+#userDialog .btn:focus{ outline: 3px solid rgba(59,130,246,.6); outline-offset: 2px; }
+```
+
+> Великі плоскі кнопки, різні кольори, широкий відступ — мінімум помилок під час натискання.
+
+---
+
+# 4) Як це зібрати разом (коротко про UX)
+
+1. Користувач вводить код / прикладає мітку → натискає **ОК** (або Enter) → `submitAuto()` з `x01 = OP.AUTO`.
+2. Бекенд:
+
+   * якщо сесії **нема** → створює `LOGIN` → `mode_id=1` → показуємо **успіх**;
+   * якщо сесія **є** → `mode_id=2` → показуємо **діалог вибору** з двома великими кнопками.
+3. Кнопки “Вийти” / “Новий вхід” викликають відповідно `x01 = OP.LOGOUT` / `OP.NEW`.
+   Після відповіді показуємо короткий **успішний** діалог і **очищаємо поле** (`resetInput()`).
+
+---
+
+Якщо хочеш, піджену ще **динамічну дію** на кнопку `P10_OK` (щоб вона викликала `submitAuto()`), або додам у діалог **іконки APEX Universal Theme** замість Font Awesome — скажи, який варіант використовуєш.

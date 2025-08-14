@@ -1,0 +1,72 @@
+Зрозуміло, дякую! Тобто, якщо:
+
+* **є відкрита сесія**,
+* **і вона триває більше 12 годин**,
+
+то:
+
+👉 **тільки закриваємо її** (`logout_date := now`, `close_reason := 'AUTO_TIMEOUT'`),
+**але не створюємо нову**.
+Після цього — **показуємо діалог (mode\_id = 2)**.
+
+---
+
+### ✅ ОНОВЛЕНИЙ ВАРІАНТ блоку `IF l_op = 1 THEN`
+
+Ось як виглядатиме потрібна логіка:
+
+```plsql
+IF l_op = 1 /* AUTO */ THEN
+  IF l_open_id IS NULL THEN
+    -- Немає активної сесії — все добре, можна логінити
+    INSERT INTO user_sessions (user_id, login_date)
+      VALUES (l_user_id, l_now)
+      RETURNING id INTO l_open_id;
+
+    put_log(l_user_id, l_open_id, 'LOGIN', 'SUCCESS');
+
+    apex_json.write('ok', true);
+    apex_json.write('mode_id', 1); -- LOGIN_DONE
+    apex_json.write('sessionId', l_open_id);
+    apex_json.write('loginTs', TO_CHAR(l_now AT LOCAL TIME ZONE, 'dd.mm.yyyy hh24:mi'));
+
+  ELSE
+    -- Є активна сесія
+    IF l_now - l_login_dt > INTERVAL '12' HOUR THEN
+      -- Вона застаріла – закриваємо її
+      UPDATE user_sessions
+         SET logout_date = l_now,
+             close_reason_id = lu.close_id('AUTO_TIMEOUT')
+       WHERE id = l_open_id;
+
+      put_log(l_user_id, l_open_id, 'LOGOUT', 'SUCCESS');
+
+      -- показуємо діалог (користувач має сам повторно зайти)
+      apex_json.write('ok', true);
+      apex_json.write('mode_id', 2); -- HAS_OPEN_SESSION (але вже закрита)
+      apex_json.write('sessionId', l_open_id);
+      apex_json.write('openLoginTs', TO_CHAR(l_login_dt AT LOCAL TIME ZONE, 'dd.mm.yyyy hh24:mi'));
+      apex_json.write('message', 'Сесію завершено через перевищення тривалості.');
+    ELSE
+      -- Сесія ще активна і не перевищила 12 год – показуємо діалог
+      apex_json.write('ok', true);
+      apex_json.write('mode_id', 2); -- HAS_OPEN_SESSION
+      apex_json.write('sessionId', l_open_id);
+      apex_json.write('openLoginTs', TO_CHAR(l_login_dt AT LOCAL TIME ZONE, 'dd.mm.yyyy hh24:mi'));
+    END IF;
+  END IF;
+```
+
+---
+
+### 🔍 Пояснення
+
+| Умова                 | Дія                                                 |
+| --------------------- | --------------------------------------------------- |
+| Немає відкритої сесії | Створюємо нову                                      |
+| Є сесія < 12 год      | Показуємо діалог                                    |
+| Є сесія > 12 год      | Закриваємо + показуємо діалог (без створення нової) |
+
+---
+
+Якщо треба — можу вбудувати цей код у повну структуру `BEGIN ... END`, щоб побачити всю картину.

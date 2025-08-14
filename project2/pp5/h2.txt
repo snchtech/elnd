@@ -1,0 +1,151 @@
+Окей, зберемо все в робочий «адмін»-екран і доступ лише для ролі **Administrator**, плюс кнопку «Адміністрування» на головній.
+
+---
+
+# 1) В’юшки / SQL для двох IR
+
+### (A) «Хто зараз у системі» (відкриті сесії)
+
+```sql
+SELECT
+  s.id              AS session_id,
+  s.user_id,
+  u.user_firstname,
+  u.user_lastname,
+  s.login_date
+FROM user_sessions s
+LEFT JOIN users u ON u.user_id = s.user_id
+WHERE s.logout_date IS NULL
+ORDER BY s.login_date DESC
+```
+
+* У IR: **Number of Rows** = **15**, **Pagination** = numeric (звичайна пагінація).
+
+### (B) «Архів» (усі сесії; перша сторінка — 10 останніх)
+
+```sql
+SELECT
+  s.id              AS session_id,
+  s.user_id,
+  u.user_firstname,
+  u.user_lastname,
+  s.login_date,
+  s.logout_date,
+  cr.code           AS close_reason_code
+FROM user_sessions s
+LEFT JOIN users u          ON u.user_id = s.user_id
+LEFT JOIN close_reason_lu cr ON cr.id   = s.close_reason_id
+ORDER BY s.login_date DESC
+```
+
+* У IR: **Number of Rows** = **10**, **Sort** = `login_date DESC`, **Pagination** = numeric.
+  Перші 10 записів — це і будуть «останні 10», далі — сторінки зі старішими записами.
+
+---
+
+# 2) Сторінка «Адміністрування» з двома IR (кроки в APEX)
+
+1. **Create Page → Report → Interactive Report**
+   Page Name: `Адміністрування` (або «Сесії»).
+2. Додай **Region 1**: «Онлайн зараз» (SQL з розділу A вище).
+
+   * Attributes → Appearance → **Number of Rows = 15**.
+   * Pagination: увімкнена (numeric).
+3. Додай **Region 2**: «Архів» (SQL з розділу B вище).
+
+   * Attributes → Appearance → **Number of Rows = 10**.
+   * Pagination: увімкнена (numeric).
+4. Розташуйте «Архів» під першим IR (Region Position нижче).
+
+---
+
+# 3) Доступ лише для ролі Administrator
+
+> В APEX «хто ти» — **Authentication Scheme**, «що тобі можна» — **Authorization Scheme**. Нам потрібні обидва:
+>
+> 1. автентифікація (користувач входить у додаток),
+> 2. авторизація (перевірка ролі Administrator).
+
+## Варіант 1 (рекомендовано): **Access Control** (вбудована функція)
+
+APEX автоматично створює таблиці доступу та схеми авторизації.
+
+1. **Shared Components → Access Control → Enable Access Control**.
+2. Створіть роль **Administrator** і додайте користувачів (APP\_USER) у цю роль.
+3. APEX створить готову **Authorization Scheme** (зазвичай назв типу *“Access Control: Administrator”*).
+4. На **Page → Authorization Scheme** виберіть *Access Control: Administrator*.
+   – Тепер сторінка доступна тільки адмінам (решту перекине на логін / «access denied»).
+5. Для всього додатку виберіть **Authentication Scheme**:
+   **Shared Components → Authentication Schemes → Create → Application Express Accounts**
+   (або SSO / custom — за вашою інфраструктурою).
+
+## Варіант 2 (кастомний): власна таблиця ролей + PL/SQL‑схема
+
+1. Таблиця ролей (приклад):
+
+```sql
+CREATE TABLE app_user_roles (
+  username   VARCHAR2(255) NOT NULL,
+  role_code  VARCHAR2(50)  NOT NULL,
+  CONSTRAINT pk_app_user_roles PRIMARY KEY (username, role_code)
+);
+-- вставляєте: ('ADMIN_USER','ADMINISTRATOR')
+```
+
+2. **Authorization Scheme → Create → PL/SQL Function Returning Boolean**:
+
+```plsql
+RETURN EXISTS (
+  SELECT 1
+  FROM app_user_roles
+  WHERE UPPER(username) = UPPER(v('APP_USER'))
+    AND role_code = 'ADMINISTRATOR'
+);
+```
+
+3. Призначте цю схему **на сторінку «Адміністрування»** (Page → Authorization Scheme).
+4. **Authentication Scheme** для додатку — як вище: *Application Express Accounts* (або ваш SSO).
+
+---
+
+# 4) Кнопка «Адміністрування» на головній (видна лише адмінам)
+
+1. На головній сторінці (форма) створіть кнопку **ADMIN**:
+
+   * **Action**: *Redirect to Page in this Application* → Target: сторінка «Адміністрування».
+   * **Template**: кнопку зробіть великою (Large) — під ваш flat‑стиль.
+2. **Server-side Condition** кнопки → **Authorization Scheme**:
+   виберіть ту саму *Access Control: Administrator* (або ваш кастомний варіант).
+   – Тепер кнопку бачать тільки адміни.
+
+(Опціонально) **CSS** для виразнішої кнопки:
+
+```css
+#ADMIN { /* Static ID у кнопки */
+  background:#3b82f6; color:#fff; border:none; border-radius:14px;
+  padding:16px 22px; font-size:18px; font-weight:800; text-transform:uppercase;
+  box-shadow:0 10px 20px rgba(0,0,0,.15);
+}
+#ADMIN:focus { outline:3px solid rgba(59,130,246,.6); outline-offset:2px; }
+```
+
+---
+
+# 5) Налаштування «закритості» сторінки
+
+* Переконайтеся, що **Application** має **Authentication Scheme** (не No Authentication).
+* На сторінці «Адміністрування»:
+
+  * **Page → Security → Authentication**: *Page requires authentication* (за замовчуванням так).
+  * **Page → Security → Authorization Scheme**: ваша *Administrator* схема.
+* За потреби додайте **Access Denied Page** або перекидання на «доступ заборонений» (ми таку сторінку вже робили).
+
+---
+
+## Готово
+
+* Адмін‑сторінка з двома IR (онлайн/архів) та потрібною пагінацією.
+* Доступ лише ролі **Administrator** (через Access Control або кастомну схему).
+* Кнопка «Адміністрування» на головній — видна лише адмінам, веде на сторінку.
+
+Якщо скажеш, який спосіб автентифікації у вас (APEX Accounts чи SSO/LDAP), піджену точні кроки під нього та, за потреби, міграційний скрипт для `app_user_roles`.

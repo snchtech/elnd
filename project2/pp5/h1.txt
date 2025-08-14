@@ -1,0 +1,153 @@
+ок, робимо зручно й доступно:
+
+1. Enter у полі вводу запускає ту ж функцію (я назвy її `submitAuto()`, але нижче зроблю синонім на твою `submitCheck()`).
+2. У діалозі з кнопками **“Вийти”** / **“Новий вхід”** — лівою/правою стрілкою переключаємо фокус між ними, Enter виконує дію активної кнопки. Працює і для NFC‑сканера (він емулює ввод + Enter).
+
+---
+
+## 1) HTML (мінімальні правки)
+
+Переконайся, що в діалозі кнопки мають ідентифікатори та `type="button"`:
+
+```html
+<div id="dlg-choice" class="dlg-section" hidden>
+  <div class="dlg-icon info"><span class="fa fa-info-circle" aria-hidden="true"></span></div>
+  <div class="dlg-text">
+    <div class="dlg-row">
+      Виявлено активну сесію від: <b><span id="dlg-open-login-ts"></span></b>
+    </div>
+    <div class="btn-grid" id="choiceToolbar" role="toolbar" aria-label="Вибір дії">
+      <button id="btnLogout" class="btn btn-logout" type="button" onclick="doLogout()" aria-label="Вийти">Вийти</button>
+      <button id="btnNew"    class="btn btn-new"    type="button" onclick="doNew()"    aria-label="Новий вхід">Новий вхід</button>
+    </div>
+  </div>
+</div>
+```
+
+---
+
+## 2) JS: Enter у полі вводу запускає ту ж функцію
+
+> Якщо в тебе вже є `submitCheck()`, ось як зробити, щоб **обидві назви** працювали однаково:
+
+```js
+// якщо в тебе залишилась стара назва:
+function submitCheck(){ return submitAuto(); }  // синонім
+
+// Enter у полі вводу (ідеально для NFC-сканера):
+document.addEventListener('DOMContentLoaded', function(){
+  var input = document.getElementById('P10_CODE');
+  if (input){
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        submitAuto(); // викликає той самий процес, що і кнопка ОК
+      }
+    });
+  }
+});
+```
+
+> Тепер: ручний ввід + Enter, або NFC (який надсилає Enter) — завжди викликають `submitAuto()`.
+
+---
+
+## 3) JS: клавіатурна навігація між “Вийти” / “Новий вхід”
+
+Додаємо невеликий модуль, який:
+
+* після відкриття секції вибору ставить фокус на першу кнопку,
+* перехоплює **ArrowLeft/ArrowRight** для перемикання,
+* на **Enter** виконує дію активної кнопки,
+* працює лише коли видима секція `#dlg-choice`.
+
+```js
+// --- Клавіатурна навігація для кнопок вибору ---
+const CHOICE = {
+  ids: ['btnLogout', 'btnNew'],
+  current: 0,
+  active: function(){ return document.getElementById(this.ids[this.current]); },
+  focus: function(idx){
+    this.current = (idx + this.ids.length) % this.ids.length;
+    const el = this.active();
+    if (el) { el.focus(); }
+  },
+  next: function(){ this.focus(this.current + 1); },
+  prev: function(){ this.focus(this.current - 1); },
+  isVisible: function(){
+    const sec = document.getElementById('dlg-choice');
+    return sec && !sec.hasAttribute('hidden');
+  }
+};
+
+// Ініціалізація слухачів
+document.addEventListener('DOMContentLoaded', function(){
+  const toolbar = document.getElementById('choiceToolbar');
+  if (!toolbar) return;
+
+  // Делегований keydown на toolbar (працює, коли будь-яка з двох кнопок у фокусі)
+  toolbar.addEventListener('keydown', function(e){
+    if (!CHOICE.isVisible()) return; // не втручатись, якщо секцію приховано
+
+    if (e.key === 'ArrowRight'){
+      e.preventDefault();
+      CHOICE.next();
+    } else if (e.key === 'ArrowLeft'){
+      e.preventDefault();
+      CHOICE.prev();
+    } else if (e.key === 'Enter' || e.key === ' '){
+      // Виконати дію поточної кнопки
+      e.preventDefault();
+      const btn = CHOICE.active();
+      if (btn) { btn.click(); } // викличе doLogout() або doNew() через onclick
+    } else if (e.key === '1'){
+      e.preventDefault();
+      CHOICE.focus(0);
+    } else if (e.key === '2'){
+      e.preventDefault();
+      CHOICE.focus(1);
+    }
+  });
+});
+```
+
+> Порада: у функції `openChoiceDialog()` після відкриття діалогу одразу викликай фокус на першій кнопці:
+
+```js
+function openChoiceDialog(){
+  document.getElementById('dlg-success')?.setAttribute('hidden','hidden');
+  document.getElementById('dlg-error')?.setAttribute('hidden','hidden');
+  document.getElementById('dlg-choice')?.removeAttribute('hidden');
+
+  const ttl = document.getElementById('dlg-title');
+  if (ttl) ttl.textContent = "Є відкрита сесія";
+
+  apex.theme.openRegion('userDialog');
+
+  // стартовий фокус на "Вийти"
+  CHOICE.focus(0);
+}
+```
+
+---
+
+## 4) (Опційно) візуальний фокус для чіткості
+
+```css
+#userDialog .btn:focus{
+  outline: 3px solid rgba(59,130,246,.6);
+  outline-offset: 2px;
+}
+```
+
+---
+
+## 5) Нагадування про кнопки/виклики процесів
+
+* Кнопка **ОК** на формі має викликати `submitAuto()` (або твій `submitCheck()` — тепер це синоніми).
+* Кнопки **Вийти**/**Новий вхід** у діалозі **вже** мають `onclick="doLogout()"` / `onclick="doNew()"`.
+* Завдяки коду вище **стрілки** перемикають фокус, а **Enter** на активній кнопці виконає відповідну дію.
+
+---
+
+Готово: тепер і ручний ввід з Enter, і NFC‑скан, і клавіші стрілок/Enter у діалозі — все зводиться до тих самих функцій (`submitAuto`/`doLogout`/`doNew`) і працює однаково стабільно.

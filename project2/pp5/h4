@@ -1,0 +1,99 @@
+Ah, you're working with **Oracle APEX** — that explains why `preventDefault()` might **not seem to work** in the usual way. APEX uses its own JavaScript framework and event handling, and forms often submit using **dynamic actions** or built-in APEX page processes.
+
+Let’s solve this:
+
+---
+
+## ✅ **Goal**: Prevent pressing Enter in a text field from submitting the form on an APEX page.
+
+---
+
+## 🔍 Why Enter causes submit in APEX
+
+In Oracle APEX:
+
+* If there's a form region (like a `Form on Table` or `Form on Procedure`), APEX ties submit logic to the **Enter key**.
+* Pressing Enter inside an input (especially the first item) may trigger the default "Submit" button action.
+* Even if you use `preventDefault()` in your own code, APEX may still fire its own processes.
+
+---
+
+## ✅ SOLUTION: Use `apex.item().getElement()` and block Enter key
+
+### 🔧 JavaScript to block Enter key for a specific item
+
+```js
+apex.item("P1_MY_FIELD").getElement().on("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+  }
+});
+```
+
+* Replace `P1_MY_FIELD` with your actual item name (page item ID).
+* This code goes in a **dynamic action** or **page load script**.
+
+---
+
+## ✅ Option 1: Dynamic Action on Page Load (Recommended)
+
+1. Go to **Page Designer**.
+2. Create a new **Dynamic Action**:
+
+   * **Event**: Page Load
+   * **True Action**: Execute JavaScript Code
+3. In the JS Code box:
+
+```js
+apex.item("P1_MY_FIELD").getElement().on("keydown", function(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+  }
+});
+```
+
+---
+
+## ✅ Option 2: Block Enter globally on the page
+
+If you want to **block Enter from submitting the page entirely**, unless it's from a button click:
+
+### Add this in **Page Load Dynamic Action** → **Execute JS Code**:
+
+```js
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    // Optional: Allow Enter if focused on a button or textarea
+    const target = e.target;
+    if (target.tagName !== 'TEXTAREA' && target.tagName !== 'BUTTON') {
+      e.preventDefault();
+    }
+  }
+});
+```
+
+---
+
+## ✅ Option 3: Disable "Default Button" on the page
+
+1. Go to **Page Designer**.
+2. Click on the **Page** node.
+3. In the **Behavior** section, check if there’s a **"Default Button"** set.
+4. Set it to `None`.
+
+This avoids APEX automatically submitting the page on Enter.
+
+---
+
+## ✅ Summary
+
+| Method                             | Use Case                           |
+| ---------------------------------- | ---------------------------------- |
+| `preventDefault()` on item keydown | Stop Enter for specific field      |
+| Global keydown handler             | Stop Enter globally                |
+| Remove "Default Button"            | Stop APEX from submitting on Enter |
+| Use Dynamic Actions                | Preferred APEX approach            |
+
+---
+
+Let me know which field or form you're trying to block Enter on, and I can tailor the code further.
